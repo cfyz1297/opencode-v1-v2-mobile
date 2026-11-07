@@ -2,7 +2,7 @@
 
 Правила ниже выведены из фактического кода; инструментов принуждения (линтер/форматтер) в репозитории нет, поэтому единственные автоматические гейты — `tsc --noEmit` и `npm test`.
 
-Актуально на 2026-11-06, коммит `6538aed` (0.3.2).
+Актуально на 2026-11-07, коммит `b0d31bc` (0.3.3).
 
 ## Обязательные разделы
 
@@ -31,7 +31,7 @@
 - `any` формально не запрещён механически, но встречается точечно (`as any`/`: any` в `src`+`app`), обычно на границе известных-неполных типов: `name={icon as any}` (`src/components/chat/ToolCallCard.tsx:347 (ToolCallCard)`), `(event as any).payload` (`src/stores/events.ts:398 (connect)`). `AGENTS.md` требует «без `any`» — фактически это правило нарушается в 24 местах.
 - TypeScript: `strict: true`, наследование `expo/tsconfig.base` (`tsconfig.json:2-4`). `include` охватывает и `*.test.ts(x)`: `npm run typecheck` проверяет тесты наравне с исходниками.
 - Запуск: `npm run typecheck`, `npm test`, `npm run test:coverage`, `npm run check:versions`.
-- Числа на 2026-11-06: **638 тестов**, покрытие **98.35 % строк / 86.29 % ветвей / 97.23 % функций**.
+- Числа на 2026-11-07: **651 тест**, покрытие **98.36 % строк / 86.22 % ветвей / 97.24 % функций**.
 
 ### 3) Импорты и модули
 
@@ -56,7 +56,7 @@
 - Каталог: тест лежит рядом с модулем (`src/lib/*.test.ts`), один тест — один файл модуля; исключение по имени: `src/lib/session-recency.test.ts` тестирует `session-grouping.ts`.
 - Раннер: встроенный `node:test`, ассерты `node:assert/strict`; `describe/it` редки — почти всё плоские `test(...)`.
 - Моки: внедрение зависимостей (фейковое хранилище, фейковый `fetch`), подмена `expo/fetch` через `registerHooks` (`src/lib/sdk.integration.test.ts:1-17`), HTTP-заглушка для интеграционных (`tests/fixtures/mock-opencode-server.ts`), «экранный» харнесс на `vm` + `typescript` (`src/lib/connections-screen.test.ts:1-30`), статические проверки исходников регулярками для того, что нельзя отрендерить (`src/components/wide-content-scroll.regression.test.ts`, `src/lib/dialog-back-gesture.regression.test.ts`).
-- Покрытие: гейт 80 % по строкам/ветвям/функциям (`package.json`); фактически 98.35 / 86.29 / 97.23 (прогон 2026-11-06).
+- Покрытие: гейт 80 % по строкам/ветвям/функциям (`package.json`); фактически 98.36 / 86.22 / 97.24 (прогон 2026-11-07).
 - Подробности — `docs/codebase/TESTING.md`.
 
 ### 6) Прочие наблюдаемые конвенции

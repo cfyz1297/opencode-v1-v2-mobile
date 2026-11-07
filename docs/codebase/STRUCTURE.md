@@ -1,6 +1,6 @@
 # Структура кодовой базы
 
-Актуально на 2026-11-06, коммит `6538aed` (0.3.2).
+Актуально на 2026-11-07, коммит `b0d31bc` (0.3.3).
 
 ## Обязательные разделы
 
@@ -56,7 +56,7 @@
 - Тестовые файлы импортируют модули с явным `.ts` (Node исполняет их type-stripping'ом).
 - Карта `src/lib` по назначению:
   - транспорт/протокол: `sdk.ts`, **`sdk-v1.ts`**, **`api-detect.ts`**, `sse.ts`, `v2-compat.ts`, `headers.ts`, `auth.ts`, `api-error.ts`, `directory-client.ts`, `provider-auth.ts`;
-  - сессии и сообщения: `session-list.ts`, `session-grouping.ts`, `session-selection.ts`, `session-load-reconcile.ts`, `session-status-reconcile.ts`, `message-merge.ts`, `message-run.ts`, **`message-page.ts`**, `part-batch.ts`, `part-runs.ts`, `prompt-from-parts.ts`, `revert-filter.ts`, `pending-questions.ts`, `question-answers.ts`, `answered-questions.ts`;
+  - сессии и сообщения: `session-list.ts`, `session-grouping.ts`, `session-selection.ts`, `session-load-reconcile.ts`, `session-status-reconcile.ts`, `message-merge.ts`, `message-run.ts`, **`message-page.ts`**, `part-batch.ts`, `part-order.ts`, `part-runs.ts`, `prompt-from-parts.ts`, `revert-filter.ts`, `pending-questions.ts`, `question-answers.ts`, `answered-questions.ts`;
   - живучесть: `run-watchdog.ts`, `stream-watchdog.ts`, `connection-health.ts`;
   - UI-логика: `adaptive-layout.ts`, `keyboard-inset.ts`, `scroll-config.ts`, `scroll-follow.ts`, `model-selection.ts`, `model-picker-filter.ts`, `model-visibility.ts`, **`session-stats.ts`**, **`tool-view.ts`**, `providers-ui.ts`, `status-labels.ts`, `tablet-session-nav.ts`, `notify-format.ts`;
   - хранилище/безопасность: `offline-history.ts`, `history-storage.ts`, `connection-security.ts`, `scrub.ts`, `logbuffer.ts`;
