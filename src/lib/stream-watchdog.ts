@@ -29,3 +29,16 @@ export function isStreamStalled({
   if (!activeRun) return false
   return now - lastActivityAt >= stallMs
 }
+
+/**
+ * How long the app must have been in the background before the event stream is
+ * discarded on return. Android suspends JS timers and can drop a socket without
+ * a FIN: the reader then never resolves, and the stall watchdog only watches
+ * runs — so an app resumed into a dead stream stays silent until the next
+ * prompt waits out the stall window. One reconnect is cheaper than that.
+ */
+export const RESUME_RECONNECT_AFTER_MS = 15_000
+
+export function shouldReconnectOnResume(backgroundedForMs: number): boolean {
+  return backgroundedForMs >= RESUME_RECONNECT_AFTER_MS
+}

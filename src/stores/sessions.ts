@@ -6,6 +6,7 @@ import { extractPromptFromParts, type PromptFromParts } from "../lib/prompt-from
 import { mergeIncomingMessage, reconcileTemps } from "../lib/message-merge"
 import { isColdSessionLoad, isLiveEventForSession } from "../lib/session-load-reconcile"
 import { createPartBatcher } from "../lib/part-batch"
+import { shouldApplyPartUpdate } from "../lib/part-order"
 import { countTurns, isWholeSession, keepLoadedHistory, messageLimitForTurns, trimToTurns } from "../lib/message-page"
 import { offlineHistory } from '../lib/history-storage'
 
@@ -41,8 +42,13 @@ function applyParts(batch: Part[]) {
     for (const part of batch) {
       if (part.sessionID && part.sessionID !== state.currentSession.id) continue
       const messageParts = parts[part.messageID] || []
-      const exists = messageParts.some((p) => p.id === part.id)
-      parts[part.messageID] = exists ? messageParts.map((p) => (p.id === part.id ? part : p)) : [...messageParts, part]
+      const existing = messageParts.find((p) => p.id === part.id)
+      if (!existing) {
+        parts[part.messageID] = [...messageParts, part]
+      } else if (shouldApplyPartUpdate(existing, part)) {
+        parts[part.messageID] = messageParts.map((p) => (p.id === part.id ? part : p))
+      }
+      // A rejected stale update is still proof of life: clear a stuck spinner.
       applied = true
     }
     if (!applied) return {}

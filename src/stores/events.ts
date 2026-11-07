@@ -7,7 +7,7 @@ import i18n from "../lib/i18n/config"
 import { statusFromPart } from "../lib/status-labels"
 import { isAuthError } from "../lib/api-error"
 import { isSessionActuallyIdle } from "../lib/session-status-reconcile"
-import { isStreamStalled } from "../lib/stream-watchdog"
+import { isStreamStalled, shouldReconnectOnResume } from "../lib/stream-watchdog"
 import { runsNeedingResync } from "../lib/run-watchdog"
 import { reconcilePendingQuestions } from "../lib/pending-questions"
 import { recordAnswered, type AnsweredQuestion } from "../lib/answered-questions"
@@ -64,10 +64,15 @@ interface EventsState {
 
   connect: () => void
   disconnect: () => void
+  /** Replace the suspension-prone stream after the app returns from background. */
+  resumeFromBackground: (backgroundedForMs: number) => void
 }
 
 let controller: AbortController | null = null
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+// Set by resumeFromBackground: the next connect() is a recovery, so its first
+// byte must re-read the transcript instead of waiting for a run to go quiet.
+let forceResyncOnConnect = false
 
 // Sessions that emitted session.error since they last went busy. SessionStatus
 // has no error variant — an errored session still ends with a busy -> idle
@@ -307,7 +312,8 @@ export const useEvents = create<EventsState>((set, get) => ({
       // gates the one-time busy-session resync below so a cold app start
       // (sessionStatus is always empty then) never triggers it, and a run of
       // failed retries can't re-arm the check on every attempt.
-      const isReconnect = get().reconnectAttempts > 0
+      const isReconnect = forceResyncOnConnect || get().reconnectAttempts > 0
+      forceResyncOnConnect = false
       let resyncedAfterReconnect = false
       const stableTimer = setTimeout(() => {
         if (!currentController.signal.aborted) {
@@ -633,6 +639,16 @@ export const useEvents = create<EventsState>((set, get) => ({
         }
       }
     })()
+  },
+
+  resumeFromBackground: (backgroundedForMs) => {
+    if (!shouldReconnectOnResume(backgroundedForMs)) return
+    // The OS may have killed the old socket without an error; aborting it also
+    // drops whatever stale backlog it buffered, so the bubble cannot replay an
+    // answer the transcript already shows. connect() cancels a pending backoff
+    // too, and the resync flag makes the first byte re-read the open session.
+    forceResyncOnConnect = true
+    get().connect()
   },
 
   disconnect: () => {

@@ -105,6 +105,24 @@ function RootLayout() {
     return () => sub.remove()
   }, [])
 
+  // Android freezes JS timers and can silently kill the SSE socket while the
+  // app is backgrounded. The stall watchdog cannot see that while idle, so a
+  // resumed app would show a dead session until the next prompt waited out the
+  // 30s window. Reconnect eagerly; a quick app switch keeps the stream.
+  useEffect(() => {
+    let backgroundedAt: number | null = null
+    const sub = AppState.addEventListener("change", (next) => {
+      if (next === "background") {
+        backgroundedAt = Date.now()
+      } else if (next === "active" && backgroundedAt !== null) {
+        const elapsed = Date.now() - backgroundedAt
+        backgroundedAt = null
+        useEvents.getState().resumeFromBackground(elapsed)
+      }
+    })
+    return () => sub.remove()
+  }, [])
+
   // Connect/disconnect SSE and load catalog when client changes
   useEffect(() => {
     if (client && !sseStarted.current) {

@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import { createRequire } from "node:module"
 import { runInNewContext } from "node:vm"
-import { isStreamStalled } from "./stream-watchdog.ts"
+import { isStreamStalled, shouldReconnectOnResume } from "./stream-watchdog.ts"
 import { isSessionActuallyIdle } from "./session-status-reconcile.ts"
 import { runsNeedingResync } from "./run-watchdog.ts"
 
@@ -68,7 +68,7 @@ function harness() {
     },
   }
 
-  const stats = { messageCalls: 0, pendingCalls: 0, refreshCalls: 0, applied: 0, handled: [] as string[] }
+  const stats = { messageCalls: 0, pendingCalls: 0, refreshCalls: 0, applied: 0, streams: 0, handled: [] as string[] }
   // Transcript the fake server returns. `null` means "run still in progress".
   let transcript: Array<{ info: Record<string, unknown>; parts: unknown[] }> | null = COMPLETED_TRANSCRIPT
   let failWith: { status: number } | null = null
@@ -103,6 +103,7 @@ function harness() {
     },
     global: {
       events: async function* (signal: AbortSignal, activity?: () => void) {
+        stats.streams++
         onActivity = activity ?? null
         while (!signal.aborted) {
           const item = await sse.next()
@@ -160,7 +161,7 @@ function harness() {
     "../lib/status-labels": { statusFromPart: () => "" },
     "../lib/api-error": { isAuthError: () => false },
     "../lib/session-status-reconcile": { isSessionActuallyIdle },
-    "../lib/stream-watchdog": { isStreamStalled },
+    "../lib/stream-watchdog": { isStreamStalled, shouldReconnectOnResume },
     "../lib/run-watchdog": { runsNeedingResync },
     "../lib/pending-questions": { reconcilePendingQuestions: (local: unknown) => local },
     "../lib/answered-questions": { recordAnswered: (list: unknown) => list },
@@ -238,6 +239,8 @@ function harness() {
     sessions,
     stats,
     connect: () => exports.useEvents.getState().connect(),
+    resume: (backgroundedForMs: number) =>
+      exports.useEvents.getState().resumeFromBackground(backgroundedForMs),
     push: (event: unknown) => {
       sse.push(event)
       return settle()
@@ -476,4 +479,32 @@ test("a reconnect resyncs the open session even when the server has nothing to s
   // parsed event would never run: the client would stay stale after a drop
   // whose busy -> idle transition happened while it was offline.
   assert.ok(app.stats.refreshCalls >= 1, "a reconnected stream catches up on its own")
+})
+
+test("returning from a long background replaces a socket the OS may have killed", async () => {
+  const app = harness()
+  app.heartbeatEvery(15_000)
+  app.connect()
+  await app.settle()
+  assert.equal(app.stats.streams, 1)
+  assert.equal(app.stats.refreshCalls, 0, "a healthy socket is trusted")
+
+  app.resume(10 * 60_000)
+  await app.settle()
+
+  assert.equal(app.stats.streams, 2, "the suspended socket is replaced, not trusted")
+  await app.advance(20_000)
+  assert.ok(app.stats.refreshCalls >= 1, "the open session catches up after the gap")
+})
+
+test("a quick app switch keeps the stream and costs no reconnect", async () => {
+  const app = harness()
+  app.heartbeatEvery(15_000)
+  app.connect()
+  await app.settle()
+
+  app.resume(3_000)
+  await app.settle()
+
+  assert.equal(app.stats.streams, 1)
 })

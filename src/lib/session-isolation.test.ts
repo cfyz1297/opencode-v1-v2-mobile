@@ -22,6 +22,7 @@ function harness() {
     '../lib/message-merge': { mergeIncomingMessage: () => [], reconcileTemps: () => ({ messages: [], parts: {} }) },
     '../lib/session-load-reconcile': { isColdSessionLoad: () => true, isLiveEventForSession: () => true },
     '../lib/part-batch': { createPartBatcher: () => ({ push: () => {}, dispose: () => {} }) },
+    '../lib/part-order': { shouldApplyPartUpdate: () => true },
     '../lib/message-page': {
       countTurns: () => 1,
       messageLimitForTurns: () => 200,

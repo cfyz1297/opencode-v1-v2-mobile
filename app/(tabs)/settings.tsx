@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useState } from "react"
 import {
   View,
   Text,
@@ -10,7 +10,7 @@ import {
   Linking,
   Alert,
 } from "react-native"
-import { router } from "expo-router"
+import { router, useFocusEffect } from "expo-router"
 import { Ionicons } from "@expo/vector-icons"
 import { useTranslation } from "react-i18next"
 import { PROVIDERS_ROUTE } from "../../src/lib/providers-ui"
@@ -86,19 +86,22 @@ export default function SettingsScreen() {
   // Settings is where a user goes to ask "what am I running?". Answer it, and if
   // a newer build exists say so here too — the banner on the sessions list is
   // dismissible, this row is not (AGE-110). Uses the same 24h-throttled check,
-  // so opening Settings repeatedly costs no extra requests.
+  // so opening Settings repeatedly costs no extra requests. Checking on focus,
+  // not mount: the tab stays mounted for the process lifetime.
   const [updateAvailable, setUpdateAvailable] = useState<AvailableUpdate | null>(null)
-  useEffect(() => {
-    let cancelled = false
-    checkForUpdate({ ignoreDismissed: true })
-      .then((result) => {
-        if (!cancelled) setUpdateAvailable(result)
-      })
-      .catch(() => undefined)
-    return () => {
-      cancelled = true
-    }
-  }, [])
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false
+      checkForUpdate({ ignoreDismissed: true })
+        .then((result) => {
+          if (!cancelled) setUpdateAvailable(result)
+        })
+        .catch(() => undefined)
+      return () => {
+        cancelled = true
+      }
+    }, []),
+  )
 
   // Check OS permission state on first toggle attempt
   const handleToggle = useCallback(

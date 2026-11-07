@@ -54,7 +54,7 @@ versions. Not published to Google Play or F-Droid.
 - `HANDOFF.md` — engineering state, what shipped and what is left
 - `docs/` — upstream review and security review
 
-Verification: `npm test` (638 tests, node built-in runner), `npm run typecheck`,
+Verification: `npm test` (651 tests, node built-in runner), `npm run typecheck`,
 `npm run check:versions`, `npm run test:coverage` (about 98% of lines).
 
 ## Optional

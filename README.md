@@ -8,9 +8,9 @@ A fork of [dzianisv/opencode-mobile](https://github.com/dzianisv/opencode-mobile
 
 The repository used to be called `opencode-mobile`; it was renamed to `opencode-v1-v2-mobile` in 0.3.0. Old links redirect, and the APK file name (`opencode-mobile-v2.apk`) is kept unchanged so the built-in update check and the release signature chain keep working.
 
-Version **0.3.2 (67)**. Installs over 0.3.1 — no uninstall needed.
+Version **0.3.3 (68)**. Installs over 0.3.2 — no uninstall needed.
 
-> **Status:** every build runs 638 automated tests plus an Android CUA smoke on an emulator. Not yet exercised against a real opencode 1.18.x server, and the tablet layout, tunnel wizard and offline history have been checked in code and on the emulator only.
+> **Status:** every build runs 651 automated tests plus an Android CUA smoke on an emulator. Not yet exercised against a real opencode 1.18.x server, and the tablet layout, tunnel wizard and offline history have been checked in code and on the emulator only.
 
 ## Is this the app you are looking for?
 
@@ -109,7 +109,7 @@ The base is upstream [dzianisv/opencode-mobile](https://github.com/dzianisv/open
 | What | Upstream | Fork |
 |---|---|---|
 | Server API | API 1.x only (`/session`, `/global/*`) | **both**: 1.x (`/session`, `/global/*`) and 2.x (`/api/*`), auto-detected, forceable in Settings |
-| Version | 0.4.x | fork's own 0.3.x line, currently 0.3.2 (67) |
+| Version | 0.4.x | fork's own 0.3.x line, currently 0.3.3 (68) |
 | Signing and updates | new debug key per build in old versions | permanent keystore, installs in place |
 | Channels | Google Play, self-hosted F-Droid, APK, EAS | APK from GitHub Releases only |
 | Telemetry | Sentry (crash reports) + PostHog | both dependencies removed |
@@ -180,7 +180,13 @@ A separate pure-Java client without Gradle (`aapt → ecj → d8 → apksigner`)
 ## Updates
 
 <details>
-<summary>Changelog by version (0.2.11 - 0.3.2)</summary>
+<summary>Changelog by version (0.2.11 - 0.3.3)</summary>
+
+### 0.3.3
+
+- **The update notice works again.** Opening the release page now marks that version as seen and hides the strip — `Linking.openURL` resolves to `void`, so the previous check never dismissed it. The banner also re-checks when the app returns to the foreground, and the About row refreshes every time Settings is opened, instead of only on the first mount.
+- **An answer received while backgrounded no longer re-types itself.** On return the app replaces the SSE stream before refreshing the transcript, so the backlog of buffered deltas is dropped instead of replaying older, shorter snapshots over the complete answer. Text and reasoning parts additionally only grow while a run streams; a stale delta can no longer shrink them.
+- **A long background no longer hangs the session.** Android can kill the event socket without an error while JS is suspended, and the stall watchdog only watched active runs, so a resumed app could stay silent until the next prompt waited out 30 seconds. Returning after 15+ seconds in the background now opens a fresh stream and re-syncs the open session, the busy state and pending permission/question forms. A quick app switch keeps the existing stream.
 
 ### 0.3.2
 

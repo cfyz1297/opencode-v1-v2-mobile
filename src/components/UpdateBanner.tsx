@@ -11,7 +11,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react"
-import { View, Text, TouchableOpacity, StyleSheet, Linking } from "react-native"
+import { View, Text, TouchableOpacity, StyleSheet, Linking, AppState } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { useTranslation } from "react-i18next"
 import { checkForUpdate, dismissUpdate, CURRENT_VERSION, type AvailableUpdate } from "../lib/update-check"
@@ -22,13 +22,24 @@ export function UpdateBanner({ isDark }: { isDark: boolean }) {
 
   useEffect(() => {
     let cancelled = false
-    checkForUpdate()
-      .then((result) => {
-        if (!cancelled) setUpdate(result)
-      })
-      .catch(() => undefined)
+    const check = () => {
+      checkForUpdate()
+        .then((result) => {
+          if (!cancelled) setUpdate(result)
+        })
+        .catch(() => undefined)
+    }
+    check()
+    // The strip lives on a tab that stays mounted for the whole process
+    // lifetime, so a mount-only check would never notice a release published
+    // while the app was open (or just backgrounded). The policy throttles this
+    // to one request per day.
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active") check()
+    })
     return () => {
       cancelled = true
+      sub.remove()
     }
   }, [])
 
@@ -42,8 +53,14 @@ export function UpdateBanner({ isDark }: { isDark: boolean }) {
     // Opening the release page is also an implicit "I've seen this version":
     // do not nag about it again either. But only dismiss after the URL opens —
     // if openURL fails (no browser), keep the banner visible (BUG-026).
-    const opened = await Linking.openURL(update.url).catch(() => false)
-    if (opened) void dismissUpdate(update.version)
+    // openURL resolves to void; only a rejection means it did not open.
+    try {
+      await Linking.openURL(update.url)
+    } catch {
+      return
+    }
+    void dismissUpdate(update.version)
+    setUpdate(null)
   }, [update])
 
   if (!update) return null

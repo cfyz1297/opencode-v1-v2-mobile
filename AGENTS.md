@@ -20,7 +20,7 @@ docs/                # отчёты (security ×2, upstream review, провер
 ```bash
 npm run check:versions   # package.json ↔ app.json ↔ android/app/build.gradle
 npm run typecheck
-npm test                 # node --test через scripts/run-tests.mjs (638 тестов на 0.3.2)
+npm test                 # node --test через scripts/run-tests.mjs (651 тест на 0.3.3)
 npm run test:coverage    # пороги 80% по строкам/ветвям/функциям
 npm run android          # dev-сборка на устройстве/эмуляторе
 ```
