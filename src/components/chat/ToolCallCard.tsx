@@ -1,10 +1,11 @@
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Platform } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { useTranslation } from "react-i18next"
 import type { Part } from "../../lib/sdk"
 import { DiffView } from "./DiffView"
 import { isShellTool, toolCommand, toolDetailText, toolTitle } from "../../lib/tool-view"
+import { formatToolDuration } from "../../lib/tool-duration"
 
 const TOOL_ICONS: Record<string, string> = {
   read: "glasses-outline",
@@ -295,11 +296,20 @@ function ErrorBanner({ message, isDark }: { message: string; isDark: boolean }) 
 }
 
 // --- Duration display ---
-function duration(start?: number, end?: number): string | null {
-  if (!start || !end) return null
-  const ms = end - start
-  if (ms < 1000) return `${ms}ms`
-  return `${(ms / 1000).toFixed(1)}s`
+// A running tool has no end timestamp, so it needs a clock that ticks: without
+// one the row stayed blank for the whole call and a long command looked frozen.
+function useRunningClock(start: number | undefined, running: boolean): number | undefined {
+  const [now, setNow] = useState<number | undefined>(undefined)
+  useEffect(() => {
+    if (!running || !start) {
+      setNow(undefined)
+      return
+    }
+    setNow(Date.now())
+    const id = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [running, start])
+  return now
 }
 
 // --- Main component ---
@@ -315,7 +325,8 @@ export function ToolCallCard({ tool, isDark }: Props) {
   const status = tool.state?.status || "pending"
   const color = statusColor(status)
   const error = tool.state?.error?.message
-  const elapsed = duration(tool.state?.time?.start, tool.state?.time?.end)
+  const now = useRunningClock(tool.state?.time?.start, status === "running")
+  const elapsed = formatToolDuration(tool.state?.time?.start, tool.state?.time?.end, now)
   // An empty object is what a tool sends at input.started, before any argument
   // has arrived: counting it as detail gave a chevron that opened onto nothing.
   const hasDetail =
