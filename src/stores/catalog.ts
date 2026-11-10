@@ -87,6 +87,11 @@ export const useCatalog = create<CatalogState>((set, get) => ({
     const raw = providerResult
     const connected = new Set(Array.isArray(raw?.connected) ? raw.connected : [])
     const defaults = raw?.default || {}
+    // A failed fetch (providerResult null — server asleep, phone just
+    // unlocked, request timed out) must not erase the catalog: the model and
+    // reasoning-effort pickers read `providers` from here, so an empty list
+    // leaves both sheets blank until something else calls load() again. Only
+    // for the same connection though — another server's models are not ours.
     const providers: Provider[] = Array.isArray(raw?.all)
       ? raw.all
           .filter((p) => connected.has(p.id))
@@ -108,7 +113,9 @@ export const useCatalog = create<CatalogState>((set, get) => ({
               })),
           }))
           .filter((p) => p.models.length > 0)
-      : []
+      : providerResult === null && get().catalogConnection === scope
+        ? get().providers
+        : []
 
     // Filter out hidden agents
     const visible = agents.filter((a) => !a.hidden)

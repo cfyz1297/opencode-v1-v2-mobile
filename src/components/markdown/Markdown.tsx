@@ -79,13 +79,22 @@ const lightTheme = {
     borderRadius: 4,
   },
   codespan: {
-    backgroundColor: "#e8e5f0",
     color: "#6d28d9",
+    // No pill. Android draws an inline background from the span's own box, and
+    // for a wrapped span that box is taller than the line: the bar of
+    // `pi-extension/` starts above the previous line and covers the letters
+    // there, while a smaller code font shifts it about half a line down. Two
+    // emulator runs (in inherited-metrics and explicit-metrics variants) both
+    // reproduce it, so the highlight itself is what corrupts chat — the glyphs
+    // are fine. Inline code is marked by colour and monospace instead.
+    //
+    // `transparent` rather than omitting the key: react-native-marked's own
+    // codespan style carries a background, and only an explicit value
+    // overrides it. bgColor 0 makes Android paint no rectangle at all.
+    // fontSize/lineHeight must stay inherited too (a nested Text that declares
+    // its own metrics shifts the box as well).
+    backgroundColor: "transparent",
     fontFamily: mono,
-    fontSize: 13,
-    paddingHorizontal: 4,
-    paddingVertical: 1,
-    borderRadius: 3,
   },
   list: { marginBottom: 4 },
   li: { marginBottom: 2 },
@@ -114,7 +123,6 @@ const darkTheme = {
   },
   codespan: {
     ...lightTheme.codespan,
-    backgroundColor: "#2a2040",
     color: "#c4b5fd",
   },
   hr: { ...lightTheme.hr, backgroundColor: "#2a2a2a" },

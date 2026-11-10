@@ -118,6 +118,12 @@ function RootLayout() {
         const elapsed = Date.now() - backgroundedAt
         backgroundedAt = null
         useEvents.getState().resumeFromBackground(elapsed)
+        // The provider/agent catalog is loaded once per connection. If that
+        // one request ran while the phone was locked or the server was down,
+        // the model and effort pickers stayed empty for the rest of the
+        // session (they only recovered after opening Settings → Models, which
+        // calls load() itself). Refreshing here makes a resume self-healing.
+        void useCatalog.getState().load()
       }
     })
     return () => sub.remove()
