@@ -122,6 +122,15 @@ export default function SessionScreen() {
   const modelSheetRef = useRef<BottomSheet>(null)
   const variantSheetRef = useRef<BottomSheet>(null)
 
+  // Both the chip and the /model command open this sheet. An empty catalog
+  // means the one load() at connect time failed (or never ran on this
+  // connection) — refetch instead of showing a blank list; the sheet fills in
+  // as soon as the response lands.
+  const openModelPicker = useCallback(() => {
+    if (useCatalog.getState().providers.length === 0) void useCatalog.getState().load()
+    modelSheetRef.current?.expand()
+  }, [])
+
   // Emulator/tablet size changes can leave the model sheet expanded over the
   // session sidebar; close pickers whenever the window geometry changes.
   useEffect(() => {
@@ -467,7 +476,7 @@ export default function SessionScreen() {
           return true
         case "model":
           setInput("")
-          modelSheetRef.current?.expand()
+          openModelPicker()
           return true
         case "agent":
           setInput("")
@@ -520,7 +529,7 @@ export default function SessionScreen() {
           return false
       }
     },
-    [router, cycleAgent, sessionClient, currentSession, messages, t],
+    [router, cycleAgent, sessionClient, currentSession, messages, t, openModelPicker],
   )
 
   // Slash command handler
@@ -1078,7 +1087,7 @@ export default function SessionScreen() {
 
           <TouchableOpacity
             style={[s.modelChip, isDark && s.modelChipDark]}
-            onPress={() => modelSheetRef.current?.expand()}
+            onPress={openModelPicker}
             testID="model-chip"
           >
             <Ionicons name="hardware-chip-outline" size={14} color={isDark ? "#888888" : "#666666"} />
