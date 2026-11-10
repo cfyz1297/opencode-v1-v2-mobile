@@ -8,9 +8,9 @@ A fork of [dzianisv/opencode-mobile](https://github.com/dzianisv/opencode-mobile
 
 The repository used to be called `opencode-mobile`; it was renamed to `opencode-v1-v2-mobile` in 0.3.0. Old links redirect, and the APK file name (`opencode-mobile-v2.apk`) is kept unchanged so the built-in update check and the release signature chain keep working.
 
-Version **0.3.3 (68)**. Installs over 0.3.2 — no uninstall needed.
+Version **0.3.4 (69)**. Installs over 0.3.3 — no uninstall needed.
 
-> **Status:** every build runs 651 automated tests plus an Android CUA smoke on an emulator. Not yet exercised against a real opencode 1.18.x server, and the tablet layout, tunnel wizard and offline history have been checked in code and on the emulator only.
+> **Status:** every build runs 657 automated tests plus an Android CUA smoke on an emulator. Not yet exercised against a real opencode 1.18.x server, and the tablet layout, tunnel wizard and offline history have been checked in code and on the emulator only.
 
 ## Is this the app you are looking for?
 
@@ -109,7 +109,7 @@ The base is upstream [dzianisv/opencode-mobile](https://github.com/dzianisv/open
 | What | Upstream | Fork |
 |---|---|---|
 | Server API | API 1.x only (`/session`, `/global/*`) | **both**: 1.x (`/session`, `/global/*`) and 2.x (`/api/*`), auto-detected, forceable in Settings |
-| Version | 0.4.x | fork's own 0.3.x line, currently 0.3.3 (68) |
+| Version | 0.4.x | fork's own 0.3.x line, currently 0.3.4 (69) |
 | Signing and updates | new debug key per build in old versions | permanent keystore, installs in place |
 | Channels | Google Play, self-hosted F-Droid, APK, EAS | APK from GitHub Releases only |
 | Telemetry | Sentry (crash reports) + PostHog | both dependencies removed |
@@ -180,7 +180,12 @@ A separate pure-Java client without Gradle (`aapt → ecj → d8 → apksigner`)
 ## Updates
 
 <details>
-<summary>Changelog by version (0.2.11 - 0.3.3)</summary>
+<summary>Changelog by version (0.2.11 - 0.3.4)</summary>
+
+### 0.3.4
+
+- **Chat text is drawn cleanly.** Inline code was highlighted with a background bar. On Android that bar is placed from the code span's own box, so for a span that wraps the bar is taller than its line and covers the letters above it, and a code span with a smaller font shifts its bar about half a line down. Reproduced on an Android 15 emulator with several style variants: the bars misplace in all of them while the glyphs are correct, so the background itself was the defect. Inline code now keeps the code colour and a monospace family only.
+- **The model and effort pickers no longer come up empty.** The provider catalog loaded once per connection; if that request landed while the phone was locked or the server unreachable, both sheets stayed blank until Settings → Models reloaded it. A failed fetch now keeps the list already loaded (per connection, so another server's models never leak in), returning to the app refreshes it, and opening the picker with an empty catalog fetches again first.
 
 ### 0.3.3
 
