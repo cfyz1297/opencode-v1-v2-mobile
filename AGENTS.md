@@ -44,5 +44,6 @@ npm run android          # dev-сборка на устройстве/эмуля
 - `gh` CLI авторизован как `cfyz1297`, scopes `repo, workflow, gist, read:org`. Пуш в `.github/workflows/*` требует scope `workflow` — проверять `gh auth status` перед правкой workflow.
 - Активны только workflow `Build Android APK` и `Security scan`. Всё остальное (магазины, iOS, Maestro) из проекта удалено.
 - Версия живёт в трёх местах: `package.json`, `app.json` (version + versionCode) и `android/app/build.gradle`. `check:versions` проверяет их; workflow берёт ожидаемые значения из `app.json`, литералы в нём больше не дублируются.
+- Версионирование — **SemVer**: MAJOR — несовместимое изменение (протокол/API, требующее переподключения или переустановки), MINOR — новая функциональность, PATCH — исправления. Ломающее изменение не выпускать под patch-номером.
 - Релиз: тег `vX.Y.Z` → GitHub Release с `opencode-mobile-v2.apk` + `SHA256SUMS.txt`; предыдущему релизу добавить строку «⚠️ Устарел — используйте vX.Y.Z». Имя APK не меняется: на него опираются встроенная проверка обновлений и сверка подписи в CI.
 - `dist/` — локальные APK, в Git не попадают (`dist/` в `.gitignore`). APK публикуется только ассетом релиза; `git add -A -f` в этом репозитории опасен — однажды затащил два APK в историю.
