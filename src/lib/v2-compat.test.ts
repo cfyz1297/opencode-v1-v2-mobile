@@ -490,6 +490,26 @@ describe("V2EventAdapter", () => {
     assert.equal(donePart.state.output, "out\n")
   })
 
+  it("gives a tool part a time window, which V2 never sends", () => {
+    // Live V2 tool parts carry no state.time at all, so the card had nothing
+    // to measure and never showed a duration - a long run looked frozen.
+    const a = adapter()
+    a.adapt({ type: "session.step.started", created: 1, data: { sessionID: "s", assistantMessageID: "m1", agent: "build", model: { id: "m", providerID: "p" } } })
+    const started = a.adapt({
+      type: "session.tool.input.started", created: 2_000,
+      data: { sessionID: "s", assistantMessageID: "m1", id: "t1", name: "shell" },
+    })
+    const pending = started.find((e) => e.type === "message.part.updated")?.properties.part
+    assert.deepEqual(pending.state.time, { start: 2_000 })
+
+    const success = a.adapt({
+      type: "session.tool.success", created: 9_000,
+      data: { sessionID: "s", assistantMessageID: "m1", id: "t1", content: [] },
+    })
+    const done = success.find((e) => e.type === "message.part.updated")?.properties.part
+    assert.deepEqual(done.state.time, { start: 2_000, end: 9_000 }, "the window opens once and closes at the end")
+  })
+
   it("keeps the progress title so a running tool says what it is doing", () => {
     // session.tool.progress carries only metadata.title; it was accepted by
     // toolPartUpdated and then dropped, leaving a blank row for long runs.

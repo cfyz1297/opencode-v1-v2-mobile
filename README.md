@@ -8,9 +8,9 @@ A fork of [dzianisv/opencode-mobile](https://github.com/dzianisv/opencode-mobile
 
 The repository used to be called `opencode-mobile`; it was renamed to `opencode-v1-v2-mobile` in 0.3.0. Old links redirect, and the APK file name (`opencode-mobile-v2.apk`) is kept unchanged so the built-in update check and the release signature chain keep working.
 
-Version **0.3.4 (69)**. Installs over 0.3.3 — no uninstall needed.
+Version **0.3.5 (70)**. Installs over 0.3.4 — no uninstall needed.
 
-> **Status:** every build runs 657 automated tests plus an Android CUA smoke on an emulator. Not yet exercised against a real opencode 1.18.x server, and the tablet layout, tunnel wizard and offline history have been checked in code and on the emulator only.
+> **Status:** every build runs 663 automated tests plus an Android CUA smoke on an emulator. Not yet exercised against a real opencode 1.18.x server, and the tablet layout, tunnel wizard and offline history have been checked in code and on the emulator only.
 
 ## Is this the app you are looking for?
 
@@ -109,7 +109,7 @@ The base is upstream [dzianisv/opencode-mobile](https://github.com/dzianisv/open
 | What | Upstream | Fork |
 |---|---|---|
 | Server API | API 1.x only (`/session`, `/global/*`) | **both**: 1.x (`/session`, `/global/*`) and 2.x (`/api/*`), auto-detected, forceable in Settings |
-| Version | 0.4.x | fork's own 0.3.x line, currently 0.3.4 (69) |
+| Version | 0.4.x | fork's own 0.3.x line, currently 0.3.5 (70) |
 | Signing and updates | new debug key per build in old versions | permanent keystore, installs in place |
 | Channels | Google Play, self-hosted F-Droid, APK, EAS | APK from GitHub Releases only |
 | Telemetry | Sentry (crash reports) + PostHog | both dependencies removed |
@@ -180,7 +180,11 @@ A separate pure-Java client without Gradle (`aapt → ecj → d8 → apksigner`)
 ## Updates
 
 <details>
-<summary>Changelog by version (0.2.11 - 0.3.4)</summary>
+<summary>Changelog by version (0.2.11 - 0.3.5)</summary>
+
+### 0.3.5
+
+- **A long-running tool no longer looks like a frozen app.** The row showed a duration only when both the start and end timestamps were present, and a running tool has no end — so a ten-minute command sat there with no sign of life. It now ticks the elapsed time every second and reads `5m 05s` past the first minute. V2 servers also send no timing for tool parts at all (checked against a live server: `{status, input, content, metadata}` and nothing else), so the V2 adapter now builds that window from the event timestamps instead of assuming it exists.
 
 ### 0.3.4
 

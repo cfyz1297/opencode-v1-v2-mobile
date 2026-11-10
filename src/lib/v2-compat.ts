@@ -624,6 +624,7 @@ export class V2EventAdapter {
   private reasoningAccum = new Map<string, string>()
   private seenMessageIDs = new Set<string>()
   private toolInputs = new Map<string, unknown>()
+  private toolTimes = new Map<string, { start: number; end?: number }>()
 
   // Feed one decoded V2 event envelope. Returns the V1 events to dispatch.
   adapt(event: V2EventEnvelope): V1Event[] {
@@ -715,7 +716,7 @@ export class V2EventAdapter {
       case "session.tool.input.started": {
         const events: V1Event[] = this.ensureMessage(data, event)
         this.toolInputs.set(String(data.id), {})
-        events.push(this.toolPartUpdated(data, { status: "pending", input: {} }))
+        events.push(this.toolPartUpdated(data, { status: "pending", input: {} }, event.created))
         return events
       }
 
@@ -725,25 +726,35 @@ export class V2EventAdapter {
         const events: V1Event[] = this.ensureMessage(data, event)
         const input = parseMaybeJson(String(data.text ?? "{}"))
         this.toolInputs.set(String(data.id), input)
-        events.push(this.toolPartUpdated(data, { status: "pending", input }))
+        events.push(this.toolPartUpdated(data, { status: "pending", input }, event.created))
         return events
       }
 
       case "session.tool.called": {
         const events: V1Event[] = this.ensureMessage(data, event)
         if (data.input !== undefined) this.toolInputs.set(String(data.id), data.input)
-        events.push(this.toolPartUpdated(data, { status: "running", input: data.input ?? this.toolInputs.get(String(data.id)) }))
+        events.push(
+          this.toolPartUpdated(
+            data,
+            { status: "running", input: data.input ?? this.toolInputs.get(String(data.id)) },
+            event.created,
+          ),
+        )
         return events
       }
 
       case "session.tool.progress": {
         const events: V1Event[] = this.ensureMessage(data, event)
         events.push(
-          this.toolPartUpdated(data, {
-            status: "running",
-            input: this.toolInputs.get(String(data.id)),
-            title: (data.metadata as { title?: string } | undefined)?.title,
-          }),
+          this.toolPartUpdated(
+            data,
+            {
+              status: "running",
+              input: this.toolInputs.get(String(data.id)),
+              title: (data.metadata as { title?: string } | undefined)?.title,
+            },
+            event.created,
+          ),
         )
         return events
       }
@@ -751,11 +762,15 @@ export class V2EventAdapter {
       case "session.tool.success": {
         const events: V1Event[] = this.ensureMessage(data, event)
         events.push(
-          this.toolPartUpdated(data, {
-            status: "completed",
-            input: this.toolInputs.get(String(data.id)),
-            output: contentText(data.content as Array<{ type?: string; text?: string }>),
-          }),
+          this.toolPartUpdated(
+            data,
+            {
+              status: "completed",
+              input: this.toolInputs.get(String(data.id)),
+              output: contentText(data.content as Array<{ type?: string; text?: string }>),
+            },
+            event.created,
+          ),
         )
         return events
       }
@@ -764,11 +779,15 @@ export class V2EventAdapter {
         const events: V1Event[] = this.ensureMessage(data, event)
         const err = data.error as { message?: string } | undefined
         events.push(
-          this.toolPartUpdated(data, {
-            status: "error",
-            input: this.toolInputs.get(String(data.id)),
-            error: { message: err?.message ?? "Tool failed" },
-          }),
+          this.toolPartUpdated(
+            data,
+            {
+              status: "error",
+              input: this.toolInputs.get(String(data.id)),
+              error: { message: err?.message ?? "Tool failed" },
+            },
+            event.created,
+          ),
         )
         return events
       }
@@ -933,11 +952,22 @@ export class V2EventAdapter {
   private toolPartUpdated(
     data: Record<string, unknown>,
     patch: { status: PartStateStatus; input?: unknown; output?: string; error?: { message: string }; title?: string },
+    at?: number,
   ): V1Event {
     const messageID = String(data.assistantMessageID ?? "")
     const callID = String(data.id ?? "")
     const toolName = String(data.name ?? "") || this.toolNames.get(callID) || ""
     if (data.name) this.toolNames.set(callID, String(data.name))
+    // V2 tool parts carry no state.time at all (checked against the live
+    // server), so the card had nothing to measure and showed no duration for
+    // any tool. Synthesize it from the event timestamps: the first event of a
+    // call opens the window, the terminal one closes it.
+    const now = at ?? Date.now()
+    const timing = this.toolTimes.get(callID) ?? { start: now }
+    if (timing.end === undefined && (patch.status === "completed" || patch.status === "error")) {
+      timing.end = Math.max(now, timing.start)
+    }
+    this.toolTimes.set(callID, timing)
     const part: Part = {
       id: `tc_${callID}`,
       sessionID: String(data.sessionID ?? ""),
@@ -947,6 +977,7 @@ export class V2EventAdapter {
       callID,
       state: {
         status: patch.status,
+        time: timing.end === undefined ? { start: timing.start } : { start: timing.start, end: timing.end },
         ...(patch.input !== undefined ? { input: patch.input } : {}),
         ...(patch.output !== undefined ? { output: patch.output } : {}),
         ...(patch.error ? { error: patch.error } : {}),
@@ -970,6 +1001,7 @@ export class V2EventAdapter {
       this.textAccum.size <= MAX_TRACKED &&
       this.reasoningAccum.size <= MAX_TRACKED &&
       this.toolInputs.size <= MAX_TRACKED &&
+      this.toolTimes.size <= MAX_TRACKED &&
       this.toolNames.size <= MAX_TRACKED
     )
       return
