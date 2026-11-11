@@ -61,8 +61,7 @@
         "expo-image-picker",
         {
           "photosPermission": "OpenCode can attach images from your photo library to messages to your AI coding agent.",
-          "cameraPermission": "OpenCode can capture images with your camera and attach them to messages to your AI coding agent.",
-          "microphonePermission": false
+          "cameraPermission": "OpenCode can capture images with your camera and attach them to messages to your AI coding agent."
         }
       ],
       [

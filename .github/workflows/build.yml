@@ -155,6 +155,12 @@ jobs:
           if grep -q "SYSTEM_ALERT_WINDOW" /tmp/permissions.txt; then
             echo "SYSTEM_ALERT_WINDOW is present in the release APK"; exit 1
           fi
+          # Voice input needs the runtime permission to be declared at all;
+          # without it requestPermissionsAsync can only answer "denied". An
+          # image-picker `microphonePermission: false` silently removed it.
+          if ! grep -q "RECORD_AUDIO" /tmp/permissions.txt; then
+            echo "RECORD_AUDIO is missing from the release APK: voice input cannot work"; exit 1
+          fi
           "$SIGNER" verify --print-certs "$APK" > /tmp/current-signers.txt
           cat /tmp/current-signers.txt
           # Production certificate fingerprint. Hardcoded on purpose: downloading
