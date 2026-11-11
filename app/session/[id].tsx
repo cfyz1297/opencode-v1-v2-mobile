@@ -603,11 +603,14 @@ export default function SessionScreen() {
       const items = settled.filter((r) => r.status === "fulfilled").map((r) => r.value)
       if (items.length) setAttachments((prev) => [...prev, ...items])
       if (settled.some((r) => r.status === "rejected")) {
-        console.error(
-          "Failed to process image(s):",
-          settled.filter((r) => r.status === "rejected").map((r) => r.reason),
-        )
-        Alert.alert(t("session.alerts.imageFailedTitle"), t("session.alerts.imageFailedMessage"))
+        const reasons = settled
+          .filter((r): r is PromiseRejectedResult => r.status === "rejected")
+          .map((r) => (r.reason instanceof Error ? r.reason.message : String(r.reason)))
+        console.error("Failed to process image(s):", reasons)
+        log.error("ImagePicker", "processing failed:", reasons.join("; "))
+        // Same reasoning as the picker branch: without the reason the report
+        // only says "try another photo" and the next fix is another guess.
+        Alert.alert(t("session.alerts.imageFailedTitle"), `${t("session.alerts.imageFailedMessage")}\n\n${reasons.join("\n")}`)
       }
     } catch (err) {
       // Previously an unhandled rejection here: the picker never opened and the
@@ -1154,7 +1157,7 @@ export default function SessionScreen() {
         >
           <View style={s.inputRow}>
             {/* Attach button */}
-            <TouchableOpacity style={s.attachBtn} onPress={pickFromLibrary} onLongPress={pickFromCamera}>
+            <TouchableOpacity style={s.attachBtn} onPress={pickFromLibrary} onLongPress={pickFromCamera} testID="attach-button">
               <Ionicons name="add-circle-outline" size={26} color={isDark ? "#888888" : "#666666"} />
             </TouchableOpacity>
 

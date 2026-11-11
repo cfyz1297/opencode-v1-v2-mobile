@@ -55,6 +55,9 @@ test("the gallery picker survives a system picker that refuses to launch", () =>
   // The reason is invisible otherwise: logcat only, and release builds drop it.
   // Diagnostics reports carry the log ring buffer, so record the real error.
   assert.match(picker, /log\.error\(/)
+  // A failed convert (toJpeg) shows the same generic alert; it must name the
+  // reason too, otherwise "try another photo" is all the next report says.
+  assert.match(picker, /log\.error\("ImagePicker", "processing failed:"/)
 })
 
 test("reading the clipboard cannot fail silently", () => {
