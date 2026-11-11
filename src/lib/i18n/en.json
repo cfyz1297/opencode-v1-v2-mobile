@@ -139,7 +139,9 @@
       "speechErrorTitle": "Voice input failed",
       "speechErrorMessage": "Could not use voice input. Check your microphone permission and try again.",
       "abortFailedTitle": "Could not stop the run",
-      "abortFailedMessage": "The server did not accept the interrupt. The run is still going — check the server."
+      "abortFailedMessage": "The server did not accept the interrupt. The run is still going — check the server.",
+      "pickerRestartTitle": "Photo picker needs a restart",
+      "pickerRestartMessage": "Android released the app screen while the app was in the background, and the photo picker went with it. Close the app completely and open it again — attaching works after that. Nothing is wrong with the photo."
     }
   },
   "connection": {

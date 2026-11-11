@@ -139,7 +139,9 @@
       "speechErrorTitle": "语音输入失败",
       "speechErrorMessage": "无法使用语音输入。请检查麦克风权限后重试。",
       "abortFailedTitle": "无法停止运行",
-      "abortFailedMessage": "服务器未接受中断请求，任务仍在继续 — 请检查服务器。"
+      "abortFailedMessage": "服务器未接受中断请求，任务仍在继续 — 请检查服务器。",
+      "pickerRestartTitle": "需要重启应用",
+      "pickerRestartMessage": "Android 在应用处于后台时回收了界面，图片选择器也随之失效。请完全关闭应用后重新打开，之后即可正常添加图片。照片本身没有问题。"
     }
   },
   "connection": {

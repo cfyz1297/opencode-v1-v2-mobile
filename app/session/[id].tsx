@@ -52,6 +52,7 @@ import { adaptiveLayout } from '../../src/lib/adaptive-layout'
 import { TabletSessions } from '../../src/components/TabletSessions'
 import { isSafeSessionId } from '../../src/lib/session-id'
 import { log } from "../../src/lib/logbuffer"
+import { isDeadLauncherError } from "../../src/lib/image-pick-error"
 
 
 // --- Builtin slash commands ---
@@ -596,6 +597,9 @@ export default function SessionScreen() {
         // Release builds drop console output; the log ring buffer travels with
         // diagnostics reports, so the real reason stays visible.
         log.error("ImagePicker", "system picker failed, retrying legacy:", err)
+        // The legacy intent uses the same activity-result launcher, so a dead
+        // registry makes this a guaranteed second failure.
+        if (isDeadLauncherError(err)) throw err
         result = await launchLibrary(true)
       }
       if (result.canceled) return
@@ -618,8 +622,14 @@ export default function SessionScreen() {
       const reason = err instanceof Error ? err.message : String(err)
       console.error("Failed to open image picker:", err)
       log.error("ImagePicker", reason)
-      // Both pickers failed: the reason is the only clue the next report can
-      // carry, and the generic message alone cannot tell them apart.
+      if (isDeadLauncherError(err)) {
+        // Not the photo's fault and not fixable from JS: the native registry
+        // dropped the launcher when Android recreated the Activity.
+        Alert.alert(t("session.alerts.pickerRestartTitle"), t("session.alerts.pickerRestartMessage"))
+        return
+      }
+      // The reason is the only clue the next report can carry, and the generic
+      // message alone cannot tell the failures apart.
       Alert.alert(t("session.alerts.imageFailedTitle"), `${t("session.alerts.imageFailedMessage")}\n\n${reason}`)
     } finally {
       pickingRef.current = false
@@ -632,8 +642,18 @@ export default function SessionScreen() {
       Alert.alert(t("session.alerts.cameraPermissionTitle"), t("session.alerts.cameraPermissionMessage"))
       return
     }
-    const result = await ImagePicker.launchCameraAsync({ quality: 1 })
-    if (result.canceled) return
+    const result = await ImagePicker.launchCameraAsync({ quality: 1 }).catch((err) => {
+      // Same dead registry as the gallery path; unhandled here it silently
+      // swallowed the long-press on +.
+      const reason = err instanceof Error ? err.message : String(err)
+      log.error("ImagePicker", "camera:", reason)
+      Alert.alert(
+        t(isDeadLauncherError(err) ? "session.alerts.pickerRestartTitle" : "session.alerts.imageFailedTitle"),
+        t(isDeadLauncherError(err) ? "session.alerts.pickerRestartMessage" : "session.alerts.imageFailedMessage"),
+      )
+      return null
+    })
+    if (!result || result.canceled) return
     const a = result.assets[0]
     try {
       const item = await toJpeg(a.uri, a.width, a.height)
