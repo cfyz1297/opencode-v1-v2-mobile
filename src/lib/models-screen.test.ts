@@ -165,7 +165,7 @@ test('shared visibility hook gates both pickers until catalog belongs to the act
       state = initialize(value => Object.assign(state, value))
       return Object.assign(selector(state), { getState: () => state })
     } },
-    '@react-native-async-storage/async-storage': { default: storage },
+    '@react-native-async-storage/async-storage': { __esModule: true, default: storage },
     '../lib/model-visibility': { createModelVisibility },
     './connections': { useConnections: selector(connection) },
     './catalog': { useCatalog: selector(catalog) },

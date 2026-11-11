@@ -1024,7 +1024,7 @@ export default function SessionScreen() {
                     <ActivityIndicator size="small" color={isDark ? "#888888" : "#666666"} />
                     <Text style={[s.loadingMoreText, isDark && s.metaDark]}>{t("session.loadingOlder")}</Text>
                   </View>
-                ) : null
+                ) : undefined
               }
             />
             {/* Empty state rendered OUTSIDE the inverted list to avoid the
@@ -1285,7 +1285,11 @@ const s = StyleSheet.create({
   // Empty state overlay — sits on top of the (empty) inverted list, untransformed,
   // so its text/icon render upright and un-mirrored on Android.
   emptyOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
     justifyContent: "center",
     alignItems: "center",
     paddingVertical: 64,
