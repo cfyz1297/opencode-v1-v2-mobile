@@ -103,7 +103,12 @@ jobs:
       - name: Build APK
         if: inputs.reuse_apk_run_id == ''
         working-directory: android
-        run: ./gradlew assembleRelease
+        # The NDK is not part of the Gradle cache, so every run downloads it
+        # from dl.google.com; that download fails every so often with
+        # "Archive is not a ZIP archive" and fails the whole build before any
+        # code is compiled. One retry is enough to ride that out; a real
+        # compile error fails both attempts.
+        run: ./gradlew assembleRelease || ./gradlew assembleRelease
 
       - name: Verify reused build has identical application sources
         if: inputs.reuse_apk_run_id != ''
