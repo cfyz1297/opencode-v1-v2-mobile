@@ -43,6 +43,23 @@ test("opening the image picker cannot fail silently", () => {
   assert.match(picker, /Keyboard\.dismiss\(\)/)
 })
 
+test("the gallery picker survives a system picker that refuses to launch", () => {
+  // Reported: tapping + showed "Изображение не прикреплено" immediately, with
+  // no picker UI at all — launchImageLibraryAsync rejected before any choice.
+  // The system photo picker intent is the fragile part; `legacy: true` uses
+  // ACTION_GET_CONTENT, which any device with a file manager can answer.
+  const picker = block("const pickFromLibrary = useCallback(", "}, [t])")
+  assert.match(picker, /legacy: true/)
+  // Retry must happen *inside* the failure path, not instead of the first try.
+  assert.match(picker, /catch \(err\)[\s\S]*launchLibrary\(true\)/)
+  // The reason is invisible otherwise: logcat only, and release builds drop it.
+  // Diagnostics reports carry the log ring buffer, so record the real error.
+  assert.match(picker, /log\.error\(/)
+  // A failed convert (toJpeg) shows the same generic alert; it must name the
+  // reason too, otherwise "try another photo" is all the next report says.
+  assert.match(picker, /log\.error\("ImagePicker", "processing failed:"/)
+})
+
 test("reading the clipboard cannot fail silently", () => {
   const paste = block("const pasteFromClipboard = useCallback(", "}, [t])")
   assert.match(paste, /catch \(err\)/)

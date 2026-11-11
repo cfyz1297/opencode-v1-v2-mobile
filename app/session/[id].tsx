@@ -51,6 +51,7 @@ import { useSpeech } from "../../src/lib/speech"
 import { adaptiveLayout } from '../../src/lib/adaptive-layout'
 import { TabletSessions } from '../../src/components/TabletSessions'
 import { isSafeSessionId } from '../../src/lib/session-id'
+import { log } from "../../src/lib/logbuffer"
 
 
 // --- Builtin slash commands ---
@@ -574,30 +575,52 @@ export default function SessionScreen() {
   const pickFromLibrary = useCallback(async () => {
     if (pickingRef.current) return
     pickingRef.current = true
-    try {
-      Keyboard.dismiss()
-      const result = await ImagePicker.launchImageLibraryAsync({
+    const launchLibrary = (legacy: boolean) =>
+      ImagePicker.launchImageLibraryAsync({
         mediaTypes: ["images"],
         allowsMultipleSelection: true,
         selectionLimit: 10,
         quality: 1, // full quality - we compress in manipulator
+        ...(legacy ? { legacy: true } : {}),
       })
+    try {
+      Keyboard.dismiss()
+      // The system photo picker is an activity outside the app: when the ROM
+      // has none (or refuses the intent) the call rejects before any UI, so the
+      // user only saw the error alert. ACTION_GET_CONTENT is answered by the
+      // file manager on every device.
+      let result
+      try {
+        result = await launchLibrary(false)
+      } catch (err) {
+        // Release builds drop console output; the log ring buffer travels with
+        // diagnostics reports, so the real reason stays visible.
+        log.error("ImagePicker", "system picker failed, retrying legacy:", err)
+        result = await launchLibrary(true)
+      }
       if (result.canceled) return
       const settled = await Promise.allSettled(result.assets.map((a) => toJpeg(a.uri, a.width, a.height)))
       const items = settled.filter((r) => r.status === "fulfilled").map((r) => r.value)
       if (items.length) setAttachments((prev) => [...prev, ...items])
       if (settled.some((r) => r.status === "rejected")) {
-        console.error(
-          "Failed to process image(s):",
-          settled.filter((r) => r.status === "rejected").map((r) => r.reason),
-        )
-        Alert.alert(t("session.alerts.imageFailedTitle"), t("session.alerts.imageFailedMessage"))
+        const reasons = settled
+          .filter((r): r is PromiseRejectedResult => r.status === "rejected")
+          .map((r) => (r.reason instanceof Error ? r.reason.message : String(r.reason)))
+        console.error("Failed to process image(s):", reasons)
+        log.error("ImagePicker", "processing failed:", reasons.join("; "))
+        // Same reasoning as the picker branch: without the reason the report
+        // only says "try another photo" and the next fix is another guess.
+        Alert.alert(t("session.alerts.imageFailedTitle"), `${t("session.alerts.imageFailedMessage")}\n\n${reasons.join("\n")}`)
       }
     } catch (err) {
       // Previously an unhandled rejection here: the picker never opened and the
       // button silently did nothing.
+      const reason = err instanceof Error ? err.message : String(err)
       console.error("Failed to open image picker:", err)
-      Alert.alert(t("session.alerts.imageFailedTitle"), t("session.alerts.imageFailedMessage"))
+      log.error("ImagePicker", reason)
+      // Both pickers failed: the reason is the only clue the next report can
+      // carry, and the generic message alone cannot tell them apart.
+      Alert.alert(t("session.alerts.imageFailedTitle"), `${t("session.alerts.imageFailedMessage")}\n\n${reason}`)
     } finally {
       pickingRef.current = false
     }
@@ -1134,7 +1157,7 @@ export default function SessionScreen() {
         >
           <View style={s.inputRow}>
             {/* Attach button */}
-            <TouchableOpacity style={s.attachBtn} onPress={pickFromLibrary} onLongPress={pickFromCamera}>
+            <TouchableOpacity style={s.attachBtn} onPress={pickFromLibrary} onLongPress={pickFromCamera} testID="attach-button">
               <Ionicons name="add-circle-outline" size={26} color={isDark ? "#888888" : "#666666"} />
             </TouchableOpacity>
 
