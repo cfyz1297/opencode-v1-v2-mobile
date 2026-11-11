@@ -20,8 +20,10 @@
     "@react-navigation/native": "^7.0.14",
     "expo": "^58.0.0",
     "expo-clipboard": "~58.0.4",
+    "expo-constants": "~58.0.16",
     "expo-crypto": "~58.0.8",
     "expo-device": "~58.0.5",
+    "expo-font": "~58.0.12",
     "expo-image-manipulator": "~58.0.16",
     "expo-image-picker": "~58.0.10",
     "expo-linking": "~58.0.17",
@@ -31,7 +33,9 @@
     "expo-router": "~58.0.31",
     "expo-secure-store": "~58.0.3",
     "expo-speech-recognition": "~58.0.1",
+    "expo-splash-screen": "~58.0.14",
     "expo-status-bar": "~58.0.5",
+    "expo-system-ui": "~58.0.7",
     "i18next": "^26.3.6",
     "react": "19.3.0",
     "react-i18next": "^17.0.10",
@@ -46,7 +50,6 @@
     "zustand": "^5.0.2"
   },
   "devDependencies": {
-    "@expo/config-plugins": "~58.0.13",
     "@types/node": "^24.19.2",
     "@types/react": "~19.3.0",
     "typescript": "~6.0.3"

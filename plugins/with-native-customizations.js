@@ -1,6 +1,6 @@
 // Expo prebuild rewrites every file it owns on every run, so native
 // customizations cannot live in android/ — they are re-applied here instead.
-const { withAppBuildGradle, withMainActivity, createRunOncePlugin } = require('@expo/config-plugins')
+const { withAppBuildGradle, withMainActivity, withAndroidManifest, createRunOncePlugin } = require('expo/config-plugins')
 
 const SIGNING = `        if (System.getenv("RELEASE_STORE_FILE")) {
             release {
@@ -62,14 +62,22 @@ function withReleaseSigning(config) {
   return withAppBuildGradle(config, (cfg) => {
     let src = cfg.modResults.contents
 
+    // Inside signingConfigs, right after the generated debug block: the debug
+    // keystore password closes that block, then signingConfigs closes.
     if (!src.includes('RELEASE_STORE_FILE')) {
-      src = src.replace(/(\n    buildTypes \{)/, `\n${SIGNING}$1`)
+      const anchor = /( {12}keyPassword 'android'\n {8}\}\n)( {4}\}\n {4}buildTypes \{)/
+      if (!anchor.test(src)) throw new Error('with-native-customizations: signingConfigs anchor not found')
+      src = src.replace(anchor, `$1${SIGNING}$2`)
     }
-    // The generated template hardwires the debug key into the release build.
-    src = src.replace(
-      /(release \{[\s\S]*?)signingConfig signingConfigs\.debug/,
-      "$1signingConfig signingConfigs.findByName('release') ?: signingConfigs.debug",
-    )
+    // Only the release build type switches to the production key; the debug
+    // build type keeps the generated debug keystore.
+    const templateReleaseSigning =
+      '            // Caution! In production, you need to generate your own keystore file.\n' +
+      '            // see https://reactnative.dev/docs/signed-apk-android.\n' +
+      '            signingConfig signingConfigs.debug\n'
+    if (src.includes(templateReleaseSigning)) {
+      src = src.replace(templateReleaseSigning, "            signingConfig signingConfigs.findByName('release') ?: signingConfigs.debug\n")
+    }
     src = src.replace('proguard-android-optimize.txt', 'proguard-android.txt')
 
     if (!src.includes('dependenciesInfo')) {
@@ -123,8 +131,20 @@ function withImeReporter(config) {
   })
 }
 
+function withCleartextTraffic(config) {
+  return withAndroidManifest(config, (cfg) => {
+    const application = cfg.modResults.manifest.application?.[0]
+    if (!application) throw new Error('with-native-customizations: no <application> in manifest')
+    // SDK 58 dropped `android.usesCleartextTraffic` from the config schema and
+    // prebuild silently ignores it. The app talks to opencode over plain
+    // http://127.0.0.1, which Android blocks by default since API 28.
+    application.$['android:usesCleartextTraffic'] = 'true'
+    return cfg
+  })
+}
+
 module.exports = createRunOncePlugin(
-  (config) => withImeReporter(withReleaseSigning(config)),
+  (config) => withCleartextTraffic(withImeReporter(withReleaseSigning(config))),
   'with-native-customizations',
   '1.0.0',
 )

@@ -7,11 +7,6 @@
     "scheme": "opencode",
     "userInterfaceStyle": "automatic",
     "icon": "./assets/icon.png",
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#0F172A"
-    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "cc.agentlabs.opencode",
@@ -36,7 +31,6 @@
     "android": {
       "package": "cc.agentlabs.opencode",
       "versionCode": 72,
-      "usesCleartextTraffic": true,
       "blockedPermissions": [
         "android.permission.SYSTEM_ALERT_WINDOW"
       ],
@@ -78,7 +72,16 @@
           "speechRecognitionPermission": "OpenCode uses speech recognition so you can dictate prompts to your AI coding agent hands-free."
         }
       ],
-      "expo-localization"
+      "expo-localization",
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#0F172A"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
