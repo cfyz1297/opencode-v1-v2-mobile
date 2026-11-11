@@ -121,7 +121,11 @@ const server = createServer((req, res) => {
   ] }
   else if (path === '/api/agent') data = { data: [{ id: 'build', name: 'Build', mode: 'primary' }] }
   else if (path === '/api/model/default') data = {}
-  else if (['/api/model', '/api/command', '/api/project', '/api/permission/request', '/api/form', '/api/session/roadmap-session/form', '/api/session/roadmap-session/permission', '/api/session/roadmap-session/diff', '/api/session/tablet-session-two/form', '/api/session/tablet-session-two/permission', '/api/session/tablet-session-two/diff'].includes(path)) data = { data: [] }
+  else if (path === '/api/model') data = { data: [
+    { id: 'm1', providerID: 'fix', name: 'Fixture One', capabilities: { tools: true }, variants: [{ id: 'low' }, { id: 'high' }] },
+    { id: 'm2', providerID: 'fix', name: 'Fixture Two', capabilities: { tools: true }, variants: [{ id: 'low' }, { id: 'high' }] },
+  ] }
+  else if (['/api/command', '/api/project', '/api/permission/request', '/api/form', '/api/session/roadmap-session/form', '/api/session/roadmap-session/permission', '/api/session/roadmap-session/diff', '/api/session/tablet-session-two/form', '/api/session/tablet-session-two/permission', '/api/session/tablet-session-two/diff'].includes(path)) data = { data: [] }
   else { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end('{}'); return }
   res.writeHead(200, { 'Content-Type': 'application/json' })
   res.end(JSON.stringify(data))
@@ -162,6 +166,28 @@ try {
   await waitFor('OFFLINE_ANSWER_42')
   await sleep(2500)
   screenshot('session-phone')
+  // The chips are the only way to change model and reasoning effort, and a
+  // sheet that silently never opens is invisible to the unit tests. Tapping
+  // them, and checking the label really follows the choice, is the regression
+  // guard for "model and effort selection stopped working".
+  await tap('model-chip')
+  await waitFor('Select Model')
+  await waitFor('Fixture Two')
+  screenshot('model-picker-open')
+  await tap('model-option-fix-m2')
+  await waitFor('model-chip')
+  assert.ok(!snapshot().includes('Select Model'), 'Picking a model closes the sheet')
+  // The chip shows the model id, not the display name.
+  await waitFor('m2')
+  await tap('variant-chip')
+  await waitFor('Reasoning Effort')
+  await waitFor('variant-option-high')
+  screenshot('variant-picker-open')
+  await tap('variant-option-high')
+  await waitFor('variant-chip')
+  assert.ok(!snapshot().includes('Reasoning Effort'), 'Picking an effort closes the sheet')
+  await waitFor('High')
+  await screenshot('model-and-effort-selected')
   adb('shell', 'wm', 'size', '1920x1200')
   await sleep(2000)
   // Re-open the session after resize so a stolen back/sheet cannot leave history on top.
@@ -203,10 +229,15 @@ try {
   await waitFor('No saved conversations yet.')
   screenshot('history-cleared')
   writeFileSync(`${out}/requests.json`, JSON.stringify(requests, null, 2))
-  writeFileSync(`${out}/result.json`, JSON.stringify({ result: 'PASS', checks: ['tunnel-commands', 'reject-http-before-network', 'v2-connect', 'live-session-text', 'tablet-split', 'tablet-portrait', 'offline-cold-restart', 'read-only', 'clear-history'] }, null, 2))
+  writeFileSync(`${out}/result.json`, JSON.stringify({ result: 'PASS', checks: ['tunnel-commands', 'reject-http-before-network', 'v2-connect', 'live-session-text', 'model-picker-select', 'effort-picker-select', 'tablet-split', 'tablet-portrait', 'offline-cold-restart', 'read-only', 'clear-history'] }, null, 2))
   console.log('PASS: Android tunnel, tablet and offline history CUA smoke')
 } catch (error) {
   screenshot('failure')
+  // A JS exception inside the sheet only reaches logcat; without it a failed
+  // run says "UI did not contain Select Model" and nothing more.
+  try {
+    writeFileSync(`${out}/logcat.txt`, adb('logcat', '-d', '-t', '400', '-s', 'ReactNativeJS:V', 'AndroidRuntime:E'))
+  } catch {}
   throw error
 } finally {
   server.closeAllConnections()
