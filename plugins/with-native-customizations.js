@@ -71,6 +71,10 @@ function withReleaseSigning(config) {
     }
     // Only the release build type switches to the production key; the debug
     // build type keeps the generated debug keystore.
+    // AGP 9 rejects `proguard-android.txt` outright ("no longer supported since
+    // it includes -dontoptimize"), so the template's optimize file stays. The
+    // non-optimize variant was only there for the F-Droid scanner, and store
+    // publishing is gone.
     const templateReleaseSigning =
       '            // Caution! In production, you need to generate your own keystore file.\n' +
       '            // see https://reactnative.dev/docs/signed-apk-android.\n' +
@@ -78,7 +82,6 @@ function withReleaseSigning(config) {
     if (src.includes(templateReleaseSigning)) {
       src = src.replace(templateReleaseSigning, "            signingConfig signingConfigs.findByName('release') ?: signingConfigs.debug\n")
     }
-    src = src.replace('proguard-android-optimize.txt', 'proguard-android.txt')
 
     if (!src.includes('dependenciesInfo')) {
       src = src.replace(
