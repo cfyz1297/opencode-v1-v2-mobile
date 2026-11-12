@@ -120,6 +120,8 @@ function RootLayout() {
       } else if (next === "active" && backgroundedAt !== null) {
         const elapsed = Date.now() - backgroundedAt
         backgroundedAt = null
+        // Whatever was held while returning is already visible on screen.
+        notifications.dropHeld()
         useEvents.getState().resumeFromBackground(elapsed)
         // The provider/agent catalog is loaded once per connection. If that
         // one request ran while the phone was locked or the server was down,

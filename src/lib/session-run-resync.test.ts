@@ -545,19 +545,20 @@ test("a quick app switch keeps the stream and costs no reconnect", async () => {
 
 // Notifications are only for a phone the user is not looking at, so they are
 // generated exactly when the SSE socket is dead. These cover the path that
-// replaces the stream: polling while the app is in the background.
+// replaces the stream: the server's own list of running sessions, polled while
+// the app is in the background. Local status and the optimistic `sending` flag
+// are deliberately NOT trusted — they are what the previous versions relied on.
 test("a run that ends while the app is backgrounded still notifies", async () => {
   const app = harness()
-  app.heartbeatEvery(15_000)
+  app.setActive([SESSION])
   app.setBusy()
   app.connect()
   await app.settle()
-  await app.push(busyEvent)
-  assert.equal(app.events.getState().sessionStatus[SESSION].type, "busy")
 
   // The socket is dead from here on: no idle event will ever arrive.
   app.setAppState("background")
-  app.setActive([])
+  await app.advance(6_000) // baseline: the server still lists the run
+  app.setActive([]) // the run finished
   await app.advance(6_000)
 
   assert.equal(app.events.getState().sessionStatus[SESSION].type, "idle")
@@ -568,43 +569,39 @@ test("a run that ends while the app is backgrounded still notifies", async () =>
 
 test("the background watch stays off while the app is open", async () => {
   const app = harness()
-  app.heartbeatEvery(15_000)
+  app.setActive([SESSION])
   app.setBusy()
   app.connect()
   await app.settle()
-  await app.push(busyEvent)
-  app.setActive([])
 
   await app.advance(6_000)
-  assert.equal(app.stats.messageCalls, 0, "no server polling while the transcript is on screen")
+  assert.equal(app.stats.pendingCalls, 0, "no server polling while the transcript is on screen")
 
   app.setAppState("background")
   await app.advance(6_000)
-  assert.ok(app.stats.messageCalls >= 1, "polling starts with the app in the background")
+  assert.ok(app.stats.pendingCalls >= 1, "polling starts with the app in the background")
 })
 
 test("returning to the foreground stops the polling", async () => {
   const app = harness()
-  app.heartbeatEvery(15_000)
-  app.setBusy()
   app.setActive([SESSION])
+  app.setBusy()
   app.connect()
   await app.settle()
-  await app.push(busyEvent)
 
   app.setAppState("background")
   await app.advance(6_000)
-  const calls = app.stats.messageCalls
+  const calls = app.stats.pendingCalls
   assert.ok(calls >= 1)
 
   app.setAppState("active")
   await app.advance(6_000)
-  assert.equal(app.stats.messageCalls, calls, "no polling once the user is back")
+  assert.equal(app.stats.pendingCalls, calls, "no polling once the user is back")
 })
 
 test("a question asked while backgrounded reaches the shade", async () => {
   const app = harness()
-  app.heartbeatEvery(15_000)
+  app.setActive([SESSION])
   app.setBusy()
   app.connect()
   await app.settle()
@@ -626,7 +623,7 @@ test("a question asked while backgrounded reaches the shade", async () => {
 
 test("a permission request created while backgrounded reaches the shade", async () => {
   const app = harness()
-  app.heartbeatEvery(15_000)
+  app.setActive([SESSION])
   app.setBusy()
   app.connect()
   await app.settle()
@@ -641,7 +638,7 @@ test("a permission request created while backgrounded reaches the shade", async 
 
 test("the same prompt never notifies twice, whether it arrives over SSE or the poll", async () => {
   const app = harness()
-  app.heartbeatEvery(15_000)
+  app.setActive([SESSION])
   app.setBusy()
   app.connect()
   await app.settle()
@@ -657,7 +654,7 @@ test("the same prompt never notifies twice, whether it arrives over SSE or the p
 
 test("a run that failed while backgrounded is reported as an error, not a success", async () => {
   const app = harness()
-  app.heartbeatEvery(15_000)
+  app.setActive([SESSION])
   app.setBusy()
   app.setTranscript([
     { info: { id: "u1", sessionID: SESSION, role: "user", time: { created: 1 } }, parts: [] },
@@ -677,6 +674,7 @@ test("a run that failed while backgrounded is reported as an error, not a succes
   await app.push(busyEvent)
 
   app.setAppState("background")
+  await app.advance(6_000) // baseline
   app.setActive([])
   await app.advance(6_000)
 
@@ -685,39 +683,40 @@ test("a run that failed while backgrounded is reported as an error, not a succes
 })
 
 test("a run sent right before minimizing still reports its end", async () => {
-  // The busy event travels over the socket the app just lost: only the
-  // optimistic sending flag says a run is in flight.
+  // The busy event travels over the socket the app just lost, so no local state
+  // knows about the run at all — only the server does.
   const app = harness()
   app.heartbeatEvery(15_000)
   app.connect()
   await app.settle()
-  app.setBusy()
+  app.setActive([SESSION])
   app.setAppState("background")
+  await app.advance(6_000) // baseline: the server lists the run
   app.setActive([])
   await app.advance(6_000)
 
   assert.equal(app.events.getState().sessionStatus[SESSION].type, "idle")
   assert.equal(app.sessions.getState().sending[SESSION], false)
   assert.equal(app.notified.filter((n) => n.category === "completed").length, 1)
+  assert.equal(app.notified[0].force, true)
 })
 
 test("two runs in a row each report their end", async () => {
   const app = harness()
-  app.heartbeatEvery(15_000)
+  app.setActive([SESSION])
   app.setBusy()
   app.connect()
   await app.settle()
-  await app.push(busyEvent)
   app.setAppState("background")
+  await app.advance(6_000) // baseline
   app.setActive([])
   await app.advance(6_000)
   assert.equal(app.notified.filter((n) => n.category === "completed").length, 1)
 
   // The next prompt is sent before another busy event could be delivered: the
   // per-session "already notified" mark must not swallow this run's notice.
-  app.setBusy()
   app.setActive([SESSION])
-  await app.advance(16_000)
+  await app.advance(20_000) // a new run, seen as active again
   app.setActive([])
   await app.advance(6_000)
   assert.equal(app.notified.filter((n) => n.category === "completed").length, 2)

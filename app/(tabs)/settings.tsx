@@ -173,7 +173,7 @@ export default function SettingsScreen() {
         formatLogLines(
           getLogEntries()
             .filter((entry) => ["notifications", "keepalive", "watch"].includes(entry.tag))
-            .slice(-8),
+            .slice(-14),
         ),
       )
     }, []),

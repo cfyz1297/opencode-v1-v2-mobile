@@ -167,13 +167,14 @@ export interface SendOptions {
 }
 
 /**
- * A payload that arrived while the app was in the foreground is held for a few
- * seconds instead of being dropped: "send a prompt and minimize" is the normal
- * way to use the app, and a short run then finishes while the app is still
- * technically active. If the app goes to the background inside this window the
- * alert is posted, otherwise it is dropped as noise (the transcript is open).
+ * A payload that arrived while the app was still technically in the foreground
+ * is held for a moment instead of being dropped: when you send a prompt and
+ * minimize, the first status events can land a fraction of a second before
+ * Android reports the transition. The window is deliberately short — a longer
+ * one turns into "a notification appears right after opening the app", which is
+ * exactly the noise the user asked to avoid.
  */
-export const HOLD_TTL_MS = 10_000
+export const HOLD_TTL_MS = 3_000
 let held: Array<{ payload: Payload; at: number }> = []
 
 export type AttemptOutcome = "posted" | "held" | "app-active" | "disabled" | "no-permission" | "deduped" | "error"
@@ -229,6 +230,15 @@ export function flushHeld() {
   const due = held.filter((entry) => now - entry.at <= HOLD_TTL_MS).map((entry) => entry.payload)
   held = []
   for (const payload of due) void send(payload, { force: true })
+}
+
+/**
+ * The app is on screen again. Anything still held was generated while the app
+ * was coming back (the event stream replays what happened while it was away) —
+ * the user is looking at the transcript, so it must not surface later.
+ */
+export function dropHeld() {
+  held = []
 }
 
 /**

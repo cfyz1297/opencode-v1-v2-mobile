@@ -190,6 +190,8 @@ const RUN_END_NOTIFY_TTL_MS = 15_000
 function notifyRunRecovered(sessionID: string, messages: Message[], force = false) {
   const notifiedAt = recoveredNotifiedAt.get(sessionID)
   if (notifiedAt !== undefined && Date.now() - notifiedAt < RUN_END_NOTIFY_TTL_MS) return
+  // One notification per finished run, whichever path saw the end first.
+  const dedupe = { dedupeKey: `end-${sessionID}`, dedupeCooldownMs: 20_000 }
   const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant")
   if (lastAssistant?.error) {
     // No session.error event was delivered either, so this is the only place
@@ -200,6 +202,7 @@ function notifyRunRecovered(sessionID: string, messages: Message[], force = fals
         title: i18n.t("notifications.titles.error"),
         body: sanitizeBody(lastAssistant.error.message, i18n.t("notifications.bodies.error")),
         sessionId: sessionID,
+        ...dedupe,
       },
       { force },
     )
@@ -211,6 +214,7 @@ function notifyRunRecovered(sessionID: string, messages: Message[], force = fals
         title: i18n.t("notifications.titles.completed"),
         body: sanitizeBody(title, i18n.t("notifications.bodies.completed")),
         sessionId: sessionID,
+        ...dedupe,
       },
       { force },
     )
@@ -225,7 +229,14 @@ function notifyRunRecovered(sessionID: string, messages: Message[], force = fals
 // Called when entering a session to recover from missed SSE events or failed
 // optimistic removals — and, while the app is backgrounded, by the background
 // watch: a prompt created after the SSE socket died is only visible here.
+// Every prompt has exactly one entry point: this function is called from the
+// session screen, from reconnect recovery and from the background watch at the
+// same time — two overlapping pulls would notify the same prompt twice.
+const refreshing = new Set<string>()
+
 export async function refreshPending(client: Client, sessionID: string, options: { background?: boolean } = {}) {
+  if (refreshing.has(sessionID)) return
+  refreshing.add(sessionID)
   try {
     const [perms, questions] = await Promise.all([client.permission.list(), client.question.list(sessionID)])
     const sessionPerms = (perms || []).filter((p: Record<string, unknown>) => p.sessionID === sessionID)
@@ -391,27 +402,81 @@ export const BACKGROUND_POLL_MS = 5_000
 
 let backgroundPollTimer: ReturnType<typeof setInterval> | null = null
 let appStateWatchInstalled = false
+// What the server listed as running on the previous tick. The tick learns
+// "this run ended" by comparing sets — no SSE, no local sessionStatus and no
+// optimistic `sending` flag: all three are exactly what a backgrounded app
+// cannot rely on, and all three were why the previous versions stayed silent.
+let lastActiveSeen: Set<string> | null = null
+
+function clientFor(sessionID: string): Client | null {
+  const sessionsState = useSessions.getState()
+  const session =
+    sessionsState.sessions.find((s) => s.id === sessionID) ??
+    (sessionsState.currentSession?.id === sessionID ? sessionsState.currentSession : undefined)
+  const connState = useConnections.getState()
+  return (session?.directory ? connState.clientForDirectory(session.directory) : undefined) ?? connState.client ?? null
+}
+
+async function notifyRunEnded(sessionID: string) {
+  const client = clientFor(sessionID)
+  if (!client) return
+  try {
+    const response = await client.session.messages(sessionID)
+    notifyRunRecovered(sessionID, (response || []).map((m) => m.info), true)
+    finishRunLocally(sessionID)
+  } catch (err) {
+    // A session deleted elsewhere is not a finished run.
+    if ((err as { status?: number } | null)?.status === 404) finishRunLocally(sessionID)
+    log.warn("watch", "could not read the transcript of", sessionID, String(err))
+  }
+}
 
 async function pollWhileBackgrounded() {
+  // Unconditional: the diagnostics block must show whether the timer runs at
+  // all, which is the difference between "timer frozen" and "nothing to do".
+  log.info("watch", `tick (${AppState.currentState})`)
   // The listener can fire late; trust the current state over the last event.
   if (AppState.currentState === "active") return
-  const running = activeRunSessionIDs()
-  if (running.length === 0) return
   const client = useConnections.getState().client
-  if (!client) return
-  log.info("watch", `poll for ${running.length} run(s):`, running.join(","))
-  // Per session: permission.list is global and question.list is session-scoped.
-  await Promise.allSettled(running.map((sessionID) => refreshPending(client, sessionID, { background: true })))
-  // Same recovery the reconnect path uses: only clears a run the server
-  // confirms is over, and notifies for it. `background` makes the notification
-  // bypass the AppState gate — this code only runs while backgrounded, so a
-  // wrong reading there must not swallow the alert.
-  await resyncBusySessions(undefined, { background: true })
+  if (!client) {
+    log.warn("watch", "no client")
+    return
+  }
+
+  // Server truth first: it knows which sessions run right now, including the
+  // ones this app never saw a busy event for.
+  const serverActive = await activeSessionIDs(client)
+  const running = new Set(activeRunSessionIDs())
+  if (serverActive) for (const id of serverActive) running.add(id)
+
+  if (serverActive && lastActiveSeen) {
+    for (const sessionID of lastActiveSeen) {
+      if (!serverActive.has(sessionID)) {
+        log.info("watch", "run ended:", sessionID)
+        await notifyRunEnded(sessionID)
+      }
+    }
+  }
+  // First tick of a background period only takes a baseline: a run that ended
+  // while the app was open was already handled by the SSE path.
+  lastActiveSeen = serverActive ? new Set(serverActive) : null
+
+  // Per session: permission.list is global and question.list is session-scoped,
+  // and a session may live on another directory's connection.
+  await Promise.allSettled(
+    [...running].map((sessionID) => refreshPending(clientFor(sessionID) ?? client, sessionID, { background: true })),
+  )
+  // Servers without /session/active (V1) fall back to the local status recovery.
+  if (!serverActive) await resyncBusySessions(undefined, { background: true })
 }
 
 export function startBackgroundWatch() {
   if (backgroundPollTimer) return
   log.info("watch", "started (app in background)")
+  lastActiveSeen = null
+  // Poll immediately: a run may already have finished while the app was being
+  // put away, and 5s of silence for nothing is noticeable.
+  void pollWhileBackgrounded()
   backgroundPollTimer = setInterval(() => {
     void pollWhileBackgrounded()
   }, BACKGROUND_POLL_MS)
@@ -635,6 +700,11 @@ export const useEvents = create<EventsState>((set, get) => ({
                     title: i18n.t("notifications.titles.completed"),
                     body: sanitizeBody(match?.title, i18n.t("notifications.bodies.completed")),
                     sessionId: sessionID,
+                    // Same key as the background poll: when the socket resumes
+                    // it replays the idle event for a run the poll already
+                    // reported, and that must not buzz twice.
+                    dedupeKey: `end-${sessionID}`,
+                    dedupeCooldownMs: 20_000,
                   })
                 }
               }
