@@ -166,6 +166,15 @@ jobs:
           if ! grep -q "RECORD_AUDIO" /tmp/permissions.txt; then
             echo "RECORD_AUDIO is missing from the release APK: voice input cannot work"; exit 1
           fi
+          # The keep-alive foreground service is the only reason notifications
+          # reach a locked phone; without the permission Android 14+ refuses to
+          # start it, and missing the plugin would silently drop the service.
+          if ! grep -q "FOREGROUND_SERVICE_DATA_SYNC" /tmp/permissions.txt; then
+            echo "FOREGROUND_SERVICE_DATA_SYNC is missing: notifications die in the background"; exit 1
+          fi
+          if ! "$AAPT" dump xmltree "$APK" AndroidManifest.xml | grep -q "KeepAliveService"; then
+            echo "KeepAliveService is missing from the release APK"; exit 1
+          fi
           "$SIGNER" verify --print-certs "$APK" > /tmp/current-signers.txt
           cat /tmp/current-signers.txt
           # Production certificate fingerprint. Hardcoded on purpose: downloading
