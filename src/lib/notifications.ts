@@ -157,22 +157,54 @@ function immediateTrigger() {
 // Send — single entry point, decides whether to fire
 // ---------------------------------------------------------------------------
 
-export async function send(payload: Payload) {
-  if (!preferences()[payload.category]) return
-  // Only for a phone the user is not looking at. With the app open the
-  // transcript already shows the answer, and a banner over the chat is noise.
-  // (The settings "test notification" button bypasses this deliberately.)
-  if (AppState.currentState === "active") return
-  if (!(await granted())) {
-    log.info("notifications", `skipped ${payload.category}: permission not granted`)
-    return
+export interface SendOptions {
+  /**
+   * The caller already knows the app is in the background (the background
+   * watch only runs there), so the AppState gate is skipped. Without this a
+   * wrong/racy AppState reading silently swallows every background alert.
+   */
+  force?: boolean
+}
+
+/**
+ * A payload that arrived while the app was in the foreground is held for a few
+ * seconds instead of being dropped: "send a prompt and minimize" is the normal
+ * way to use the app, and a short run then finishes while the app is still
+ * technically active. If the app goes to the background inside this window the
+ * alert is posted, otherwise it is dropped as noise (the transcript is open).
+ */
+export const HOLD_TTL_MS = 10_000
+let held: Array<{ payload: Payload; at: number }> = []
+
+export type AttemptOutcome = "posted" | "held" | "app-active" | "disabled" | "no-permission" | "deduped" | "error"
+
+const attempts: Array<{ at: number; category: Category; outcome: AttemptOutcome; detail?: string }> = []
+
+function record(category: Category, outcome: AttemptOutcome, detail?: string) {
+  attempts.push({ at: Date.now(), category, outcome, detail })
+  if (attempts.length > 12) attempts.shift()
+  // The diagnostics block in Settings reads these lines; without them a missing
+  // notification is indistinguishable from a notification that was never
+  // generated — the reason the first three attempts could not be diagnosed.
+  log.info("notifications", `${category}: ${outcome}${detail ? ` — ${detail}` : ""}`)
+}
+
+export async function send(payload: Payload, options: SendOptions = {}) {
+  if (!preferences()[payload.category]) return record(payload.category, "disabled")
+
+  if (!options.force && AppState.currentState === "active") {
+    held.push({ payload, at: Date.now() })
+    if (held.length > 5) held.shift()
+    return record(payload.category, "held")
   }
+
+  if (!(await granted())) return record(payload.category, "no-permission")
 
   if (payload.dedupeKey) {
     const now = Date.now()
     const lastSent = dedupeSentAt.get(payload.dedupeKey) || 0
     const cooldown = payload.dedupeCooldownMs ?? 30_000
-    if (now - lastSent < cooldown) return
+    if (now - lastSent < cooldown) return record(payload.category, "deduped")
     dedupeSentAt.set(payload.dedupeKey, now)
     // BUG-029: prune stale dedupe entries so the map doesn't grow unbounded
     // on long-lived sessions.
@@ -181,10 +213,22 @@ export async function send(payload: Payload) {
     }
   }
 
-  await deliver(payload.title, payload.body, {
+  const result = await deliver(payload.title, payload.body, {
     category: payload.category,
     sessionId: payload.sessionId,
   })
+  record(payload.category, result.ok ? "posted" : "error", result.error)
+}
+
+/**
+ * The app just left the foreground. Post whatever it was holding back — the
+ * user is no longer looking at the transcript.
+ */
+export function flushHeld() {
+  const now = Date.now()
+  const due = held.filter((entry) => now - entry.at <= HOLD_TTL_MS).map((entry) => entry.payload)
+  held = []
+  for (const payload of due) void send(payload, { force: true })
 }
 
 /**
@@ -208,7 +252,7 @@ export async function sendTest(title: string, body: string): Promise<{ ok: boole
   }
 }
 
-async function deliver(title: string, body: string, data: NotificationData) {
+async function deliver(title: string, body: string, data: NotificationData): Promise<{ ok: boolean; error?: string }> {
   try {
     // A missing channel makes Android drop the notification silently.
     await ensureChannel()
@@ -221,10 +265,13 @@ async function deliver(title: string, body: string, data: NotificationData) {
       },
       trigger: immediateTrigger(),
     })
+    return { ok: true }
   } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
     // Never let a failed notification take down the event handler that called
     // it; the log line lands in the diagnostics report.
-    log.error("notifications", "could not show a notification:", error instanceof Error ? error.message : error)
+    log.error("notifications", "could not show a notification:", message)
+    return { ok: false, error: message }
   }
 }
 

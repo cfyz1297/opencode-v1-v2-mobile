@@ -17,6 +17,7 @@ function harness(options: { status?: string; failSchedule?: boolean; appState?: 
   const scheduled: Array<{ title: string; body: string; trigger: unknown }> = []
   const logs: string[] = []
   const state = { status: options.status ?? "granted", appState: options.appState ?? "background" }
+  const clock = { now: 1_000_000 }
 
   const Notifications = {
     AndroidImportance: { HIGH: 4 },
@@ -61,7 +62,7 @@ function harness(options: { status?: string; failSchedule?: boolean; appState?: 
       return modules[id]
     },
     console: { log: () => {}, warn: () => {}, error: () => {} },
-    Date,
+    Date: { now: () => clock.now },
     Map,
     Object,
     Promise,
@@ -77,7 +78,7 @@ function harness(options: { status?: string; failSchedule?: boolean; appState?: 
     errors: true,
     connection: true,
   }))
-  return { exports, scheduled, logs, state }
+  return { exports, scheduled, logs, state, clock }
 }
 
 test("a finished run reaches the shade while the app is in the background", async () => {
@@ -92,13 +93,58 @@ test("a finished run reaches the shade while the app is in the background", asyn
   assert.equal(scheduled[0].title, "Task completed")
 })
 
-test("nothing is posted while the app is open — the transcript already shows it", async () => {
+test("nothing is posted over an open chat — the transcript already shows it", async () => {
   // Reported from the device: banners over an open chat are noise.
   const { exports, scheduled } = harness({ appState: "active" })
   for (const category of ["completed", "questions", "permissions", "errors"] as const) {
     await exports.send({ category, title: "t", body: "b", sessionId: "ses_1" })
   }
   assert.equal(scheduled.length, 0)
+})
+
+test("an alert held while the app was open still arrives if the user minimizes", async () => {
+  // "Send a prompt and minimize" is the normal flow: a short run finishes
+  // while the app is still technically active, and simply dropping the alert
+  // is why completion notifications were never seen.
+  const { exports, scheduled, state } = harness({ appState: "active" })
+  await exports.send({ category: "completed", title: "Task completed", body: "…", sessionId: "ses_1" })
+  assert.equal(scheduled.length, 0)
+
+  state.appState = "background"
+  exports.flushHeld()
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.equal(scheduled.length, 1)
+  assert.equal(scheduled[0].title, "Task completed")
+})
+
+test("a stale hold is dropped instead of buzzing long afterwards", async () => {
+  const { exports, scheduled, state, clock } = harness({ appState: "active" })
+  await exports.send({ category: "completed", title: "Task completed", body: "…", sessionId: "ses_1" })
+  // The app only reached the background a minute later (e.g. a call came in):
+  // the answer was already read, so the alert is noise by then.
+  clock.now += 60_000
+  state.appState = "background"
+  exports.flushHeld()
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.equal(scheduled.length, 0)
+})
+
+test("flushHeld posts each held alert once", async () => {
+  const { exports, scheduled, state } = harness({ appState: "active" })
+  await exports.send({ category: "completed", title: "Task completed", body: "…", sessionId: "ses_1" })
+  state.appState = "background"
+  exports.flushHeld()
+  exports.flushHeld()
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.equal(scheduled.length, 1)
+})
+
+test("the background watch forces delivery even if AppState still says active", async () => {
+  // The poll only runs in the background by construction; a wrong reading must
+  // not swallow the alert (this is the failure the user kept hitting).
+  const { exports, scheduled } = harness({ appState: "active" })
+  await exports.send({ category: "completed", title: "Task completed", body: "…", sessionId: "ses_1" }, { force: true })
+  assert.equal(scheduled.length, 1)
 })
 
 test("the notification uses the app's own channel, not expo's fallback", async () => {
@@ -115,7 +161,7 @@ test("a denied OS permission is logged instead of disappearing", async () => {
   const { exports, scheduled, logs } = harness({ status: "denied" })
   await exports.send({ category: "errors", title: "Session error", body: "…", sessionId: "ses_1" })
   assert.equal(scheduled.length, 0)
-  assert.ok(logs.some((line) => line.includes("permission not granted")))
+  assert.ok(logs.some((line) => line.includes("no-permission")))
 })
 
 test("a category the user turned off is dropped", async () => {

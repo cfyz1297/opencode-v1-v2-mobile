@@ -114,6 +114,9 @@ function RootLayout() {
     const sub = AppState.addEventListener("change", (next) => {
       if (next === "background") {
         backgroundedAt = Date.now()
+        // Anything that arrived while the user was still on screen is now
+        // unseen: post it instead of dropping it (notifications.flushHeld).
+        notifications.flushHeld()
       } else if (next === "active" && backgroundedAt !== null) {
         const elapsed = Date.now() - backgroundedAt
         backgroundedAt = null

@@ -71,3 +71,24 @@ test("settings makes a blocked OS permission visible and can post a real test no
   assert.match(settings, /Linking\.openSettings\(\)/)
   assert.match(settings, /settings\.notifications\.status\.blocked/)
 })
+
+test("settings shows the app's own last notification decisions", () => {
+  // "A notification did not arrive" has no error surface on Android: the
+  // decision (held / suppressed / never generated) has to be readable.
+  const settings = read("app/(tabs)/settings.tsx")
+  assert.match(settings, /getLogEntries\(\)/)
+  assert.match(settings, /"notifications", "keepalive", "watch"/)
+  assert.match(settings, /testID="notification-diagnostics"/)
+})
+
+test("held alerts are flushed when the app leaves the foreground", () => {
+  const layout = read("app/_layout.tsx")
+  assert.match(layout, /next === "background"[\s\S]{0,400}notifications\.flushHeld\(\)/)
+})
+
+test("the background watch marks its notifications as background-generated", () => {
+  const events = read("src/stores/events.ts")
+  const poll = events.slice(events.indexOf("async function pollWhileBackgrounded"))
+  assert.match(poll, /refreshPending\(client, sessionID, \{ background: true \}\)/)
+  assert.match(poll, /resyncBusySessions\(undefined, \{ background: true \}\)/)
+})

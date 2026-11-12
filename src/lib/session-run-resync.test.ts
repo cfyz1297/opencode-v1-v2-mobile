@@ -70,7 +70,7 @@ function harness() {
 
   const stats = { messageCalls: 0, pendingCalls: 0, refreshCalls: 0, applied: 0, streams: 0, handled: [] as string[] }
   // Notifications the store asked the notification module to post.
-  const notified: Array<{ category: string; title: string; body: string; sessionId?: string }> = []
+  const notified: Array<{ category: string; title: string; body: string; sessionId?: string; force?: boolean }> = []
   // AppState, mutable like the real module: the store reads currentState and
   // subscribes for background/active transitions.
   const appState = {
@@ -170,7 +170,10 @@ function harness() {
     },
     "./sessions": { useSessions: sessions, abortedSessions: new Set<string>() },
     "react-native": { AppState: appState },
-    "../lib/notifications": { send: (payload: typeof notified[number]) => notified.push(payload) },
+    "../lib/notifications": {
+      send: (payload: typeof notified[number], options?: { force?: boolean }) =>
+        notified.push({ ...payload, force: options?.force }),
+    },
     "../lib/notify-format": { sanitizeBody: (_title: unknown, fallback: string) => fallback, PERMISSION_NOTIFICATION_KEY: "permission", QUESTION_NOTIFICATION_KEY: "question" },
     "../lib/i18n/config": { __esModule: true, default: { t: (key: string) => key } },
     "../lib/status-labels": { statusFromPart: () => "" },
@@ -181,6 +184,9 @@ function harness() {
     "../lib/pending-questions": { reconcilePendingQuestions: (local: unknown) => local },
     "../lib/answered-questions": { recordAnswered: (list: unknown) => list },
     "../lib/keep-alive": { setKeepAlive: () => {} },
+    "../lib/logbuffer": {
+      log: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} },
+    },
   }
 
   const source = readFileSync(fileURLToPath(new URL("../stores/events.ts", import.meta.url).href), "utf8")
@@ -555,7 +561,9 @@ test("a run that ends while the app is backgrounded still notifies", async () =>
   await app.advance(6_000)
 
   assert.equal(app.events.getState().sessionStatus[SESSION].type, "idle")
-  assert.equal(app.notified.filter((n) => n.category === "completed").length, 1)
+  const completed = app.notified.filter((n) => n.category === "completed")
+  assert.equal(completed.length, 1)
+  assert.equal(completed[0].force, true)
 })
 
 test("the background watch stays off while the app is open", async () => {
@@ -609,6 +617,9 @@ test("a question asked while backgrounded reaches the shade", async () => {
 
   const questions = app.notified.filter((n) => n.category === "questions")
   assert.equal(questions.length, 1)
+  // Background-generated alerts must not depend on AppState still reading
+  // "background" — that race is what kept swallowing them on the device.
+  assert.equal(questions[0].force, true)
   // The header/question text is server-supplied and must not reach the shade.
   assert.equal(questions[0].body, "question")
 })

@@ -13,6 +13,7 @@ import { runsNeedingResync } from "../lib/run-watchdog"
 import { reconcilePendingQuestions } from "../lib/pending-questions"
 import { recordAnswered, type AnsweredQuestion } from "../lib/answered-questions"
 import { setKeepAlive } from "../lib/keep-alive"
+import { log } from "../lib/logbuffer"
 import type { QuestionRequest } from "../lib/v2-compat"
 import type { Client, Part, Session, Message } from "../lib/sdk"
 
@@ -147,30 +148,36 @@ function finishRunLocally(sessionID: string) {
 // All of these are filtered by src/lib/notifications.ts, which stays silent
 // while the app is in the foreground: they exist for the phone-in-pocket case.
 
-function notifyPermissionPrompt(sessionID: string, id: string) {
-  notify({
-    category: "permissions",
-    title: i18n.t("notifications.titles.permission"),
-    // Fixed body: the tool name, resources and command text are
-    // server-supplied and must not reach the lock screen.
-    body: i18n.t(PERMISSION_NOTIFICATION_KEY),
-    sessionId: sessionID,
-    dedupeKey: `perm-${id}`,
-    dedupeCooldownMs: 60_000,
-  })
+function notifyPermissionPrompt(sessionID: string, id: string, force = false) {
+  notify(
+    {
+      category: "permissions",
+      title: i18n.t("notifications.titles.permission"),
+      // Fixed body: the tool name, resources and command text are
+      // server-supplied and must not reach the lock screen.
+      body: i18n.t(PERMISSION_NOTIFICATION_KEY),
+      sessionId: sessionID,
+      dedupeKey: `perm-${id}`,
+      dedupeCooldownMs: 60_000,
+    },
+    { force },
+  )
 }
 
-function notifyQuestionPrompt(sessionID: string, id: string) {
-  notify({
-    category: "questions",
-    // Fixed title and body: the header/question text is
-    // server-supplied (see PERMISSION_NOTIFICATION_KEY).
-    title: i18n.t("notifications.titles.question"),
-    body: i18n.t(QUESTION_NOTIFICATION_KEY),
-    sessionId: sessionID,
-    dedupeKey: `question-${id}`,
-    dedupeCooldownMs: 60_000,
-  })
+function notifyQuestionPrompt(sessionID: string, id: string, force = false) {
+  notify(
+    {
+      category: "questions",
+      // Fixed title and body: the header/question text is
+      // server-supplied (see PERMISSION_NOTIFICATION_KEY).
+      title: i18n.t("notifications.titles.question"),
+      body: i18n.t(QUESTION_NOTIFICATION_KEY),
+      sessionId: sessionID,
+      dedupeKey: `question-${id}`,
+      dedupeCooldownMs: 60_000,
+    },
+    { force },
+  )
 }
 
 // Runs ended by the recovery path (SSE stream dead while the phone was locked)
@@ -180,27 +187,33 @@ function notifyQuestionPrompt(sessionID: string, id: string) {
 const recoveredNotifiedAt = new Map<string, number>()
 const RUN_END_NOTIFY_TTL_MS = 15_000
 
-function notifyRunRecovered(sessionID: string, messages: Message[]) {
+function notifyRunRecovered(sessionID: string, messages: Message[], force = false) {
   const notifiedAt = recoveredNotifiedAt.get(sessionID)
   if (notifiedAt !== undefined && Date.now() - notifiedAt < RUN_END_NOTIFY_TTL_MS) return
   const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant")
   if (lastAssistant?.error) {
     // No session.error event was delivered either, so this is the only place
     // the failure can surface.
-    notify({
-      category: "errors",
-      title: i18n.t("notifications.titles.error"),
-      body: sanitizeBody(lastAssistant.error.message, i18n.t("notifications.bodies.error")),
-      sessionId: sessionID,
-    })
+    notify(
+      {
+        category: "errors",
+        title: i18n.t("notifications.titles.error"),
+        body: sanitizeBody(lastAssistant.error.message, i18n.t("notifications.bodies.error")),
+        sessionId: sessionID,
+      },
+      { force },
+    )
   } else {
     const title = useSessions.getState().sessions.find((s) => s.id === sessionID)?.title
-    notify({
-      category: "completed",
-      title: i18n.t("notifications.titles.completed"),
-      body: sanitizeBody(title, i18n.t("notifications.bodies.completed")),
-      sessionId: sessionID,
-    })
+    notify(
+      {
+        category: "completed",
+        title: i18n.t("notifications.titles.completed"),
+        body: sanitizeBody(title, i18n.t("notifications.bodies.completed")),
+        sessionId: sessionID,
+      },
+      { force },
+    )
   }
   recoveredNotifiedAt.set(sessionID, Date.now())
   for (const [id, at] of recoveredNotifiedAt) {
@@ -212,7 +225,7 @@ function notifyRunRecovered(sessionID: string, messages: Message[]) {
 // Called when entering a session to recover from missed SSE events or failed
 // optimistic removals — and, while the app is backgrounded, by the background
 // watch: a prompt created after the SSE socket died is only visible here.
-export async function refreshPending(client: Client, sessionID: string) {
+export async function refreshPending(client: Client, sessionID: string, options: { background?: boolean } = {}) {
   try {
     const [perms, questions] = await Promise.all([client.permission.list(), client.question.list(sessionID)])
     const sessionPerms = (perms || []).filter((p: Record<string, unknown>) => p.sessionID === sessionID)
@@ -248,10 +261,10 @@ export async function refreshPending(client: Client, sessionID: string) {
     // above is what the SSE handlers check, so a prompt that arrives both ways
     // still produces exactly one notification.
     for (const permission of freshPerms) {
-      notifyPermissionPrompt(sessionID, (permission as { id: string }).id)
+      notifyPermissionPrompt(sessionID, (permission as { id: string }).id, options.background)
     }
     for (const question of freshQuestions) {
-      notifyQuestionPrompt(sessionID, question.id)
+      notifyQuestionPrompt(sessionID, question.id, options.background)
     }
   } catch (err) {
     console.warn("[Events] Failed to refresh pending:", err)
@@ -283,7 +296,7 @@ async function activeSessionIDs(client: Client): Promise<Set<string> | null> {
 // still-busy session. Also re-checks sessionStatus right before writing, so a
 // real session.status event that lands while the fetch is in flight (e.g. the
 // session went busy again) wins over this resync.
-async function resyncBusySessions(only?: ReadonlySet<string>) {
+async function resyncBusySessions(only?: ReadonlySet<string>, options: { background?: boolean } = {}) {
   const pendingSessionIDs = new Set(activeRunSessionIDs().filter((sessionID) => !only || only.has(sessionID)))
   if (pendingSessionIDs.size === 0) return
 
@@ -333,7 +346,7 @@ async function resyncBusySessions(only?: ReadonlySet<string>) {
         // The run ended while no session.status event could be delivered (the
         // socket dies when Android backgrounds the app). This is the only place
         // that can tell the user it finished.
-        notifyRunRecovered(sessionID, messages)
+        notifyRunRecovered(sessionID, messages, options.background)
         finishRunLocally(sessionID)
         if (viewing()) useSessions.getState().applyServerMessages(response)
       } catch (err) {
@@ -386,15 +399,19 @@ async function pollWhileBackgrounded() {
   if (running.length === 0) return
   const client = useConnections.getState().client
   if (!client) return
+  log.info("watch", `poll for ${running.length} run(s):`, running.join(","))
   // Per session: permission.list is global and question.list is session-scoped.
-  await Promise.allSettled(running.map((sessionID) => refreshPending(client, sessionID)))
+  await Promise.allSettled(running.map((sessionID) => refreshPending(client, sessionID, { background: true })))
   // Same recovery the reconnect path uses: only clears a run the server
-  // confirms is over, and notifies for it.
-  await resyncBusySessions()
+  // confirms is over, and notifies for it. `background` makes the notification
+  // bypass the AppState gate — this code only runs while backgrounded, so a
+  // wrong reading there must not swallow the alert.
+  await resyncBusySessions(undefined, { background: true })
 }
 
 export function startBackgroundWatch() {
   if (backgroundPollTimer) return
+  log.info("watch", "started (app in background)")
   backgroundPollTimer = setInterval(() => {
     void pollWhileBackgrounded()
   }, BACKGROUND_POLL_MS)
@@ -402,6 +419,7 @@ export function startBackgroundWatch() {
 
 export function stopBackgroundWatch() {
   if (!backgroundPollTimer) return
+  log.info("watch", "stopped (app in foreground)")
   clearInterval(backgroundPollTimer)
   backgroundPollTimer = null
 }

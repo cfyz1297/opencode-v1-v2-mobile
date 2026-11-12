@@ -55,6 +55,10 @@
         "failedTitle": "Not sent",
         "failedPermission": "Android blocks notifications for OpenCode. Allow them in system settings.",
         "failedOther": "The system refused the notification: {{reason}}"
+      },
+      "diagnostics": {
+        "hint": "Last notification decisions (nothing here means none was generated):",
+        "empty": "No notification activity yet."
       }
     },
     "privacy": {

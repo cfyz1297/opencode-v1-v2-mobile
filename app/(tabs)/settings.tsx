@@ -27,6 +27,7 @@ import {
   sendTest,
 } from "../../src/lib/notifications"
 import type { Category } from "../../src/lib/notifications"
+import { formatLogLines, getLogEntries } from "../../src/lib/logbuffer"
 import { ORIGINAL_REPO_URL, PRIVACY_POLICY_URL, PROJECT_REPO_URL } from "../../src/lib/links"
 import { CURRENT_VERSION, checkForUpdate, type AvailableUpdate } from "../../src/lib/update-check"
 import type { LocalePreference } from "../../src/lib/i18n/locale-resolve"
@@ -83,6 +84,7 @@ export default function SettingsScreen() {
   const { settings, hasBiometrics, updateSettings, lock } = useAuth()
   const { notifications, setNotification, locale, setLocale, serverApi, setServerApi } = useSettings()
   const [osGranted, setOsGranted] = useState<boolean | null>(null)
+  const [diagnostics, setDiagnostics] = useState("")
 
   // Settings is where a user goes to ask "what am I running?". Answer it, and if
   // a newer build exists say so here too — the banner on the sessions list is
@@ -159,6 +161,21 @@ export default function SettingsScreen() {
       return () => {
         cancelled = true
       }
+    }, []),
+  )
+
+  // The reasons the last notifications were (not) posted, straight from the
+  // log buffer — refreshed on every focus, i.e. every time the user comes back
+  // to check whether a background alert arrived.
+  useFocusEffect(
+    useCallback(() => {
+      setDiagnostics(
+        formatLogLines(
+          getLogEntries()
+            .filter((entry) => ["notifications", "keepalive", "watch"].includes(entry.tag))
+            .slice(-8),
+        ),
+      )
     }, []),
   )
   const localeLabels: Record<LocalePreference, string> = {
@@ -304,6 +321,18 @@ export default function SettingsScreen() {
             />
           )
         })}
+        {/* When a notification does not arrive there is nothing to look at:
+            Android drops it silently and the app has no error surface. These are
+            the app's own last decisions, so the next report can say whether the
+            alert was held, suppressed, or never generated at all. */}
+        <View style={styles.diagnosticsBlock}>
+          <Text style={[styles.diagnosticsHint, isDark && styles.diagnosticsHintDark]}>
+            {t("settings.notifications.diagnostics.hint")}
+          </Text>
+          <Text selectable style={[styles.diagnosticsText, isDark && styles.diagnosticsTextDark]} testID="notification-diagnostics">
+            {diagnostics || t("settings.notifications.diagnostics.empty")}
+          </Text>
+        </View>
       </SettingSection>
 
       <SettingSection title={t("settings.sections.privacy")} isDark={isDark}>
@@ -476,6 +505,26 @@ const styles = StyleSheet.create({
   },
   textDark: {
     color: "#ffffff",
+  },
+  diagnosticsBlock: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 6,
+  },
+  diagnosticsHint: {
+    fontSize: 12,
+    color: "#999999",
+  },
+  diagnosticsHintDark: {
+    color: "#777777",
+  },
+  diagnosticsText: {
+    fontSize: 11,
+    fontFamily: "monospace",
+    color: "#444444",
+  },
+  diagnosticsTextDark: {
+    color: "#aaaaaa",
   },
   settingDescription: {
     fontSize: 13,
