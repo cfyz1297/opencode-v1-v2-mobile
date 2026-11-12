@@ -31,21 +31,21 @@ export default function TabLayout() {
         name="index"
         options={{
           title: t("nav.sessionsTab"),
-          tabBarIcon: ({ color, size }) => <Ionicons name="chatbubbles-outline" size={size} color={color} />,
+          tabBarIcon: ({ color, size }) => <Ionicons name="chatbubbles-outline" size={size} color={String(color)} />,
         }}
       />
       <Tabs.Screen
         name="connections"
         options={{
           title: t("nav.connectionsTab"),
-          tabBarIcon: ({ color, size }) => <Ionicons name="server-outline" size={size} color={color} />,
+          tabBarIcon: ({ color, size }) => <Ionicons name="server-outline" size={size} color={String(color)} />,
         }}
       />
       <Tabs.Screen
         name="settings"
         options={{
           title: t("nav.settingsTab"),
-          tabBarIcon: ({ color, size }) => <Ionicons name="settings-outline" size={size} color={color} />,
+          tabBarIcon: ({ color, size }) => <Ionicons name="settings-outline" size={size} color={String(color)} />,
         }}
       />
     </Tabs>

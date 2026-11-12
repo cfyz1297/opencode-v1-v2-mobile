@@ -1,4 +1,5 @@
 package cc.agentlabs.opencode
+import expo.modules.splashscreen.SplashScreenManager
 
 import android.os.Build
 import android.os.Bundle
@@ -9,9 +10,9 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
 
 import com.facebook.react.ReactActivity
-import com.facebook.react.ReactActivityDelegate
 import com.facebook.react.ReactApplication
 import com.facebook.react.bridge.Arguments
+import com.facebook.react.ReactActivityDelegate
 import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.fabricEnabled
 import com.facebook.react.defaults.DefaultReactActivityDelegate
 
@@ -20,37 +21,18 @@ import expo.modules.ReactActivityDelegateWrapper
 class MainActivity : ReactActivity() {
   /** Last reported IME height in dp; -1 means "nothing reported yet". */
   private var reportedImeDp = -1f
-
   override fun onCreate(savedInstanceState: Bundle?) {
     // Set the theme to AppTheme BEFORE onCreate to support
     // coloring the background, status bar, and navigation bar.
     // This is required for expo-splash-screen.
-    setTheme(R.style.AppTheme);
+    // setTheme(R.style.AppTheme);
+    // @generated begin expo-splashscreen - expo prebuild (DO NOT MODIFY) sync-f3ff59a738c56c9a6119210cb55f0b613eb8b6af
+    SplashScreenManager.registerOnActivity(this)
+    // @generated end expo-splashscreen
     super.onCreate(null)
     installImeReporter()
   }
 
-  /**
-   * Shrinks the app's root view to sit above the soft keyboard, and reports the
-   * IME height to JS as the `imeInset` device event.
-   *
-   * Both halves are needed, and neither can be done in JS alone:
-   *
-   * - Under edge-to-edge the window never resizes for the IME, so the React
-   *   surface keeps its full height and draws behind the keyboard. Padding the
-   *   content view is the only place where "above the keyboard" is exact;
-   *   padding inside JS left the surface full-height, so a slice of the screen
-   *   still slid under the keyboard.
-   * - React Native's own keyboardDidShow/keyboardDidHide never fire here: they
-   *   come from ReactRootView's global-layout listener, which bails out when
-   *   mReactInstanceManager is null — always the case under bridgeless, which
-   *   this app runs on.
-   * - RN `Modal`s are separate windows that the content padding does not
-   *   reach, so they still need the reported height.
-   *
-   * Keep this in sync with `src/lib/use-keyboard-height.ts`
-   * (`imeInset` + `{height, visible}`).
-   */
   private fun installImeReporter() {
     val content = findViewById<View>(android.R.id.content) ?: return
     ViewCompat.setOnApplyWindowInsetsListener(content) { view, insets ->

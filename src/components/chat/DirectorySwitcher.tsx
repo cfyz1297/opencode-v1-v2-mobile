@@ -171,7 +171,7 @@ export function DirectorySwitcher({ sheetRef, current, recents, serverHome, isDa
         ListHeaderComponent={
           items.length > 1 ? (
             <Text style={[s.section, isDark && s.dimDark]}>{t("chat.directorySwitcher.recentProjectsLabel")}</Text>
-          ) : null
+          ) : undefined
         }
       />
     </BottomSheet>

@@ -103,7 +103,12 @@ jobs:
       - name: Build APK
         if: inputs.reuse_apk_run_id == ''
         working-directory: android
-        run: ./gradlew assembleRelease
+        # The NDK is not part of the Gradle cache, so every run downloads it
+        # from dl.google.com; that download fails every so often with
+        # "Archive is not a ZIP archive" and fails the whole build before any
+        # code is compiled. One retry is enough to ride that out; a real
+        # compile error fails both attempts.
+        run: ./gradlew assembleRelease || ./gradlew assembleRelease
 
       - name: Verify reused build has identical application sources
         if: inputs.reuse_apk_run_id != ''
@@ -154,6 +159,12 @@ jobs:
           cat /tmp/permissions.txt
           if grep -q "SYSTEM_ALERT_WINDOW" /tmp/permissions.txt; then
             echo "SYSTEM_ALERT_WINDOW is present in the release APK"; exit 1
+          fi
+          # Voice input needs the runtime permission to be declared at all;
+          # without it requestPermissionsAsync can only answer "denied". An
+          # image-picker `microphonePermission: false` silently removed it.
+          if ! grep -q "RECORD_AUDIO" /tmp/permissions.txt; then
+            echo "RECORD_AUDIO is missing from the release APK: voice input cannot work"; exit 1
           fi
           "$SIGNER" verify --print-certs "$APK" > /tmp/current-signers.txt
           cat /tmp/current-signers.txt

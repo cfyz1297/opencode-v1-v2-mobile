@@ -99,7 +99,7 @@ export function ModelPicker({ providers, selected, isDark, onSelect, sheetRef, o
               <Ionicons name="options-outline" size={18} color={isDark ? "#cccccc" : "#444444"} />
               <Text style={[s.manageText, isDark && p.textWhite]}>{t("chat.modelPicker.manageModels")}</Text>
             </TouchableOpacity>
-          ) : null
+          ) : undefined
         }
         contentContainerStyle={s.content}
         stickySectionHeadersEnabled
