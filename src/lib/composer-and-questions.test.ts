@@ -26,8 +26,14 @@ test("the send-in-flight guard is released even when the send throws", () => {
 })
 
 test("answered questions are kept in the transcript instead of a 2.5s echo", () => {
-  assert.match(screen, /answeredQuestions\.map\(/)
+  assert.match(screen, /splitAnswered\(answeredQuestions\)/)
+  assert.match(screen, /answered\.byMessage\.get\(item\.message\.id\)/)
   assert.match(screen, /<AnsweredQuestionCard/)
+  // Rendering them above the composer put the card below every later answer,
+  // detached from the question it answered.
+  assert.doesNotMatch(screen, /answeredQuestions\.map\(/)
+  // V1 requests carry no message reference — they still have to render.
+  assert.match(screen, /answered\.unplaced\.map\(/)
   // The old transient confirmation hid the answer after 2500ms.
   assert.doesNotMatch(screen, /setTimeout\(\(\) => setQuestionSentText\(null\), 2500\)/)
   assert.doesNotMatch(screen, /questionSentText/)
