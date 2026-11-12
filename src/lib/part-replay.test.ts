@@ -46,6 +46,7 @@ function harness() {
       trimToTurns: (messages: unknown[]) => ({ messages, trimmed: false }),
     },
     "../lib/history-storage": { offlineHistory: { remove: async () => {} } },
+    "../lib/keep-alive": { setKeepAlive: () => {} },
   }
   vm.runInNewContext(code, {
     exports,

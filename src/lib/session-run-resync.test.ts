@@ -69,6 +69,20 @@ function harness() {
   }
 
   const stats = { messageCalls: 0, pendingCalls: 0, refreshCalls: 0, applied: 0, streams: 0, handled: [] as string[] }
+  // Notifications the store asked the notification module to post.
+  const notified: Array<{ category: string; title: string; body: string; sessionId?: string }> = []
+  // AppState, mutable like the real module: the store reads currentState and
+  // subscribes for background/active transitions.
+  const appState = {
+    currentState: "active" as string,
+    listeners: [] as Array<(state: string) => void>,
+    addEventListener(_event: string, listener: (state: string) => void) {
+      appState.listeners.push(listener)
+      return { remove: () => {} }
+    },
+  }
+  let pendingPermissions: Array<{ id: string; sessionID: string; permission: string }> = []
+  let pendingQuestions: Array<{ id: string; sessionID: string; questions: unknown[] }> = []
   // Transcript the fake server returns. `null` means "run still in progress".
   let transcript: Array<{ info: Record<string, unknown>; parts: unknown[] }> | null = COMPLETED_TRANSCRIPT
   let failWith: { status: number } | null = null
@@ -92,13 +106,13 @@ function harness() {
     permission: {
       list: async () => {
         stats.pendingCalls++
-        return []
+        return pendingPermissions
       },
     },
     question: {
       list: async () => {
         stats.pendingCalls++
-        return []
+        return pendingQuestions
       },
     },
     global: {
@@ -155,7 +169,8 @@ function harness() {
       },
     },
     "./sessions": { useSessions: sessions, abortedSessions: new Set<string>() },
-    "../lib/notifications": { send: () => {} },
+    "react-native": { AppState: appState },
+    "../lib/notifications": { send: (payload: typeof notified[number]) => notified.push(payload) },
     "../lib/notify-format": { sanitizeBody: (_title: unknown, fallback: string) => fallback, PERMISSION_NOTIFICATION_KEY: "permission", QUESTION_NOTIFICATION_KEY: "question" },
     "../lib/i18n/config": { __esModule: true, default: { t: (key: string) => key } },
     "../lib/status-labels": { statusFromPart: () => "" },
@@ -239,7 +254,19 @@ function harness() {
     events: exports.useEvents,
     sessions,
     stats,
+    notified,
     connect: () => exports.useEvents.getState().connect(),
+    // Mirrors AppState's own contract: currentState flips, then listeners run.
+    setAppState(next: string) {
+      appState.currentState = next
+      for (const listener of appState.listeners) listener(next)
+    },
+    setPendingPermissions(next: typeof pendingPermissions) {
+      pendingPermissions = next
+    },
+    setPendingQuestions(next: typeof pendingQuestions) {
+      pendingQuestions = next
+    },
     resume: (backgroundedForMs: number) =>
       exports.useEvents.getState().resumeFromBackground(backgroundedForMs),
     push: (event: unknown) => {
@@ -508,4 +535,179 @@ test("a quick app switch keeps the stream and costs no reconnect", async () => {
   await app.settle()
 
   assert.equal(app.stats.streams, 1)
+})
+
+// Notifications are only for a phone the user is not looking at, so they are
+// generated exactly when the SSE socket is dead. These cover the path that
+// replaces the stream: polling while the app is in the background.
+test("a run that ends while the app is backgrounded still notifies", async () => {
+  const app = harness()
+  app.heartbeatEvery(15_000)
+  app.setBusy()
+  app.connect()
+  await app.settle()
+  await app.push(busyEvent)
+  assert.equal(app.events.getState().sessionStatus[SESSION].type, "busy")
+
+  // The socket is dead from here on: no idle event will ever arrive.
+  app.setAppState("background")
+  app.setActive([])
+  await app.advance(6_000)
+
+  assert.equal(app.events.getState().sessionStatus[SESSION].type, "idle")
+  assert.equal(app.notified.filter((n) => n.category === "completed").length, 1)
+})
+
+test("the background watch stays off while the app is open", async () => {
+  const app = harness()
+  app.heartbeatEvery(15_000)
+  app.setBusy()
+  app.connect()
+  await app.settle()
+  await app.push(busyEvent)
+  app.setActive([])
+
+  await app.advance(6_000)
+  assert.equal(app.stats.messageCalls, 0, "no server polling while the transcript is on screen")
+
+  app.setAppState("background")
+  await app.advance(6_000)
+  assert.ok(app.stats.messageCalls >= 1, "polling starts with the app in the background")
+})
+
+test("returning to the foreground stops the polling", async () => {
+  const app = harness()
+  app.heartbeatEvery(15_000)
+  app.setBusy()
+  app.setActive([SESSION])
+  app.connect()
+  await app.settle()
+  await app.push(busyEvent)
+
+  app.setAppState("background")
+  await app.advance(6_000)
+  const calls = app.stats.messageCalls
+  assert.ok(calls >= 1)
+
+  app.setAppState("active")
+  await app.advance(6_000)
+  assert.equal(app.stats.messageCalls, calls, "no polling once the user is back")
+})
+
+test("a question asked while backgrounded reaches the shade", async () => {
+  const app = harness()
+  app.heartbeatEvery(15_000)
+  app.setBusy()
+  app.connect()
+  await app.settle()
+  await app.push(busyEvent)
+
+  app.setAppState("background")
+  // Never delivered over SSE — the form is only visible through the poll.
+  app.setPendingQuestions([{ id: "q1", sessionID: SESSION, questions: [{ header: "Pick", question: "Which?" }] }])
+  await app.advance(6_000)
+
+  const questions = app.notified.filter((n) => n.category === "questions")
+  assert.equal(questions.length, 1)
+  // The header/question text is server-supplied and must not reach the shade.
+  assert.equal(questions[0].body, "question")
+})
+
+test("a permission request created while backgrounded reaches the shade", async () => {
+  const app = harness()
+  app.heartbeatEvery(15_000)
+  app.setBusy()
+  app.connect()
+  await app.settle()
+  await app.push(busyEvent)
+
+  app.setAppState("background")
+  app.setPendingPermissions([{ id: "perm1", sessionID: SESSION, permission: "bash" }])
+  await app.advance(6_000)
+
+  assert.equal(app.notified.filter((n) => n.category === "permissions").length, 1)
+})
+
+test("the same prompt never notifies twice, whether it arrives over SSE or the poll", async () => {
+  const app = harness()
+  app.heartbeatEvery(15_000)
+  app.setBusy()
+  app.connect()
+  await app.settle()
+  await app.push(busyEvent)
+  app.setPendingQuestions([{ id: "q1", sessionID: SESSION, questions: [] }])
+
+  await app.push({ type: "question.asked", properties: { id: "q1", sessionID: SESSION, questions: [] } })
+  app.setAppState("background")
+  await app.advance(6_000)
+
+  assert.equal(app.notified.filter((n) => n.category === "questions").length, 1)
+})
+
+test("a run that failed while backgrounded is reported as an error, not a success", async () => {
+  const app = harness()
+  app.heartbeatEvery(15_000)
+  app.setBusy()
+  app.setTranscript([
+    { info: { id: "u1", sessionID: SESSION, role: "user", time: { created: 1 } }, parts: [] },
+    {
+      info: {
+        id: "a1",
+        sessionID: SESSION,
+        role: "assistant",
+        time: { created: 2, completed: 9 },
+        error: { message: "API key invalid" },
+      },
+      parts: [],
+    },
+  ])
+  app.connect()
+  await app.settle()
+  await app.push(busyEvent)
+
+  app.setAppState("background")
+  app.setActive([])
+  await app.advance(6_000)
+
+  assert.equal(app.notified.filter((n) => n.category === "completed").length, 0)
+  assert.equal(app.notified.filter((n) => n.category === "errors").length, 1)
+})
+
+test("a run sent right before minimizing still reports its end", async () => {
+  // The busy event travels over the socket the app just lost: only the
+  // optimistic sending flag says a run is in flight.
+  const app = harness()
+  app.heartbeatEvery(15_000)
+  app.connect()
+  await app.settle()
+  app.setBusy()
+  app.setAppState("background")
+  app.setActive([])
+  await app.advance(6_000)
+
+  assert.equal(app.events.getState().sessionStatus[SESSION].type, "idle")
+  assert.equal(app.sessions.getState().sending[SESSION], false)
+  assert.equal(app.notified.filter((n) => n.category === "completed").length, 1)
+})
+
+test("two runs in a row each report their end", async () => {
+  const app = harness()
+  app.heartbeatEvery(15_000)
+  app.setBusy()
+  app.connect()
+  await app.settle()
+  await app.push(busyEvent)
+  app.setAppState("background")
+  app.setActive([])
+  await app.advance(6_000)
+  assert.equal(app.notified.filter((n) => n.category === "completed").length, 1)
+
+  // The next prompt is sent before another busy event could be delivered: the
+  // per-session "already notified" mark must not swallow this run's notice.
+  app.setBusy()
+  app.setActive([SESSION])
+  await app.advance(16_000)
+  app.setActive([])
+  await app.advance(6_000)
+  assert.equal(app.notified.filter((n) => n.category === "completed").length, 2)
 })

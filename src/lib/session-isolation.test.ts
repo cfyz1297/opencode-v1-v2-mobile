@@ -29,6 +29,7 @@ function harness() {
       trimToTurns: (messages: unknown[]) => ({ messages, trimmed: false }),
     },
     '../lib/history-storage': { offlineHistory: { remove: async (id: string) => { removed.push(id) } } },
+    "../lib/keep-alive": { setKeepAlive: () => {} },
   }
   vm.runInNewContext(code, { exports, require: (name: string) => { assert.ok(name in deps, name); return deps[name] }, console, setTimeout, clearTimeout })
   return { store: exports.useSessions, pending, removed, change: () => connections.setState({ activeConnection: { id: 'b', url: 'https://b.example' } }) }

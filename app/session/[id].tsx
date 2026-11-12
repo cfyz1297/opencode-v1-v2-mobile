@@ -130,6 +130,10 @@ export default function SessionScreen() {
   // as soon as the response lands.
   const openModelPicker = useCallback(() => {
     if (useCatalog.getState().providers.length === 0) void useCatalog.getState().load()
+    // Same as the effort picker: the sheet opens without an input of its own,
+    // and an IME that is already up stays over it (gorhom only reacts to
+    // keyboard *changes* after mount), hiding the lower half of the list.
+    Keyboard.dismiss()
     modelSheetRef.current?.expand()
   }, [])
 

@@ -1,6 +1,6 @@
 import * as Notifications from "expo-notifications"
 import * as Device from "expo-device"
-import { Platform } from "react-native"
+import { Platform, AppState } from "react-native"
 import { log } from "./logbuffer"
 
 // ---------------------------------------------------------------------------
@@ -159,9 +159,10 @@ function immediateTrigger() {
 
 export async function send(payload: Payload) {
   if (!preferences()[payload.category]) return
-  // Delivered in the foreground too. An earlier build dropped everything while
-  // the app was open, which is why a finished run or a pending question never
-  // reached the shade while the user waited for it on the chat screen.
+  // Only for a phone the user is not looking at. With the app open the
+  // transcript already shows the answer, and a banner over the chat is noise.
+  // (The settings "test notification" button bypasses this deliberately.)
+  if (AppState.currentState === "active") return
   if (!(await granted())) {
     log.info("notifications", `skipped ${payload.category}: permission not granted`)
     return

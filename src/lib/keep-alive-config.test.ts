@@ -39,10 +39,13 @@ test("the service goes foreground with a type and is not exported", () => {
 
 test("the store keeps the service alive only while a run is active", () => {
   const events = read("src/stores/events.ts")
-  assert.match(events, /setKeepAlive\(\s*activeRunSessionIDs\(\)\.length > 0/)
+  assert.match(events, /setKeepAlive\(activeRunSessionIDs\(\)\.length > 0\)/)
   // Stopping when the run ends must happen on both paths: a real idle event
   // and the local "server says it is done" recovery.
   assert.match(events, /function finishRunLocally[\s\S]*?syncKeepAlive\(\)/)
+  // A send that is backgrounded before the busy event arrives still needs the
+  // service: that event travels over the socket the service exists to keep.
+  assert.match(read("src/stores/sessions.ts"), /sending: \{ \.\.\.state\.sending, \[session\.id\]: true \}[\s\S]{0,400}setKeepAlive\(true\)/)
 })
 
 test("a missing native bridge cannot break the event stream", () => {

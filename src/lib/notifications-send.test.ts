@@ -13,10 +13,10 @@ import { runInNewContext } from "node:vm"
 const require = createRequire(import.meta.url)
 const ts = require("typescript")
 
-function harness(options: { status?: string; failSchedule?: boolean } = {}) {
+function harness(options: { status?: string; failSchedule?: boolean; appState?: string } = {}) {
   const scheduled: Array<{ title: string; body: string; trigger: unknown }> = []
   const logs: string[] = []
-  const state = { status: options.status ?? "granted" }
+  const state = { status: options.status ?? "granted", appState: options.appState ?? "background" }
 
   const Notifications = {
     AndroidImportance: { HIGH: 4 },
@@ -36,7 +36,7 @@ function harness(options: { status?: string; failSchedule?: boolean } = {}) {
   const modules: Record<string, unknown> = {
     "expo-notifications": Notifications,
     "expo-device": { isDevice: true },
-    "react-native": { Platform: { OS: "android" } },
+    "react-native": { Platform: { OS: "android" }, AppState: { currentState: state.appState } },
     "./logbuffer": {
       log: {
         debug: () => {},
@@ -80,7 +80,7 @@ function harness(options: { status?: string; failSchedule?: boolean } = {}) {
   return { exports, scheduled, logs, state }
 }
 
-test("a finished run reaches the shade even while the app is in the foreground", async () => {
+test("a finished run reaches the shade while the app is in the background", async () => {
   const { exports, scheduled } = harness()
   await exports.send({
     category: "completed",
@@ -90,6 +90,15 @@ test("a finished run reaches the shade even while the app is in the foreground",
   })
   assert.equal(scheduled.length, 1)
   assert.equal(scheduled[0].title, "Task completed")
+})
+
+test("nothing is posted while the app is open — the transcript already shows it", async () => {
+  // Reported from the device: banners over an open chat are noise.
+  const { exports, scheduled } = harness({ appState: "active" })
+  for (const category of ["completed", "questions", "permissions", "errors"] as const) {
+    await exports.send({ category, title: "t", body: "b", sessionId: "ses_1" })
+  }
+  assert.equal(scheduled.length, 0)
 })
 
 test("the notification uses the app's own channel, not expo's fallback", async () => {

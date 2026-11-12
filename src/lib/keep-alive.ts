@@ -2,8 +2,10 @@
 // That kills the SSE socket the notification module generates from, so
 // "task completed" / "input needed" never reached the phone once the screen was
 // off. While an agent run is active a foreground service keeps the process
-// alive; this module is its JS side (native code: plugins/native/keepalive).
+// alive (so the background watch in stores/events.ts keeps polling); this
+// module is its JS side (native code: plugins/native/keepalive).
 import { NativeModules } from "react-native"
+import i18n from "./i18n/config"
 
 interface KeepAliveBridge {
   start: (title: string, body: string) => void
@@ -18,13 +20,16 @@ let active = false
  * tests) degrades to "no keep-alive" — notifications still work while the app
  * is alive.
  */
-export function setKeepAlive(running: boolean, title: string, body: string) {
+export function setKeepAlive(running: boolean) {
   if (running === active) return
   const bridge = NativeModules.KeepAlive as KeepAliveBridge | undefined
   if (!bridge) return
   try {
-    if (running) bridge.start(title, body)
-    else bridge.stop()
+    if (running) {
+      bridge.start(i18n.t("notifications.keepAlive.title"), i18n.t("notifications.keepAlive.body"))
+    } else {
+      bridge.stop()
+    }
     active = running
   } catch {
     // Never let the service break the event stream.
