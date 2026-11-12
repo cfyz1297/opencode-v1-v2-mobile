@@ -20,7 +20,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { useKeyboardHeight } from "../../src/lib/use-keyboard-height"
 import { buildMessageData, type MessageDataItem } from "../../src/lib/revert-filter"
 import { splitAnswered } from "../../src/lib/answered-questions"
-import { setViewedSession } from "../../src/lib/notifications"
 import { bubbleFlags, runTotals } from "../../src/lib/message-run"
 import { shouldFollowBottom } from "../../src/lib/scroll-follow"
 import { useTranslation } from "react-i18next"
@@ -408,9 +407,6 @@ export default function SessionScreen() {
   useFocusEffect(
     useCallback(() => {
       if (!id) return
-      // Suppress notifications for this chat only while it is actually on
-      // screen; leaving the screen must bring them back (notify-policy.ts).
-      setViewedSession(id)
       let cancelled = false
       selectSession(id, directory).then(() => {
         if (cancelled) return
@@ -428,7 +424,6 @@ export default function SessionScreen() {
       })
       return () => {
         cancelled = true
-        setViewedSession(null)
       }
     }, [id, directory]),
   )

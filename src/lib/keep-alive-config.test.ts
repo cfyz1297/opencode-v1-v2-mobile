@@ -7,7 +7,8 @@
 //     within seconds. The SSE socket that generates the notifications dies
 //     with it, so alerts for a locked phone never fired at all.
 //
-// The foreground rule is unit-tested in notify-policy.test.ts. The keep-alive
+// The foreground rule is now gone: every enabled category is delivered, which
+// notifications-send.test.ts runs against a fake native module. The keep-alive
 // service is native code that Expo prebuild regenerates, so these pin the
 // wiring: a dropped plugin step must fail a test, not a phone.
 import { test } from "node:test"
@@ -58,10 +59,12 @@ test("the notification permission is not blocked at build time", () => {
   assert.ok(!blocked.includes("android.permission.POST_NOTIFICATIONS"))
 })
 
-test("the chat screen marks itself as viewed and clears it on blur", () => {
-  // Without the clear, every notification for a session ever opened would stay
-  // suppressed while the app is in the foreground.
-  const screen = read("app/session/[id].tsx")
-  assert.match(screen, /setViewedSession\(id\)/)
-  assert.match(screen, /setViewedSession\(null\)/)
+test("settings makes a blocked OS permission visible and can post a real test notification", () => {
+  // Android refuses to show the permission dialog after a denial, and a
+  // suppressed notification is silent by design — without these two rows the
+  // user has no way to tell "denied" from "broken".
+  const settings = read("app/(tabs)/settings.tsx")
+  assert.match(settings, /sendTest\(/)
+  assert.match(settings, /Linking\.openSettings\(\)/)
+  assert.match(settings, /settings\.notifications\.status\.blocked/)
 })

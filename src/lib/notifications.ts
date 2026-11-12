@@ -1,7 +1,7 @@
 import * as Notifications from "expo-notifications"
 import * as Device from "expo-device"
-import { Platform, AppState } from "react-native"
-import { shouldNotify } from "./notify-policy"
+import { Platform } from "react-native"
+import { log } from "./logbuffer"
 
 // ---------------------------------------------------------------------------
 // Categories — every notification belongs to exactly one
@@ -77,23 +77,22 @@ interface NotificationData {
 type PreferencesAccessor = () => Record<Category, boolean>
 
 let preferences: PreferencesAccessor = () => defaultPreferences
-// The session whose chat is on screen right now. Notifications for it are
-// suppressed while the app is active (see notify-policy.ts); the session
-// screen sets it on focus and clears it on blur.
-let viewedSession: string | null = null
 const dedupeSentAt = new Map<string, number>()
 
 export function configure(accessor: PreferencesAccessor) {
   preferences = accessor
 }
 
-export function setViewedSession(sessionID: string | null) {
-  viewedSession = sessionID
-}
-
 // ---------------------------------------------------------------------------
 // Setup & permissions
 // ---------------------------------------------------------------------------
+
+// The app's own channel, not expo's fallback: the fallback is created lazily
+// with its own name/importance, so the user could not tune "Session prompts"
+// separately in system settings and the high-importance behaviour would be
+// whatever expo picked. A channel-aware trigger is also the only way to name a
+// channel: `content.channelId` is ignored on Android.
+export const CHANNEL_ID = "prompts"
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -108,27 +107,39 @@ Notifications.setNotificationHandler({
 export async function setup(): Promise<boolean> {
   if (!Device.isDevice) return false
 
-  const { status: existing } = await Notifications.getPermissionsAsync()
-  if (existing === "granted") {
+  try {
+    const { status: existing } = await Notifications.getPermissionsAsync()
+    if (existing === "granted") {
+      await ensureChannel()
+      return true
+    }
+
+    const { status } = await Notifications.requestPermissionsAsync()
+    if (status !== "granted") return false
+
     await ensureChannel()
     return true
+  } catch (error) {
+    log.warn("notifications", "permission request failed:", error)
+    return false
   }
-
-  const { status } = await Notifications.requestPermissionsAsync()
-  if (status !== "granted") return false
-
-  await ensureChannel()
-  return true
 }
 
 export async function granted(): Promise<boolean> {
-  const { status } = await Notifications.getPermissionsAsync()
-  return status === "granted"
+  try {
+    const { status } = await Notifications.getPermissionsAsync()
+    return status === "granted"
+  } catch (error) {
+    // Must not reject: callers are fire-and-forget event handlers, and an
+    // unhandled rejection there is invisible on device.
+    log.warn("notifications", "permission check failed:", error)
+    return false
+  }
 }
 
 async function ensureChannel() {
   if (Platform.OS !== "android") return
-  await Notifications.setNotificationChannelAsync("prompts", {
+  await Notifications.setNotificationChannelAsync(CHANNEL_ID, {
     name: "Session Prompts & Updates",
     importance: Notifications.AndroidImportance.HIGH,
     vibrationPattern: [0, 250, 250, 250],
@@ -136,22 +147,25 @@ async function ensureChannel() {
   })
 }
 
+// A channel-aware trigger is expo's "deliver now, on this channel" form. With
+// `trigger: null` the native side silently falls back to expo's own channel.
+function immediateTrigger() {
+  return Platform.OS === "android" ? { channelId: CHANNEL_ID } : null
+}
+
 // ---------------------------------------------------------------------------
 // Send — single entry point, decides whether to fire
 // ---------------------------------------------------------------------------
 
 export async function send(payload: Payload) {
-  const prefs = preferences()
-  if (!prefs[payload.category]) return
-  // Foreground notifications are delivered too: "the app is open" is not the
-  // same as "the user is reading this session". Only that one chat is quiet.
-  if (!shouldNotify(AppState.currentState === "active", payload.sessionId, viewedSession)) return
-  if (!(await granted())) return
-
-  // The channel must exist before the notification is posted or Android drops
-  // it silently; setup() creates it on connect, but a notification can fire
-  // before that finished.
-  await ensureChannel()
+  if (!preferences()[payload.category]) return
+  // Delivered in the foreground too. An earlier build dropped everything while
+  // the app was open, which is why a finished run or a pending question never
+  // reached the shade while the user waited for it on the chat screen.
+  if (!(await granted())) {
+    log.info("notifications", `skipped ${payload.category}: permission not granted`)
+    return
+  }
 
   if (payload.dedupeKey) {
     const now = Date.now()
@@ -166,19 +180,51 @@ export async function send(payload: Payload) {
     }
   }
 
-  await Notifications.scheduleNotificationAsync({
-    content: {
-      title: payload.title,
-      body: payload.body,
-      data: {
-        category: payload.category,
-        sessionId: payload.sessionId,
-      } satisfies NotificationData as Record<string, unknown>,
-      sound: "default",
-      ...(Platform.OS === "android" ? { channelId: "prompts" } : {}),
-    },
-    trigger: null,
+  await deliver(payload.title, payload.body, {
+    category: payload.category,
+    sessionId: payload.sessionId,
   })
+}
+
+/**
+ * Post one notification through the same path the app uses for real events, and
+ * report what happened. Exists because a notification either appears or does
+ * not — there is no error the user can see, and the reason (permission denied,
+ * scheduling threw) is invisible without adb.
+ */
+export async function sendTest(title: string, body: string): Promise<{ ok: boolean; reason?: string }> {
+  try {
+    const { status } = await Notifications.getPermissionsAsync()
+    if (status !== "granted") return { ok: false, reason: status }
+    await ensureChannel()
+    await Notifications.scheduleNotificationAsync({
+      content: { title, body, sound: "default" },
+      trigger: immediateTrigger(),
+    })
+    return { ok: true }
+  } catch (error) {
+    return { ok: false, reason: error instanceof Error ? error.message : String(error) }
+  }
+}
+
+async function deliver(title: string, body: string, data: NotificationData) {
+  try {
+    // A missing channel makes Android drop the notification silently.
+    await ensureChannel()
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title,
+        body,
+        data: data as unknown as Record<string, unknown>,
+        sound: "default",
+      },
+      trigger: immediateTrigger(),
+    })
+  } catch (error) {
+    // Never let a failed notification take down the event handler that called
+    // it; the log line lands in the diagnostics report.
+    log.error("notifications", "could not show a notification:", error instanceof Error ? error.message : error)
+  }
 }
 
 // ---------------------------------------------------------------------------
