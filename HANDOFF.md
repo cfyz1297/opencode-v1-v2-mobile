@@ -7,19 +7,28 @@
 - Пользователь запускает сервер в Termux на телефоне; приложение — клиент к нему.
 - **Текст релиза пишется на двух языках: сначала английский, потом русский.** Правило действует с 0.2.30, распространяется на описание GitHub Release, `README.md`/`README.ru.md` и этот файл.
 
-## Состояние на 2026-11-11
+## Состояние на 2026-11-12
 
 | Что | Значение |
 |---|---|
-| Версия | **0.3.6**, versionCode **71** (`app.json`, `package.json`, `android/app/build.gradle`, проверка в CI) |
+| Версия | **0.3.7**, versionCode **72** (`app.json`, `package.json`, `android/app/build.gradle`, проверка в CI) |
 | Ветки | `main` = `master` (релизный коммит — см. `git log -1`) |
-| Тег | `v0.3.6` (CI на теге зелёный: `test`, `build`, `roadmap-smoke`) |
-| Release | https://github.com/cfyz1297/opencode-v1-v2-mobile/releases/tag/v0.3.6 — `opencode-mobile-v2.apk` + `SHA256SUMS.txt` |
-| APK | 86 315 101 байт, SHA256 `59217a73eda080ebbc11863ed325cd7951b762c33dc6cf3841cccdf50b18c2a4` (артефакт CI `app-release`, run 42989578733) |
+| Тег | `v0.3.7` на `9151d96` (CI на теге зелёный: `test`, `build`, `roadmap-smoke`) |
+| Release | https://github.com/cfyz1297/opencode-v1-v2-mobile/releases/tag/v0.3.7 — `opencode-mobile-v2.apk` + `SHA256SUMS.txt` |
+| APK | 102 642 216 байт, SHA256 `dddffedb9203cfbdce9c45f350edba580a3d81aab7bb9e49d02e684918ed1c6f` (артефакт CI `app-release`, run 43171989931) |
 | Подпись | production keystore, сертификат SHA-256 `0b409f5f6c2ce47a84b7f4ded0403a82a99470f668d6a924d0a09c4ab7821686`; CI сверяет его без скачивания предыдущего APK |
 | Каналы | только `Build Android APK` и `Security scan`. Play / F-Droid / App Store не используются, на тег `v*` не запускаются |
-| Тесты | `npm test` — **664 passed, 0 failed**; `npm run typecheck` — тесты входят в проверку; покрытие — 98.31 % строк / 86.31 % ветвей / 97.25 % функций (`npm run test:coverage`) |
+| Тесты | `npm test` — **667 passed, 0 failed**; `npm run typecheck` — чисто; покрытие — 98.31 % строк / 86.31 % ветвей / 97.25 % функций (`npm run test:coverage`) |
 | Документация | `README.md` — английский (основной), `README.ru.md` — русский, оба ссылаются друг на друга |
+
+## Что вошло в 0.3.7 (2026-11-12)
+
+- **Голосовой ввод впервые работает.** Причина: `expo-image-picker` с `microphonePermission: false` превращал это в `blockedPermissions`, и expo писал `<uses-permission android:name="android.permission.RECORD_AUDIO" tools:node="remove"/>`. Разрешения не было в манифесте вовсе (проверено `aapt dump permissions` на 0.3.6), поэтому запрос мог ответить только «denied». Опция пришла тем же коммитом `d1cc196`, что и сама фича. Теперь CI валит сборку, если в APK нет `RECORD_AUDIO`.
+- **Шиты модели и усилия.** `@gorhom/bottom-sheet` 5.2.8 неверно считала высоту окна под RN 0.88 / edge-to-edge → шит монтировался вне экрана, тап по чипу ничего не показывал. Обновлено до 5.2.14 (там же `ListFooterComponent`/`ListEmptyComponent` принимают только `undefined`, не `null`).
+- **Expo SDK 58, RN 0.88.1, React 19.3.0.** Главное: `expo-modules-core` 58 перерегистрирует activity-result лончер в `reregister()` вместо исключения `unregistered ActivityResultLauncher` — старый баг «помогает только перезапуск» уходит.
+- **`android/` теперь генерируется prebuild'ом** на каждом прогоне: подпись, `dependenciesInfo`, `usesCleartextTraffic` (без него нет доступа к `http://127.0.0.1`), splash и IME-репортер живут в `plugins/with-native-customizations.js`; проверено двумя prebuild подряд.
+- **CUA smoke проверяет чипы** модели и усилия (выбор → подпись на чипе), дампит logcat при падении. CI повторяет сборку один раз, если NDK скачался битым.
+- Проверено на живом устройстве: прикрепление фото, выбор модели/усилия, голосовой ввод.
 
 ## Что вошло в 0.3.6 (2026-11-11)
 
