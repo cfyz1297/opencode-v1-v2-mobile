@@ -11,6 +11,7 @@ import { isStreamStalled, shouldReconnectOnResume } from "../lib/stream-watchdog
 import { runsNeedingResync } from "../lib/run-watchdog"
 import { reconcilePendingQuestions } from "../lib/pending-questions"
 import { recordAnswered, type AnsweredQuestion } from "../lib/answered-questions"
+import { setKeepAlive } from "../lib/keep-alive"
 import type { QuestionRequest } from "../lib/v2-compat"
 import type { Client, Part, Session, Message } from "../lib/sdk"
 
@@ -118,6 +119,17 @@ function activeRunSessionIDs(): string[] {
   return [...ids]
 }
 
+// Keep the process alive (and with it the SSE socket) while any run is active:
+// Android freezes a backgrounded app and the notifications for "task
+// completed", permissions and questions would never be generated.
+function syncKeepAlive() {
+  setKeepAlive(
+    activeRunSessionIDs().length > 0,
+    i18n.t("notifications.keepAlive.title"),
+    i18n.t("notifications.keepAlive.body"),
+  )
+}
+
 // Finish a run on the client without a server status event: clear the spinner,
 // drop that run's clocks. Leaving a stale clock behind would make the NEXT send
 // look silent immediately and could clear its sending flag before the server
@@ -130,6 +142,7 @@ function finishRunLocally(sessionID: string) {
   useSessions.setState((state) => ({ sending: { ...state.sending, [sessionID]: false } }))
   sessionActivityAt.delete(sessionID)
   sessionResyncedAt.delete(sessionID)
+  syncKeepAlive()
 }
 
 // Re-fetch pending permissions and questions from the server for a session.
@@ -466,6 +479,7 @@ export const useEvents = create<EventsState>((set, get) => ({
                   })
                 }
               }
+              syncKeepAlive()
               break
             }
 

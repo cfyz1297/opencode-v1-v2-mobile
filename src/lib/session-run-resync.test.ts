@@ -157,7 +157,7 @@ function harness() {
     "./sessions": { useSessions: sessions, abortedSessions: new Set<string>() },
     "../lib/notifications": { send: () => {} },
     "../lib/notify-format": { sanitizeBody: (_title: unknown, fallback: string) => fallback, PERMISSION_NOTIFICATION_KEY: "permission", QUESTION_NOTIFICATION_KEY: "question" },
-    "../lib/i18n/config": { default: { t: (key: string) => key } },
+    "../lib/i18n/config": { __esModule: true, default: { t: (key: string) => key } },
     "../lib/status-labels": { statusFromPart: () => "" },
     "../lib/api-error": { isAuthError: () => false },
     "../lib/session-status-reconcile": { isSessionActuallyIdle },
@@ -165,6 +165,7 @@ function harness() {
     "../lib/run-watchdog": { runsNeedingResync },
     "../lib/pending-questions": { reconcilePendingQuestions: (local: unknown) => local },
     "../lib/answered-questions": { recordAnswered: (list: unknown) => list },
+    "../lib/keep-alive": { setKeepAlive: () => {} },
   }
 
   const source = readFileSync(fileURLToPath(new URL("../stores/events.ts", import.meta.url).href), "utf8")

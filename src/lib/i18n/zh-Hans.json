@@ -347,6 +347,10 @@
       "permission": "有工具正在等待你的批准",
       "question": "助手有一个问题",
       "reconnecting": "正在尝试重新连接你的服务器"
+    },
+    "keepAlive": {
+      "title": "会话运行中",
+      "body": "即使应用在后台，通知也会送达"
     }
   },
   "errorBoundary": {

@@ -1,6 +1,17 @@
 // Expo prebuild rewrites every file it owns on every run, so native
 // customizations cannot live in android/ — they are re-applied here instead.
-const { withAppBuildGradle, withMainActivity, withAndroidManifest, createRunOncePlugin } = require('expo/config-plugins')
+const fs = require('fs')
+const path = require('path')
+const {
+  withAppBuildGradle,
+  withMainActivity,
+  withMainApplication,
+  withAndroidManifest,
+  withDangerousMod,
+  createRunOncePlugin,
+} = require('expo/config-plugins')
+
+const KEEPALIVE_PACKAGE = 'cc.agentlabs.opencode.keepalive'
 
 const SIGNING = `        if (System.getenv("RELEASE_STORE_FILE")) {
             release {
@@ -146,8 +157,94 @@ function withCleartextTraffic(config) {
   })
 }
 
+// --- Keep-alive foreground service -------------------------------------------
+//
+// Android freezes a backgrounded RN process, which kills the SSE socket the
+// in-app notifications are generated from. The service is started while an
+// agent run is active and stopped when it ends (see src/lib/keep-alive.ts).
+
+function withKeepAliveSources(config) {
+  return withDangerousMod(config, [
+    'android',
+    async (cfg) => {
+      const source = path.join(__dirname, 'native', 'keepalive')
+      const destination = path.join(
+        cfg.modRequest.platformProjectRoot,
+        'app',
+        'src',
+        'main',
+        'java',
+        'cc',
+        'agentlabs',
+        'opencode',
+        'keepalive',
+      )
+      fs.mkdirSync(destination, { recursive: true })
+      for (const file of fs.readdirSync(source)) {
+        fs.copyFileSync(path.join(source, file), path.join(destination, file))
+      }
+      return cfg
+    },
+  ])
+}
+
+function withKeepAliveManifest(config) {
+  return withAndroidManifest(config, (cfg) => {
+    const manifest = cfg.modResults.manifest
+    const permissions = manifest['uses-permission'] || []
+    for (const name of [
+      'android.permission.FOREGROUND_SERVICE',
+      'android.permission.FOREGROUND_SERVICE_DATA_SYNC',
+    ]) {
+      if (!permissions.some((permission) => permission.$['android:name'] === name)) {
+        permissions.push({ $: { 'android:name': name } })
+      }
+    }
+    manifest['uses-permission'] = permissions
+
+    const application = manifest.application?.[0]
+    if (!application) throw new Error('with-native-customizations: no <application> in manifest')
+    const services = application.service || []
+    if (!services.some((service) => service.$['android:name'] === `${KEEPALIVE_PACKAGE}.KeepAliveService`)) {
+      services.push({
+        $: {
+          'android:name': `${KEEPALIVE_PACKAGE}.KeepAliveService`,
+          'android:exported': 'false',
+          'android:foregroundServiceType': 'dataSync',
+        },
+      })
+    }
+    application.service = services
+    return cfg
+  })
+}
+
+function withKeepAliveRegistration(config) {
+  return withMainApplication(config, (cfg) => {
+    if (cfg.modResults.language !== 'kt') {
+      throw new Error('with-keep-alive expects the Kotlin MainApplication')
+    }
+    let src = cfg.modResults.contents
+    if (!src.includes('KeepAlivePackage')) {
+      src = src.replace(
+        'import com.facebook.react.ReactPackage\n',
+        `import com.facebook.react.ReactPackage\nimport ${KEEPALIVE_PACKAGE}.KeepAlivePackage\n`,
+      )
+      src = src.replace(/(\n\s*)\/\/ add\(MyReactNativePackage\(\)\)\n/, '$1add(KeepAlivePackage())\n')
+    }
+    if (!src.includes('add(KeepAlivePackage())')) {
+      throw new Error('with-keep-alive could not register the package in MainApplication')
+    }
+    cfg.modResults.contents = src
+    return cfg
+  })
+}
+
 module.exports = createRunOncePlugin(
-  (config) => withCleartextTraffic(withImeReporter(withReleaseSigning(config))),
+  (config) =>
+    withCleartextTraffic(
+      withImeReporter(withKeepAliveRegistration(withKeepAliveManifest(withKeepAliveSources(withReleaseSigning(config))))),
+    ),
   'with-native-customizations',
   '1.0.0',
 )

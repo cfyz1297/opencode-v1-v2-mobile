@@ -347,6 +347,10 @@
       "permission": "A tool is waiting for your approval",
       "question": "The assistant has a question",
       "reconnecting": "Trying to reconnect to your server"
+    },
+    "keepAlive": {
+      "title": "Session running",
+      "body": "Notifications will arrive even when the app is in the background"
     }
   },
   "errorBoundary": {

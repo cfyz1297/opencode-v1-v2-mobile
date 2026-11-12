@@ -1,6 +1,7 @@
 import * as Notifications from "expo-notifications"
 import * as Device from "expo-device"
 import { Platform, AppState } from "react-native"
+import { shouldNotify } from "./notify-policy"
 
 // ---------------------------------------------------------------------------
 // Categories — every notification belongs to exactly one
@@ -76,10 +77,18 @@ interface NotificationData {
 type PreferencesAccessor = () => Record<Category, boolean>
 
 let preferences: PreferencesAccessor = () => defaultPreferences
+// The session whose chat is on screen right now. Notifications for it are
+// suppressed while the app is active (see notify-policy.ts); the session
+// screen sets it on focus and clears it on blur.
+let viewedSession: string | null = null
 const dedupeSentAt = new Map<string, number>()
 
 export function configure(accessor: PreferencesAccessor) {
   preferences = accessor
+}
+
+export function setViewedSession(sessionID: string | null) {
+  viewedSession = sessionID
 }
 
 // ---------------------------------------------------------------------------
@@ -134,8 +143,15 @@ async function ensureChannel() {
 export async function send(payload: Payload) {
   const prefs = preferences()
   if (!prefs[payload.category]) return
-  if (AppState.currentState === "active") return
+  // Foreground notifications are delivered too: "the app is open" is not the
+  // same as "the user is reading this session". Only that one chat is quiet.
+  if (!shouldNotify(AppState.currentState === "active", payload.sessionId, viewedSession)) return
   if (!(await granted())) return
+
+  // The channel must exist before the notification is posted or Android drops
+  // it silently; setup() creates it on connect, but a notification can fire
+  // before that finished.
+  await ensureChannel()
 
   if (payload.dedupeKey) {
     const now = Date.now()
