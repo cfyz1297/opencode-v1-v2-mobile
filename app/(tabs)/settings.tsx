@@ -24,6 +24,7 @@ import {
   categoryMeta,
   setup as setupNotifications,
   granted as notificationsGranted,
+  sendTest,
 } from "../../src/lib/notifications"
 import type { Category } from "../../src/lib/notifications"
 import { ORIGINAL_REPO_URL, PRIVACY_POLICY_URL, PROJECT_REPO_URL } from "../../src/lib/links"
@@ -119,13 +120,47 @@ export default function SettingsScreen() {
     [setNotification, t],
   )
 
-  // Lazy-check OS permission for status display
-  if (osGranted === null) {
-    notificationsGranted()
-      .then(setOsGranted)
-      .catch(() => setOsGranted(false))
-  }
+  // Posting a real notification is the only end-to-end check a user can run:
+  // a delivered notification is invisible to the app, so a failure would stay
+  // silent without this button.
+  const handleTestNotification = useCallback(async () => {
+    const result = await sendTest(
+      t("settings.notifications.test.title"),
+      t("settings.notifications.test.body"),
+    )
+    if (result.ok) {
+      Alert.alert(t("settings.notifications.test.okTitle"), t("settings.notifications.test.okMessage"))
+      return
+    }
+    const blocked = result.reason === "denied" || result.reason === "undetermined"
+    Alert.alert(
+      t("settings.notifications.test.failedTitle"),
+      blocked
+        ? t("settings.notifications.test.failedPermission")
+        : t("settings.notifications.test.failedOther", { reason: result.reason }),
+    )
+    // Android stops showing the permission dialog after a denial; the only
+    // path left is system settings.
+    if (blocked) Linking.openSettings()
+  }, [t])
 
+  // The user may grant the permission in system settings and come back; read
+  // it again on every focus, not once per process.
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false
+      notificationsGranted()
+        .then((ok) => {
+          if (!cancelled) setOsGranted(ok)
+        })
+        .catch(() => {
+          if (!cancelled) setOsGranted(false)
+        })
+      return () => {
+        cancelled = true
+      }
+    }, []),
+  )
   const localeLabels: Record<LocalePreference, string> = {
     system: t("settings.language.system"),
     en: t("settings.language.en"),
@@ -219,6 +254,37 @@ export default function SettingsScreen() {
       </SettingSection>
 
       <SettingSection title={t("settings.sections.notifications")} isDark={isDark}>
+        {/* The permission state goes first: when Android blocks notifications,
+            the four category switches below look perfectly fine and do nothing. */}
+        <SettingRow
+          icon={osGranted === false ? "notifications-off" : "notifications"}
+          label={t("settings.notifications.status.label")}
+          description={
+            osGranted === null
+              ? undefined
+              : osGranted
+                ? t("settings.notifications.status.granted")
+                : t("settings.notifications.status.blocked")
+          }
+          isDark={isDark}
+          right={
+            osGranted === false ? (
+              <TouchableOpacity onPress={() => Linking.openSettings()} hitSlop={8}>
+                <Text style={styles.notificationStatusAction}>{t("settings.notifications.status.openSettings")}</Text>
+              </TouchableOpacity>
+            ) : osGranted ? (
+              <Ionicons name="checkmark-circle" size={20} color="#22c55e" />
+            ) : undefined
+          }
+        />
+        <SettingRow
+          icon="paper-plane-outline"
+          label={t("settings.notifications.test.label")}
+          description={t("settings.notifications.test.description")}
+          isDark={isDark}
+          onPress={handleTestNotification}
+          right={<Ionicons name="chevron-forward" size={20} color={isDark ? "#666666" : "#999999"} />}
+        />
         {categories.map((category) => {
           const meta = categoryMeta[category]
           return (
@@ -238,13 +304,6 @@ export default function SettingsScreen() {
             />
           )
         })}
-        {osGranted === false && (
-          <View style={[styles.settingRow, isDark && styles.settingRowDark]}>
-            <Text style={[styles.settingDescription, { color: "#ef4444", paddingLeft: 48 }]}>
-              {t("settings.notifications.disabledNotice")}
-            </Text>
-          </View>
-        )}
       </SettingSection>
 
       <SettingSection title={t("settings.sections.privacy")} isDark={isDark}>
@@ -422,6 +481,11 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#666666",
     marginTop: 2,
+  },
+  notificationStatusAction: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#8b5cf6",
   },
   metaDark: {
     color: "#888888",

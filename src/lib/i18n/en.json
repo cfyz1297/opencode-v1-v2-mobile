@@ -39,7 +39,23 @@
       }
     },
     "notifications": {
-      "disabledNotice": "Notifications are disabled at the system level. Enable them in Settings to receive alerts."
+      "status": {
+        "label": "Android notification permission",
+        "granted": "Allowed — notifications will arrive",
+        "blocked": "Blocked by Android. Allow notifications for OpenCode in system settings.",
+        "openSettings": "Open"
+      },
+      "test": {
+        "label": "Send a test notification",
+        "description": "Checks the whole path right now",
+        "title": "Test notification",
+        "body": "If you can read this, notifications work",
+        "okTitle": "Sent",
+        "okMessage": "A notification should appear in the shade within a second.",
+        "failedTitle": "Not sent",
+        "failedPermission": "Android blocks notifications for OpenCode. Allow them in system settings.",
+        "failedOther": "The system refused the notification: {{reason}}"
+      }
     },
     "privacy": {
       "privacyPolicy": {
