@@ -192,6 +192,7 @@ jobs:
         with:
           name: app-release
           path: android/app/build/outputs/apk/release/app-release.apk
+          retention-days: 3
 
   roadmap-smoke:
     name: Android roadmap CUA smoke
