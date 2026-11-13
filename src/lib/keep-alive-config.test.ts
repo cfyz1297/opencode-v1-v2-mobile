@@ -79,23 +79,13 @@ test("the notification permission is not blocked at build time", () => {
   assert.ok(!blocked.includes("android.permission.POST_NOTIFICATIONS"))
 })
 
-test("settings makes a blocked OS permission visible and can post a real test notification", () => {
+test("settings makes a blocked OS permission visible", () => {
   // Android refuses to show the permission dialog after a denial, and a
-  // suppressed notification is silent by design — without these two rows the
-  // user has no way to tell "denied" from "broken".
+  // suppressed notification is silent by design — without this row the user has
+  // no way to tell "denied" from "broken".
   const settings = read("app/(tabs)/settings.tsx")
-  assert.match(settings, /sendTest\(/)
   assert.match(settings, /Linking\.openSettings\(\)/)
   assert.match(settings, /settings\.notifications\.status\.blocked/)
-})
-
-test("settings shows the app's own last notification decisions", () => {
-  // "A notification did not arrive" has no error surface on Android: the
-  // decision (held / suppressed / never generated) has to be readable.
-  const settings = read("app/(tabs)/settings.tsx")
-  assert.match(settings, /getLogEntries\(\)/)
-  assert.match(settings, /"notifications", "keepalive", "watch"/)
-  assert.match(settings, /testID="notification-diagnostics"/)
 })
 
 test("held alerts are flushed when the app leaves the foreground and dropped when it returns", () => {

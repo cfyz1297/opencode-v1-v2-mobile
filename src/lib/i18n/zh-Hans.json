@@ -44,21 +44,6 @@
         "granted": "已允许 — 通知会送达",
         "blocked": "已被系统阻止。请在 Android 设置中允许 OpenCode 的通知。",
         "openSettings": "打开"
-      },
-      "test": {
-        "label": "发送测试通知",
-        "description": "立即检查整条链路",
-        "title": "测试通知",
-        "body": "看到这条通知说明功能正常",
-        "okTitle": "已发送",
-        "okMessage": "通知应在一秒内出现在通知栏。",
-        "failedTitle": "未发送",
-        "failedPermission": "Android 阻止了 OpenCode 的通知。请在系统设置中允许。",
-        "failedOther": "系统拒绝了通知：{{reason}}"
-      },
-      "diagnostics": {
-        "hint": "最近的通知决策（为空表示没有产生通知）：",
-        "empty": "暂无通知活动。"
       }
     },
     "privacy": {

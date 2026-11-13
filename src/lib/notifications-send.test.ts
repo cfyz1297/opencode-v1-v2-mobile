@@ -212,13 +212,6 @@ test("a failed native post is reported instead of silently dropping the alert", 
   assert.ok(logs.some((line) => line.includes("notify_failed")))
 })
 
-test("the test notification uses the same path, so it shows the real icon", async () => {
-  const { exports, nativeCalls } = harness({ native: true })
-  assert.equal((await exports.sendTest("Test", "Body")).ok, true)
-  assert.equal(nativeCalls.length, 1)
-  assert.equal(nativeCalls[0].category, "completed")
-})
-
 test("without a native module iOS keeps using expo-notifications", async () => {
   const { exports, scheduled } = harness()
   await exports.send({ category: "completed", title: "Task completed", body: "…", sessionId: "ses_1" })
@@ -274,20 +267,4 @@ test("deduplication still stops a repeated prompt from buzzing twice", async () 
   await exports.send(payload)
   await exports.send(payload)
   assert.equal(scheduled.length, 1)
-})
-
-test("the settings test button reports why a notification failed", async () => {
-  const denied = harness({ status: "denied" })
-  const deniedResult = await denied.exports.sendTest("Test", "Body")
-  assert.equal(deniedResult.ok, false)
-  assert.equal(deniedResult.reason, "denied")
-
-  const broken = harness({ failSchedule: true })
-  const brokenResult = await broken.exports.sendTest("Test", "Body")
-  assert.equal(brokenResult.ok, false)
-  assert.match(brokenResult.reason, /not supported/)
-
-  const ok = harness()
-  assert.equal((await ok.exports.sendTest("Test", "Body")).ok, true)
-  assert.equal(ok.scheduled.length, 1)
 })

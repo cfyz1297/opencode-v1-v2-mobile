@@ -24,10 +24,8 @@ import {
   categoryMeta,
   setup as setupNotifications,
   granted as notificationsGranted,
-  sendTest,
 } from "../../src/lib/notifications"
 import type { Category } from "../../src/lib/notifications"
-import { formatLogLines, getLogEntries } from "../../src/lib/logbuffer"
 import { ORIGINAL_REPO_URL, PRIVACY_POLICY_URL, PROJECT_REPO_URL } from "../../src/lib/links"
 import { CURRENT_VERSION, checkForUpdate, type AvailableUpdate } from "../../src/lib/update-check"
 import type { LocalePreference } from "../../src/lib/i18n/locale-resolve"
@@ -84,7 +82,6 @@ export default function SettingsScreen() {
   const { settings, hasBiometrics, updateSettings, lock } = useAuth()
   const { notifications, setNotification, locale, setLocale, serverApi, setServerApi } = useSettings()
   const [osGranted, setOsGranted] = useState<boolean | null>(null)
-  const [diagnostics, setDiagnostics] = useState("")
 
   // Settings is where a user goes to ask "what am I running?". Answer it, and if
   // a newer build exists say so here too — the banner on the sessions list is
@@ -122,30 +119,6 @@ export default function SettingsScreen() {
     [setNotification, t],
   )
 
-  // Posting a real notification is the only end-to-end check a user can run:
-  // a delivered notification is invisible to the app, so a failure would stay
-  // silent without this button.
-  const handleTestNotification = useCallback(async () => {
-    const result = await sendTest(
-      t("settings.notifications.test.title"),
-      t("settings.notifications.test.body"),
-    )
-    if (result.ok) {
-      Alert.alert(t("settings.notifications.test.okTitle"), t("settings.notifications.test.okMessage"))
-      return
-    }
-    const blocked = result.reason === "denied" || result.reason === "undetermined"
-    Alert.alert(
-      t("settings.notifications.test.failedTitle"),
-      blocked
-        ? t("settings.notifications.test.failedPermission")
-        : t("settings.notifications.test.failedOther", { reason: result.reason }),
-    )
-    // Android stops showing the permission dialog after a denial; the only
-    // path left is system settings.
-    if (blocked) Linking.openSettings()
-  }, [t])
-
   // The user may grant the permission in system settings and come back; read
   // it again on every focus, not once per process.
   useFocusEffect(
@@ -164,20 +137,6 @@ export default function SettingsScreen() {
     }, []),
   )
 
-  // The reasons the last notifications were (not) posted, straight from the
-  // log buffer — refreshed on every focus, i.e. every time the user comes back
-  // to check whether a background alert arrived.
-  useFocusEffect(
-    useCallback(() => {
-      setDiagnostics(
-        formatLogLines(
-          getLogEntries()
-            .filter((entry) => ["notifications", "keepalive", "watch"].includes(entry.tag))
-            .slice(-14),
-        ),
-      )
-    }, []),
-  )
   const localeLabels: Record<LocalePreference, string> = {
     system: t("settings.language.system"),
     en: t("settings.language.en"),
@@ -294,14 +253,6 @@ export default function SettingsScreen() {
             ) : undefined
           }
         />
-        <SettingRow
-          icon="paper-plane-outline"
-          label={t("settings.notifications.test.label")}
-          description={t("settings.notifications.test.description")}
-          isDark={isDark}
-          onPress={handleTestNotification}
-          right={<Ionicons name="chevron-forward" size={20} color={isDark ? "#666666" : "#999999"} />}
-        />
         {categories.map((category) => {
           const meta = categoryMeta[category]
           return (
@@ -321,18 +272,6 @@ export default function SettingsScreen() {
             />
           )
         })}
-        {/* When a notification does not arrive there is nothing to look at:
-            Android drops it silently and the app has no error surface. These are
-            the app's own last decisions, so the next report can say whether the
-            alert was held, suppressed, or never generated at all. */}
-        <View style={styles.diagnosticsBlock}>
-          <Text style={[styles.diagnosticsHint, isDark && styles.diagnosticsHintDark]}>
-            {t("settings.notifications.diagnostics.hint")}
-          </Text>
-          <Text selectable style={[styles.diagnosticsText, isDark && styles.diagnosticsTextDark]} testID="notification-diagnostics">
-            {diagnostics || t("settings.notifications.diagnostics.empty")}
-          </Text>
-        </View>
       </SettingSection>
 
       <SettingSection title={t("settings.sections.privacy")} isDark={isDark}>
@@ -505,26 +444,6 @@ const styles = StyleSheet.create({
   },
   textDark: {
     color: "#ffffff",
-  },
-  diagnosticsBlock: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 6,
-  },
-  diagnosticsHint: {
-    fontSize: 12,
-    color: "#999999",
-  },
-  diagnosticsHintDark: {
-    color: "#777777",
-  },
-  diagnosticsText: {
-    fontSize: 11,
-    fontFamily: "monospace",
-    color: "#444444",
-  },
-  diagnosticsTextDark: {
-    color: "#aaaaaa",
   },
   settingDescription: {
     fontSize: 13,

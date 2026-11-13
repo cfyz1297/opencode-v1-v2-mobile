@@ -181,17 +181,14 @@ export interface SendOptions {
 export const HOLD_TTL_MS = 3_000
 let held: Array<{ payload: Payload; at: number }> = []
 
-export type AttemptOutcome = "posted" | "held" | "app-active" | "disabled" | "no-permission" | "deduped" | "error"
+type AttemptOutcome = "posted" | "held" | "disabled" | "no-permission" | "deduped" | "failed"
 
-const attempts: Array<{ at: number; category: Category; outcome: AttemptOutcome; detail?: string }> = []
-
-function record(category: Category, outcome: AttemptOutcome, detail?: string) {
-  attempts.push({ at: Date.now(), category, outcome, detail })
-  if (attempts.length > 12) attempts.shift()
-  // The diagnostics block in Settings reads these lines; without them a missing
-  // notification is indistinguishable from a notification that was never
-  // generated — the reason the first three attempts could not be diagnosed.
-  log.info("notifications", `${category}: ${outcome}${detail ? ` — ${detail}` : ""}`)
+// Only failures and suppressions are logged: they are the only lines that mean
+// something in the connection diagnostics report, and a line per successful
+// prompt would flush that buffer.
+function record(category: Category, outcome: AttemptOutcome) {
+  if (outcome === "posted") return
+  log.info("notifications", `${category}: ${outcome}`)
 }
 
 export async function send(payload: Payload, options: SendOptions = {}) {
@@ -222,7 +219,7 @@ export async function send(payload: Payload, options: SendOptions = {}) {
     category: payload.category,
     sessionId: payload.sessionId,
   })
-  record(payload.category, result.ok ? "posted" : "error", result.error)
+  record(payload.category, result.ok ? "posted" : "failed")
 }
 
 /**
@@ -243,20 +240,6 @@ export function flushHeld() {
  */
 export function dropHeld() {
   held = []
-}
-
-/**
- * Post one notification through the same path the app uses for real events, and
- * report what happened. Exists because a notification either appears or does
- * not — there is no error the user can see, and the reason (permission denied,
- * scheduling threw) is invisible without adb.
- */
-export async function sendTest(title: string, body: string): Promise<{ ok: boolean; reason?: string }> {
-  const { status } = await Notifications.getPermissionsAsync()
-  if (status !== "granted") return { ok: false, reason: status }
-  // Same path as a real alert, so the test also shows its icon.
-  const result = await deliver(title, body, { category: "completed", sessionId: "test" })
-  return result.ok ? { ok: true } : { ok: false, reason: result.error }
 }
 
 async function deliver(title: string, body: string, data: NotificationData): Promise<{ ok: boolean; error?: string }> {

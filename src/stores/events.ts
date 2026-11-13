@@ -432,9 +432,6 @@ async function notifyRunEnded(sessionID: string) {
 }
 
 async function pollWhileBackgrounded() {
-  // Unconditional: the diagnostics block must show whether the timer runs at
-  // all, which is the difference between "timer frozen" and "nothing to do".
-  log.info("watch", `tick (${AppState.currentState})`)
   // The listener can fire late; trust the current state over the last event.
   if (AppState.currentState === "active") return
   const client = useConnections.getState().client
