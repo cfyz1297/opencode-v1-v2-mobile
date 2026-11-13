@@ -83,15 +83,26 @@ test("a notification tap opens the session through the deep link the router hand
   assert.match(module, /FLAG_IMMUTABLE/)
 })
 
-test("the ongoing keep-alive card is hidden instead of sitting in the shade", () => {
-  // "Remove the second 'Session running' notification": the service still needs
-  // a foreground notification, so its channel is created with IMPORTANCE_NONE.
-  const module = read("plugins/native/keepalive/NotifyModule.kt")
-  assert.match(module, /IMPORTANCE_NONE/)
-  // Importance cannot be changed after creation — an old LOW channel from a
-  // previous build has to be deleted first.
-  assert.match(module, /deleteNotificationChannel/)
+test("the keep-alive card is removed after the service is promoted", () => {
+  // Android promotes an FGS notification's channel to at least IMPORTANCE_LOW,
+  // so a NONE channel is silently upgraded and the "Session running" card comes
+  // back — exactly what happened in 0.3.15. The channel must be deleted *after*
+  // startForeground: deleting it cancels the notification, the service stays in
+  // the foreground state.
   const service = read("plugins/native/keepalive/KeepAliveService.kt")
-  assert.match(service, /hideKeepAliveChannel\(this, title\)/)
-  assert.doesNotMatch(service, /IMPORTANCE_LOW/)
+  const start = service.indexOf("startForeground(")
+  const deletions = [...service.matchAll(/deleteNotificationChannel\(/g)].map((match) => match.index ?? -1)
+  assert.ok(deletions.length >= 2, "one deletion for the stale channel, one to hide the card")
+  assert.ok(
+    deletions.some((index) => index > start),
+    "the card is only removed when the channel is deleted after startForeground",
+  )
+  // An old channel with a different importance blocks recreation, so it is
+  // replaced before startForeground too.
+  assert.ok(deletions.some((index) => index < start))
+  assert.match(service, /NotificationManager\.IMPORTANCE_NONE/)
+  // Creating the channel as LOW is the bug being fixed, not a comment about it.
+  assert.doesNotMatch(service, /NotificationManager\.IMPORTANCE_LOW\)/)
+  // Pre-Oreo has no channels; the notification is cancelled directly.
+  assert.match(service, /manager\.cancel\(NOTIFICATION_ID\)/)
 })
