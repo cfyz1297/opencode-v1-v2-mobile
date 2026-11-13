@@ -13,7 +13,17 @@ import { runInNewContext } from "node:vm"
 const require = createRequire(import.meta.url)
 const ts = require("typescript")
 
-function harness(options: { status?: string; failSchedule?: boolean; appState?: string } = {}) {
+function harness(
+  options: {
+    status?: string
+    failSchedule?: boolean
+    appState?: string
+    /** Stand-in for the native Notify module, which posts per-category icons. */
+    native?: boolean
+    nativeFails?: boolean
+  } = {},
+) {
+  const nativeCalls: Array<{ category: string; title: string; body: string; sessionId: string; channelId: string }> = []
   const scheduled: Array<{ title: string; body: string; trigger: unknown }> = []
   const logs: string[] = []
   const state = { status: options.status ?? "granted", appState: options.appState ?? "background" }
@@ -37,7 +47,21 @@ function harness(options: { status?: string; failSchedule?: boolean; appState?: 
   const modules: Record<string, unknown> = {
     "expo-notifications": Notifications,
     "expo-device": { isDevice: true },
-    "react-native": { Platform: { OS: "android" }, AppState: { currentState: state.appState } },
+    "react-native": {
+      Platform: { OS: "android" },
+      AppState: { currentState: state.appState },
+      NativeModules: options.native
+        ? {
+            Notify: {
+              notify: async (category: string, title: string, body: string, sessionId: string, channelId: string) => {
+                if (options.nativeFails) throw new Error("notify_failed")
+                nativeCalls.push({ category, title, body, sessionId, channelId })
+                return true
+              },
+            },
+          }
+        : {},
+    },
     "./logbuffer": {
       log: {
         debug: () => {},
@@ -78,7 +102,7 @@ function harness(options: { status?: string; failSchedule?: boolean; appState?: 
     errors: true,
     connection: true,
   }))
-  return { exports, scheduled, logs, state, clock }
+  return { exports, scheduled, nativeCalls, logs, state, clock }
 }
 
 test("a finished run reaches the shade while the app is in the background", async () => {
@@ -167,6 +191,37 @@ test("the background watch forces delivery even if AppState still says active", 
   // not swallow the alert (this is the failure the user kept hitting).
   const { exports, scheduled } = harness({ appState: "active" })
   await exports.send({ category: "completed", title: "Task completed", body: "…", sessionId: "ses_1" }, { force: true })
+  assert.equal(scheduled.length, 1)
+})
+
+test("on Android the notification is posted natively, so its category picks the icon", async () => {
+  // expo-notifications has one small icon for the whole app; the white square in
+  // the status bar came from it being a full-colour bitmap.
+  const { exports, nativeCalls, scheduled } = harness({ native: true })
+  await exports.send({ category: "questions", title: "Input needed", body: "…", sessionId: "ses_1" })
+  assert.equal(scheduled.length, 0, "expo must not post it on Android")
+  assert.equal(nativeCalls.length, 1)
+  assert.equal(nativeCalls[0].category, "questions")
+  assert.equal(nativeCalls[0].channelId, "prompts")
+  assert.equal(nativeCalls[0].sessionId, "ses_1")
+})
+
+test("a failed native post is reported instead of silently dropping the alert", async () => {
+  const { exports, logs } = harness({ native: true, nativeFails: true })
+  await exports.send({ category: "errors", title: "Session error", body: "…", sessionId: "ses_1" })
+  assert.ok(logs.some((line) => line.includes("notify_failed")))
+})
+
+test("the test notification uses the same path, so it shows the real icon", async () => {
+  const { exports, nativeCalls } = harness({ native: true })
+  assert.equal((await exports.sendTest("Test", "Body")).ok, true)
+  assert.equal(nativeCalls.length, 1)
+  assert.equal(nativeCalls[0].category, "completed")
+})
+
+test("without a native module iOS keeps using expo-notifications", async () => {
+  const { exports, scheduled } = harness()
+  await exports.send({ category: "completed", title: "Task completed", body: "…", sessionId: "ses_1" })
   assert.equal(scheduled.length, 1)
 })
 

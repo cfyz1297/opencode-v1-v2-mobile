@@ -1,6 +1,6 @@
 import * as Notifications from "expo-notifications"
 import * as Device from "expo-device"
-import { Platform, AppState } from "react-native"
+import { NativeModules, Platform, AppState } from "react-native"
 import { log } from "./logbuffer"
 
 // ---------------------------------------------------------------------------
@@ -93,6 +93,10 @@ export function configure(accessor: PreferencesAccessor) {
 // whatever expo picked. A channel-aware trigger is also the only way to name a
 // channel: `content.channelId` is ignored on Android.
 export const CHANNEL_ID = "prompts"
+
+interface NotifyBridge {
+  notify: (category: string, title: string, body: string, sessionId: string, channelId: string) => Promise<boolean>
+}
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -248,24 +252,28 @@ export function dropHeld() {
  * scheduling threw) is invisible without adb.
  */
 export async function sendTest(title: string, body: string): Promise<{ ok: boolean; reason?: string }> {
-  try {
-    const { status } = await Notifications.getPermissionsAsync()
-    if (status !== "granted") return { ok: false, reason: status }
-    await ensureChannel()
-    await Notifications.scheduleNotificationAsync({
-      content: { title, body, sound: "default" },
-      trigger: immediateTrigger(),
-    })
-    return { ok: true }
-  } catch (error) {
-    return { ok: false, reason: error instanceof Error ? error.message : String(error) }
-  }
+  const { status } = await Notifications.getPermissionsAsync()
+  if (status !== "granted") return { ok: false, reason: status }
+  // Same path as a real alert, so the test also shows its icon.
+  const result = await deliver(title, body, { category: "completed", sessionId: "test" })
+  return result.ok ? { ok: true } : { ok: false, reason: result.error }
 }
 
 async function deliver(title: string, body: string, data: NotificationData): Promise<{ ok: boolean; error?: string }> {
   try {
     // A missing channel makes Android drop the notification silently.
     await ensureChannel()
+
+    // One monochrome icon per category needs the native side: expo-notifications
+    // has a single small icon for the whole app (and it was a full-colour PNG,
+    // which Android paints as a white square).
+    const bridge = Platform.OS === "android" ? (NativeModules.Notify as NotifyBridge | undefined) : undefined
+    if (bridge) {
+      // Rejects with the native reason, which the catch below logs.
+      await bridge.notify(data.category, title, body, data.sessionId ?? "", CHANNEL_ID)
+      return { ok: true }
+    }
+
     await Notifications.scheduleNotificationAsync({
       content: {
         title,

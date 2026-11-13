@@ -183,6 +183,17 @@ function withKeepAliveSources(config) {
       for (const file of fs.readdirSync(source)) {
         fs.copyFileSync(path.join(source, file), path.join(destination, file))
       }
+      // Monochrome notification icons. They must live in res/, and they replace
+      // the full-colour PNG expo-notifications would use as the status-bar icon
+      // (Android draws such a bitmap as a white square).
+      const resSource = path.join(__dirname, 'native', 'res')
+      const resTarget = path.join(cfg.modRequest.platformProjectRoot, 'app', 'src', 'main', 'res')
+      for (const folder of fs.readdirSync(resSource)) {
+        fs.mkdirSync(path.join(resTarget, folder), { recursive: true })
+        for (const file of fs.readdirSync(path.join(resSource, folder))) {
+          fs.copyFileSync(path.join(resSource, folder, file), path.join(resTarget, folder, file))
+        }
+      }
       return cfg
     },
   ])
@@ -215,6 +226,18 @@ function withKeepAliveManifest(config) {
       })
     }
     application.service = services
+
+    // Status-bar icon for anything posted through expo-notifications (iOS has
+    // no such concept; on Android this now covers the test notification and any
+    // future path). Must be set after the expo-notifications plugin, hence the
+    // plugin order in app.json.
+    const metaData = application['meta-data'] || []
+    const iconKey = 'expo.modules.notifications.default_notification_icon'
+    const withoutOld = metaData.filter((entry) => entry.$['android:name'] !== iconKey)
+    withoutOld.push({
+      $: { 'android:name': iconKey, 'android:resource': '@drawable/notif_default' },
+    })
+    application['meta-data'] = withoutOld
     return cfg
   })
 }
@@ -228,12 +251,15 @@ function withKeepAliveRegistration(config) {
     if (!src.includes('KeepAlivePackage')) {
       src = src.replace(
         'import com.facebook.react.ReactPackage\n',
-        `import com.facebook.react.ReactPackage\nimport ${KEEPALIVE_PACKAGE}.KeepAlivePackage\n`,
+        `import com.facebook.react.ReactPackage\nimport ${KEEPALIVE_PACKAGE}.KeepAlivePackage\nimport ${KEEPALIVE_PACKAGE}.NotifyPackage\n`,
       )
-      src = src.replace(/(\n\s*)\/\/ add\(MyReactNativePackage\(\)\)\n/, '$1add(KeepAlivePackage())\n')
+      src = src.replace(
+        /(\n\s*)\/\/ add\(MyReactNativePackage\(\)\)\n/,
+        '$1add(KeepAlivePackage())\n$1add(NotifyPackage())\n',
+      )
     }
-    if (!src.includes('add(KeepAlivePackage())')) {
-      throw new Error('with-keep-alive could not register the package in MainApplication')
+    if (!src.includes('add(KeepAlivePackage())') || !src.includes('add(NotifyPackage())')) {
+      throw new Error('with-keep-alive could not register the packages in MainApplication')
     }
     cfg.modResults.contents = src
     return cfg

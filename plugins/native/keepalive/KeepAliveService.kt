@@ -1,7 +1,5 @@
 package cc.agentlabs.opencode.keepalive
 
-import android.app.NotificationChannel
-import android.app.NotificationManager
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
@@ -33,7 +31,9 @@ class KeepAliveService : HeadlessJsTaskService() {
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
     val title = intent?.getStringExtra(EXTRA_TITLE) ?: "OpenCode"
     val body = intent?.getStringExtra(EXTRA_BODY) ?: ""
-    createChannel(title)
+    // Hidden channel: the service keeps its foreground status, but the user
+    // does not get a second "Session running" card next to the real alerts.
+    hideKeepAliveChannel(this, title)
     showOngoing(title, body)
     // Base class starts the headless task (and every task start posts the same
     // intent again, so this method always runs first).
@@ -54,12 +54,13 @@ class KeepAliveService : HeadlessJsTaskService() {
   private fun showOngoing(title: String, body: String) {
     val notification =
       NotificationCompat.Builder(this, CHANNEL_ID)
-        .setSmallIcon(R.drawable.notification_icon)
+        .setSmallIcon(R.drawable.notif_default)
         .setContentTitle(title)
         .setContentText(body)
         .setOngoing(true)
         .setOnlyAlertOnce(true)
-        .setPriority(NotificationCompat.PRIORITY_LOW)
+        .setPriority(NotificationCompat.PRIORITY_MIN)
+        .setSilent(true)
         .build()
 
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -67,17 +68,6 @@ class KeepAliveService : HeadlessJsTaskService() {
     } else {
       startForeground(NOTIFICATION_ID, notification)
     }
-  }
-
-  private fun createChannel(title: String) {
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-    val manager = getSystemService(NotificationManager::class.java)
-    if (manager.getNotificationChannel(CHANNEL_ID) != null) return
-    manager.createNotificationChannel(
-      NotificationChannel(CHANNEL_ID, title, NotificationManager.IMPORTANCE_LOW).apply {
-        setShowBadge(false)
-      },
-    )
   }
 
   companion object {
