@@ -83,26 +83,21 @@ test("a notification tap opens the session through the deep link the router hand
   assert.match(module, /FLAG_IMMUTABLE/)
 })
 
-test("the keep-alive card is removed after the service is promoted", () => {
-  // Android promotes an FGS notification's channel to at least IMPORTANCE_LOW,
-  // so a NONE channel is silently upgraded and the "Session running" card comes
-  // back — exactly what happened in 0.3.15. The channel must be deleted *after*
-  // startForeground: deleting it cancels the notification, the service stays in
-  // the foreground state.
+test("the keep-alive card is hidden without touching the channel", () => {
+  // The notification is cancelled right after startForeground: that removes the
+  // "Session running" card while the service keeps its foreground state.
   const service = read("plugins/native/keepalive/KeepAliveService.kt")
   const start = service.indexOf("startForeground(")
-  const deletions = [...service.matchAll(/deleteNotificationChannel\(/g)].map((match) => match.index ?? -1)
-  assert.ok(deletions.length >= 2, "one deletion for the stale channel, one to hide the card")
-  assert.ok(
-    deletions.some((index) => index > start),
-    "the card is only removed when the channel is deleted after startForeground",
-  )
-  // An old channel with a different importance blocks recreation, so it is
-  // replaced before startForeground too.
-  assert.ok(deletions.some((index) => index < start))
-  assert.match(service, /NotificationManager\.IMPORTANCE_NONE/)
-  // Creating the channel as LOW is the bug being fixed, not a comment about it.
-  assert.doesNotMatch(service, /NotificationManager\.IMPORTANCE_LOW\)/)
-  // Pre-Oreo has no channels; the notification is cancelled directly.
-  assert.match(service, /manager\.cancel\(NOTIFICATION_ID\)/)
+  const cancel = service.indexOf("cancel(NOTIFICATION_ID)")
+  assert.ok(cancel > start, "the notification must be cancelled after startForeground")
+
+  // Deleting the channel cancelled the FGS notification from under the system
+  // and crashed the app in 0.3.16 — the channel stays untouched here.
+  assert.doesNotMatch(service, /deleteNotificationChannel/)
+
+  // The channel is still created with IMPORTANCE_NONE before startForeground,
+  // which is the only part of the hiding that has been stable on the device.
+  const module = read("plugins/native/keepalive/NotifyModule.kt")
+  assert.match(module, /IMPORTANCE_NONE/)
+  assert.match(service, /hideKeepAliveChannel\(this, title\)/)
 })

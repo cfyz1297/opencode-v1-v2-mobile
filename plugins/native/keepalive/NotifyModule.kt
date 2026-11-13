@@ -1,9 +1,12 @@
 package cc.agentlabs.opencode.keepalive
 
+import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import cc.agentlabs.opencode.R
@@ -90,5 +93,27 @@ class NotifyModule(private val context: ReactApplicationContext) :
       intent,
       PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
     )
+  }
+}
+
+/**
+ * The ongoing notification a foreground service must show. Android gives no way
+ * to run one silently, so the channel is created with IMPORTANCE_NONE: the
+ * service keeps its foreground status, the card stays out of the shade.
+ */
+internal fun hideKeepAliveChannel(context: Context, title: String) {
+  if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+  val manager = context.getSystemService(NotificationManager::class.java)
+  // Importance cannot be changed after creation, so an older LOW channel from a
+  // previous build has to be replaced.
+  manager.getNotificationChannel(KeepAliveService.CHANNEL_ID)?.let { existing ->
+    if (existing.importance != NotificationManager.IMPORTANCE_NONE) {
+      manager.deleteNotificationChannel(KeepAliveService.CHANNEL_ID)
+    }
+  }
+  if (manager.getNotificationChannel(KeepAliveService.CHANNEL_ID) == null) {
+    val channel = NotificationChannel(KeepAliveService.CHANNEL_ID, title, NotificationManager.IMPORTANCE_NONE)
+    channel.setShowBadge(false)
+    manager.createNotificationChannel(channel)
   }
 }
