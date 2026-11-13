@@ -37,6 +37,23 @@ test("the service goes foreground with a type and is not exported", () => {
   assert.match(plugin, /'android:exported': 'false'/)
 })
 
+test("the service runs a headless JS task, which is what re-enables background timers", () => {
+  // React Native removes its timer frame callback while the host is paused
+  // unless a headless task is active (JavaTimerManager.kt), so a plain
+  // foreground service leaves setInterval dead in the background.
+  const service = read("plugins/native/keepalive/KeepAliveService.kt")
+  assert.match(service, /HeadlessJsTaskService/)
+  assert.match(service, /HeadlessJsTaskConfig\(\s*TASK_KEY/)
+  // 0 = no timeout: terminating the React instance mid-run is worse than
+  // keeping the task alive.
+  assert.match(service, /0,/)
+  const bridge = read("src/lib/keep-alive.ts")
+  assert.match(bridge, /AppRegistry\.registerHeadlessTask\(TASK_KEY/)
+  // The task key must match on both sides.
+  assert.match(service, /TASK_KEY = "KeepAliveBackground"/)
+  assert.match(bridge, /TASK_KEY = "KeepAliveBackground"/)
+})
+
 test("the store keeps the service alive only while a run is active", () => {
   const events = read("src/stores/events.ts")
   assert.match(events, /setKeepAlive\(activeRunSessionIDs\(\)\.length > 0\)/)

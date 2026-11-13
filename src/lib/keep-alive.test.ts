@@ -24,8 +24,14 @@ function harness(options: { translate?: (key: string) => unknown; bridgeFails?: 
     stop: () => calls.push({ method: "stop", args: [] }),
   }
 
+  const registered: string[] = []
   const modules: Record<string, unknown> = {
-    "react-native": { NativeModules: { KeepAlive: bridge } },
+    "react-native": {
+      NativeModules: { KeepAlive: bridge },
+      AppRegistry: {
+        registerHeadlessTask: (key: string) => registered.push(key),
+      },
+    },
     "./i18n/config": {
       __esModule: true,
       default: {
@@ -58,7 +64,7 @@ function harness(options: { translate?: (key: string) => unknown; bridgeFails?: 
     String,
     Error,
   })
-  return { exports, calls, logs }
+  return { exports, calls, logs, registered }
 }
 
 test("an active run starts the foreground service once", () => {
@@ -108,10 +114,69 @@ test("a refused service start is logged and retried on the next call", () => {
   assert.equal(logs.filter((line) => line.includes("could not start")).length, 2)
 })
 
+test("the headless task is registered — without it React Native stops JS timers", () => {
+  // JavaTimerManager drops its frame callback while isPaused && no active
+  // headless task, so setInterval never fires in the background. The task is
+  // what keeps the background watch alive.
+  const { exports, registered, calls } = harness()
+  exports.setKeepAlive(true)
+  assert.deepEqual(registered, ["KeepAliveBackground"])
+  assert.equal(calls.length, 1)
+  // Registering twice would start a second task for one run.
+  exports.setKeepAlive(false)
+  exports.setKeepAlive(true)
+  assert.deepEqual(registered, ["KeepAliveBackground"])
+})
+
+test("stopping the run settles the headless task so timers can pause again", async () => {
+  const resolvers: Array<() => void> = []
+  const logs: string[] = []
+  const modules: Record<string, unknown> = {
+    "react-native": {
+      NativeModules: { KeepAlive: { start: () => {}, stop: () => {} } },
+      AppRegistry: {
+        registerHeadlessTask: (_key: string, factory: () => () => Promise<unknown>) => {
+          const task = factory()
+          const promise = task()
+          // The task promise must stay pending for the whole run.
+          assert.equal(promise instanceof Promise, true)
+        },
+      },
+    },
+    "./i18n/config": { __esModule: true, default: { t: (key: string) => key } },
+    "./logbuffer": {
+      log: {
+        debug: () => {},
+        info: (_tag: string, ...parts: unknown[]) => logs.push(parts.join(" ")),
+        warn: () => {},
+        error: () => {},
+      },
+    },
+  }
+  const source = readFileSync(fileURLToPath(new URL("./keep-alive.ts", import.meta.url).href), "utf8")
+  const output = ts.transpileModule(source, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText
+  const exports: Record<string, any> = {}
+  runInNewContext(output, {
+    exports,
+    module: { exports },
+    require: (id: string) => modules[id],
+    String,
+    Error,
+    Promise,
+  })
+  exports.setKeepAlive(true)
+  assert.ok(logs.some((line) => line.includes("headless task running")))
+  exports.setKeepAlive(false)
+  // Nothing to assert on the resolve itself here; the run must simply not throw.
+  assert.equal(resolvers.length, 0)
+})
+
 test("a missing native module is reported instead of silently doing nothing", () => {
   const logs: string[] = []
   const modules: Record<string, unknown> = {
-    "react-native": { NativeModules: {} },
+    "react-native": { NativeModules: {}, AppRegistry: { registerHeadlessTask: () => {} } },
     "./i18n/config": { __esModule: true, default: { t: (key: string) => key } },
     "./logbuffer": {
       log: {

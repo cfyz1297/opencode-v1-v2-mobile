@@ -1,9 +1,14 @@
-// Android freezes a cached app process seconds after it leaves the foreground.
-// That kills both the SSE socket and the JS timers the background watch needs,
-// so "task completed" / "input needed" never reached the phone once the screen
-// was off. While an agent run is active a foreground service keeps the process
-// alive; this module is its JS side (native code: plugins/native/keepalive).
-import { NativeModules } from "react-native"
+// Android freezes a cached app process seconds after it leaves the foreground,
+// and — separately — React Native stops JS timers when the host is paused
+// (JavaTimerManager drops the frame callback while isPaused && no headless
+// task). Both had to be dealt with:
+//
+//  * the foreground service keeps the process alive;
+//  * the headless task it starts keeps `hasActiveTasks()` true, which is what
+//    allows setInterval/fetch to run in the background at all.
+//
+// Native code: plugins/native/keepalive.
+import { AppRegistry, NativeModules } from "react-native"
 import i18n from "./i18n/config"
 import { log } from "./logbuffer"
 
@@ -11,6 +16,8 @@ interface KeepAliveBridge {
   start: (title: string, body: string) => void
   stop: () => void
 }
+
+const TASK_KEY = "KeepAliveBackground"
 
 // Literal fallbacks: the service must never fail to start because a translation
 // key is missing or i18next is not ready — the cost is losing every background
@@ -21,6 +28,29 @@ const FALLBACK = {
 }
 
 let active = false
+let taskRegistered = false
+// One resolver per started task: the promises must stay pending for the whole
+// run and settle when it ends, otherwise RN keeps treating the app as having
+// active work (and never lets the timers pause again).
+const taskResolvers: Array<() => void> = []
+
+function registerTask() {
+  if (taskRegistered) return
+  taskRegistered = true
+  try {
+    AppRegistry.registerHeadlessTask(TASK_KEY, () => () => {
+      log.info("keepalive", "headless task running — background timers enabled")
+      return new Promise<void>((resolve) => {
+        taskResolvers.push(() => {
+          log.info("keepalive", "headless task settled")
+          resolve()
+        })
+      })
+    })
+  } catch (error) {
+    log.error("keepalive", "could not register the headless task:", error instanceof Error ? error.message : error)
+  }
+}
 
 function label(key: string, fallback: string): string {
   try {
@@ -29,6 +59,11 @@ function label(key: string, fallback: string): string {
   } catch {
     return fallback
   }
+}
+
+function stopTasks() {
+  const resolvers = taskResolvers.splice(0)
+  for (const resolve of resolvers) resolve()
 }
 
 /**
@@ -45,15 +80,19 @@ export function setKeepAlive(running: boolean) {
   }
   try {
     if (running) {
+      // Must exist before the service asks for it.
+      registerTask()
       bridge.start(label("notifications.keepAlive.title", FALLBACK.title), label("notifications.keepAlive.body", FALLBACK.body))
     } else {
       bridge.stop()
+      stopTasks()
     }
     active = running
     log.info("keepalive", running ? "started" : "stopped")
   } catch (error) {
     // Never let the service break the event stream.
     active = false
+    stopTasks()
     log.error("keepalive", "could not", running ? "start" : "stop", "the service:", error instanceof Error ? error.message : error)
   }
 }
