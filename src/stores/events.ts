@@ -1,4 +1,5 @@
 import { create } from "zustand"
+import { AppState } from "react-native"
 import { useConnections } from "./connections"
 import { useSessions, abortedSessions } from "./sessions"
 import { send as notify } from "../lib/notifications"
@@ -11,6 +12,8 @@ import { isStreamStalled, shouldReconnectOnResume } from "../lib/stream-watchdog
 import { runsNeedingResync } from "../lib/run-watchdog"
 import { reconcilePendingQuestions } from "../lib/pending-questions"
 import { recordAnswered, type AnsweredQuestion } from "../lib/answered-questions"
+import { setKeepAlive } from "../lib/keep-alive"
+import { log } from "../lib/logbuffer"
 import type { QuestionRequest } from "../lib/v2-compat"
 import type { Client, Part, Session, Message } from "../lib/sdk"
 
@@ -118,6 +121,13 @@ function activeRunSessionIDs(): string[] {
   return [...ids]
 }
 
+// Keep the process alive (and with it the background watch) while any run is
+// active: Android freezes a backgrounded app, and then no notification for
+// "task completed", permissions or questions can be generated at all.
+function syncKeepAlive() {
+  setKeepAlive(activeRunSessionIDs().length > 0)
+}
+
 // Finish a run on the client without a server status event: clear the spinner,
 // drop that run's clocks. Leaving a stale clock behind would make the NEXT send
 // look silent immediately and could clear its sending flag before the server
@@ -130,18 +140,114 @@ function finishRunLocally(sessionID: string) {
   useSessions.setState((state) => ({ sending: { ...state.sending, [sessionID]: false } }))
   sessionActivityAt.delete(sessionID)
   sessionResyncedAt.delete(sessionID)
+  syncKeepAlive()
+}
+
+// --- Notifications ----------------------------------------------------------
+//
+// All of these are filtered by src/lib/notifications.ts, which stays silent
+// while the app is in the foreground: they exist for the phone-in-pocket case.
+
+function notifyPermissionPrompt(sessionID: string, id: string, force = false) {
+  notify(
+    {
+      category: "permissions",
+      title: i18n.t("notifications.titles.permission"),
+      // Fixed body: the tool name, resources and command text are
+      // server-supplied and must not reach the lock screen.
+      body: i18n.t(PERMISSION_NOTIFICATION_KEY),
+      sessionId: sessionID,
+      dedupeKey: `perm-${id}`,
+      dedupeCooldownMs: 60_000,
+    },
+    { force },
+  )
+}
+
+function notifyQuestionPrompt(sessionID: string, id: string, force = false) {
+  notify(
+    {
+      category: "questions",
+      // Fixed title and body: the header/question text is
+      // server-supplied (see PERMISSION_NOTIFICATION_KEY).
+      title: i18n.t("notifications.titles.question"),
+      body: i18n.t(QUESTION_NOTIFICATION_KEY),
+      sessionId: sessionID,
+      dedupeKey: `question-${id}`,
+      dedupeCooldownMs: 60_000,
+    },
+    { force },
+  )
+}
+
+// Runs ended by the recovery path (SSE stream dead while the phone was locked)
+// rather than by a session.status event. The SSE branch and a resync can end
+// the same run at the same moment; 15s of silence per session covers that
+// without hiding a genuinely new run (a new busy status clears the mark).
+const recoveredNotifiedAt = new Map<string, number>()
+const RUN_END_NOTIFY_TTL_MS = 15_000
+
+function notifyRunRecovered(sessionID: string, messages: Message[], force = false) {
+  const notifiedAt = recoveredNotifiedAt.get(sessionID)
+  if (notifiedAt !== undefined && Date.now() - notifiedAt < RUN_END_NOTIFY_TTL_MS) return
+  // One notification per finished run, whichever path saw the end first.
+  const dedupe = { dedupeKey: `end-${sessionID}`, dedupeCooldownMs: 20_000 }
+  const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant")
+  if (lastAssistant?.error) {
+    // No session.error event was delivered either, so this is the only place
+    // the failure can surface.
+    notify(
+      {
+        category: "errors",
+        title: i18n.t("notifications.titles.error"),
+        body: sanitizeBody(lastAssistant.error.message, i18n.t("notifications.bodies.error")),
+        sessionId: sessionID,
+        ...dedupe,
+      },
+      { force },
+    )
+  } else {
+    const title = useSessions.getState().sessions.find((s) => s.id === sessionID)?.title
+    notify(
+      {
+        category: "completed",
+        title: i18n.t("notifications.titles.completed"),
+        body: sanitizeBody(title, i18n.t("notifications.bodies.completed")),
+        sessionId: sessionID,
+        ...dedupe,
+      },
+      { force },
+    )
+  }
+  recoveredNotifiedAt.set(sessionID, Date.now())
+  for (const [id, at] of recoveredNotifiedAt) {
+    if (Date.now() - at > RUN_END_NOTIFY_TTL_MS) recoveredNotifiedAt.delete(id)
+  }
 }
 
 // Re-fetch pending permissions and questions from the server for a session.
 // Called when entering a session to recover from missed SSE events or failed
-// optimistic removals.
-export async function refreshPending(client: Client, sessionID: string) {
+// optimistic removals — and, while the app is backgrounded, by the background
+// watch: a prompt created after the SSE socket died is only visible here.
+// Every prompt has exactly one entry point: this function is called from the
+// session screen, from reconnect recovery and from the background watch at the
+// same time — two overlapping pulls would notify the same prompt twice.
+const refreshing = new Set<string>()
+
+export async function refreshPending(client: Client, sessionID: string, options: { background?: boolean } = {}) {
+  if (refreshing.has(sessionID)) return
+  refreshing.add(sessionID)
   try {
     const [perms, questions] = await Promise.all([client.permission.list(), client.question.list(sessionID)])
     const sessionPerms = (perms || []).filter((p: Record<string, unknown>) => p.sessionID === sessionID)
     const sessionQuestions = ((questions || []) as Array<{ id: string; sessionID: string; questions: unknown[] }>).filter(
       (q: Record<string, unknown>) => q.sessionID === sessionID,
     )
+    const before = useEvents.getState()
+    const knownPerms = before.permissions[sessionID] || []
+    const knownQuestions = before.questions[sessionID] || []
+    const freshPerms = sessionPerms.filter((p) => !knownPerms.some((known) => known.id === p.id))
+    const freshQuestions = sessionQuestions.filter((q) => !knownQuestions.some((known) => known.id === q.id))
     useEvents.setState((state) => ({
       // BUG-011: permissions keep the merge-by-ID behavior — a reply is still
       // optimistically removed from the UI, so a server list that has not
@@ -162,6 +268,15 @@ export async function refreshPending(client: Client, sessionID: string) {
         [sessionID]: reconcilePendingQuestions(state.questions[sessionID] || [], sessionQuestions as any),
       },
     }))
+    // Only prompts this client had not seen before notify; the store update
+    // above is what the SSE handlers check, so a prompt that arrives both ways
+    // still produces exactly one notification.
+    for (const permission of freshPerms) {
+      notifyPermissionPrompt(sessionID, (permission as { id: string }).id, options.background)
+    }
+    for (const question of freshQuestions) {
+      notifyQuestionPrompt(sessionID, question.id, options.background)
+    }
   } catch (err) {
     console.warn("[Events] Failed to refresh pending:", err)
   }
@@ -192,7 +307,7 @@ async function activeSessionIDs(client: Client): Promise<Set<string> | null> {
 // still-busy session. Also re-checks sessionStatus right before writing, so a
 // real session.status event that lands while the fetch is in flight (e.g. the
 // session went busy again) wins over this resync.
-async function resyncBusySessions(only?: ReadonlySet<string>) {
+async function resyncBusySessions(only?: ReadonlySet<string>, options: { background?: boolean } = {}) {
   const pendingSessionIDs = new Set(activeRunSessionIDs().filter((sessionID) => !only || only.has(sessionID)))
   if (pendingSessionIDs.size === 0) return
 
@@ -233,9 +348,16 @@ async function resyncBusySessions(only?: ReadonlySet<string>) {
         // while this fetch was in flight — that's authoritative, don't
         // stomp on it. No status at all is the optimistic-only case: the
         // transcript fetched above is then the only evidence we have.
+        // `sending` counts as "no status yet": it is set by the send tap and
+        // only cleared by a status event, so a run whose busy event never
+        // arrived after the app was backgrounded is still covered.
         const latestStatus = useEvents.getState().sessionStatus[sessionID]
-        if (latestStatus && latestStatus.type !== "busy") return
+        if (latestStatus && latestStatus.type !== "busy" && !useSessions.getState().sending[sessionID]) return
 
+        // The run ended while no session.status event could be delivered (the
+        // socket dies when Android backgrounds the app). This is the only place
+        // that can tell the user it finished.
+        notifyRunRecovered(sessionID, messages, options.background)
         finishRunLocally(sessionID)
         if (viewing()) useSessions.getState().applyServerMessages(response)
       } catch (err) {
@@ -267,6 +389,112 @@ async function resyncCurrentSession() {
   await Promise.allSettled([refreshPending(client, current.id), sessions.refreshMessages()])
 }
 
+// --- Background watch ------------------------------------------------------
+//
+// The notification module stays silent while the app is in the foreground, so
+// every alert the user cares about is generated while the phone is in a pocket
+// — exactly when the SSE socket is dead. Android kills the socket when the app
+// leaves the foreground (the keep-alive service keeps the *process*, not the
+// HTTP stream), and V2 never replays what was missed. Poll the server instead:
+// pending prompts and run state are both readable, so notifications no longer
+// depend on the stream surviving.
+export const BACKGROUND_POLL_MS = 5_000
+
+let backgroundPollTimer: ReturnType<typeof setInterval> | null = null
+let appStateWatchInstalled = false
+// What the server listed as running on the previous tick. The tick learns
+// "this run ended" by comparing sets — no SSE, no local sessionStatus and no
+// optimistic `sending` flag: all three are exactly what a backgrounded app
+// cannot rely on, and all three were why the previous versions stayed silent.
+let lastActiveSeen: Set<string> | null = null
+
+function clientFor(sessionID: string): Client | null {
+  const sessionsState = useSessions.getState()
+  const session =
+    sessionsState.sessions.find((s) => s.id === sessionID) ??
+    (sessionsState.currentSession?.id === sessionID ? sessionsState.currentSession : undefined)
+  const connState = useConnections.getState()
+  return (session?.directory ? connState.clientForDirectory(session.directory) : undefined) ?? connState.client ?? null
+}
+
+async function notifyRunEnded(sessionID: string) {
+  const client = clientFor(sessionID)
+  if (!client) return
+  try {
+    const response = await client.session.messages(sessionID)
+    notifyRunRecovered(sessionID, (response || []).map((m) => m.info), true)
+    finishRunLocally(sessionID)
+  } catch (err) {
+    // A session deleted elsewhere is not a finished run.
+    if ((err as { status?: number } | null)?.status === 404) finishRunLocally(sessionID)
+    log.warn("watch", "could not read the transcript of", sessionID, String(err))
+  }
+}
+
+async function pollWhileBackgrounded() {
+  // The listener can fire late; trust the current state over the last event.
+  if (AppState.currentState === "active") return
+  const client = useConnections.getState().client
+  if (!client) {
+    log.warn("watch", "no client")
+    return
+  }
+
+  // Server truth first: it knows which sessions run right now, including the
+  // ones this app never saw a busy event for.
+  const serverActive = await activeSessionIDs(client)
+  const running = new Set(activeRunSessionIDs())
+  if (serverActive) for (const id of serverActive) running.add(id)
+
+  if (serverActive && lastActiveSeen) {
+    for (const sessionID of lastActiveSeen) {
+      if (!serverActive.has(sessionID)) {
+        log.info("watch", "run ended:", sessionID)
+        await notifyRunEnded(sessionID)
+      }
+    }
+  }
+  // First tick of a background period only takes a baseline: a run that ended
+  // while the app was open was already handled by the SSE path.
+  lastActiveSeen = serverActive ? new Set(serverActive) : null
+
+  // Per session: permission.list is global and question.list is session-scoped,
+  // and a session may live on another directory's connection.
+  await Promise.allSettled(
+    [...running].map((sessionID) => refreshPending(clientFor(sessionID) ?? client, sessionID, { background: true })),
+  )
+  // Servers without /session/active (V1) fall back to the local status recovery.
+  if (!serverActive) await resyncBusySessions(undefined, { background: true })
+}
+
+export function startBackgroundWatch() {
+  if (backgroundPollTimer) return
+  log.info("watch", "started (app in background)")
+  lastActiveSeen = null
+  // Poll immediately: a run may already have finished while the app was being
+  // put away, and 5s of silence for nothing is noticeable.
+  void pollWhileBackgrounded()
+  backgroundPollTimer = setInterval(() => {
+    void pollWhileBackgrounded()
+  }, BACKGROUND_POLL_MS)
+}
+
+export function stopBackgroundWatch() {
+  if (!backgroundPollTimer) return
+  log.info("watch", "stopped (app in foreground)")
+  clearInterval(backgroundPollTimer)
+  backgroundPollTimer = null
+}
+
+function installAppStateWatch() {
+  if (appStateWatchInstalled) return
+  appStateWatchInstalled = true
+  AppState.addEventListener("change", (next) => {
+    if (next === "active") stopBackgroundWatch()
+    else if (next === "background") startBackgroundWatch()
+  })
+}
+
 export const useEvents = create<EventsState>((set, get) => ({
   connected: false,
   authError: false,
@@ -293,6 +521,11 @@ export const useEvents = create<EventsState>((set, get) => ({
       clearTimeout(reconnectTimer)
       reconnectTimer = null
     }
+    // Polling while backgrounded is the only notification path that survives a
+    // dead socket (see pollWhileBackgrounded).
+    installAppStateWatch()
+    if (AppState.currentState === "background") startBackgroundWatch()
+    else stopBackgroundWatch()
 
     const client = useConnections.getState().client
     if (!client) return
@@ -426,6 +659,7 @@ export const useEvents = create<EventsState>((set, get) => ({
               if (status.type === "busy") {
                 erroredSessions.delete(sessionID)
                 abortedSessions.delete(sessionID)
+                recoveredNotifiedAt.delete(sessionID)
               }
 
               set((state) => ({
@@ -463,9 +697,15 @@ export const useEvents = create<EventsState>((set, get) => ({
                     title: i18n.t("notifications.titles.completed"),
                     body: sanitizeBody(match?.title, i18n.t("notifications.bodies.completed")),
                     sessionId: sessionID,
+                    // Same key as the background poll: when the socket resumes
+                    // it replays the idle event for a run the poll already
+                    // reported, and that must not buzz twice.
+                    dedupeKey: `end-${sessionID}`,
+                    dedupeCooldownMs: 20_000,
                   })
                 }
               }
+              syncKeepAlive()
               break
             }
 
@@ -552,16 +792,7 @@ export const useEvents = create<EventsState>((set, get) => ({
                   [req.sessionID]: [...(state.permissions[req.sessionID] || []), req],
                 },
               }))
-              notify({
-                category: "permissions",
-                title: i18n.t("notifications.titles.permission"),
-                // Fixed body: the tool name, resources and command text are
-                // server-supplied and must not reach the lock screen.
-                body: i18n.t(PERMISSION_NOTIFICATION_KEY),
-                sessionId: req.sessionID,
-                dedupeKey: `perm-${req.id}`,
-                dedupeCooldownMs: 60_000,
-              })
+              notifyPermissionPrompt(req.sessionID, req.id)
               break
             }
 
@@ -589,16 +820,7 @@ export const useEvents = create<EventsState>((set, get) => ({
                   [req.sessionID]: [...(state.questions[req.sessionID] || []), req],
                 },
               }))
-              notify({
-                category: "questions",
-                // Fixed title and body: the header/question text is
-                // server-supplied (see PERMISSION_NOTIFICATION_KEY).
-                title: i18n.t("notifications.titles.question"),
-                body: i18n.t(QUESTION_NOTIFICATION_KEY),
-                sessionId: req.sessionID,
-                dedupeKey: `question-${req.id}`,
-                dedupeCooldownMs: 60_000,
-              })
+              notifyQuestionPrompt(req.sessionID, req.id)
               break
             }
 

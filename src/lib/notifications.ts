@@ -1,6 +1,7 @@
 import * as Notifications from "expo-notifications"
 import * as Device from "expo-device"
-import { Platform, AppState } from "react-native"
+import { NativeModules, Platform, AppState } from "react-native"
+import { log } from "./logbuffer"
 
 // ---------------------------------------------------------------------------
 // Categories — every notification belongs to exactly one
@@ -86,6 +87,17 @@ export function configure(accessor: PreferencesAccessor) {
 // Setup & permissions
 // ---------------------------------------------------------------------------
 
+// The app's own channel, not expo's fallback: the fallback is created lazily
+// with its own name/importance, so the user could not tune "Session prompts"
+// separately in system settings and the high-importance behaviour would be
+// whatever expo picked. A channel-aware trigger is also the only way to name a
+// channel: `content.channelId` is ignored on Android.
+export const CHANNEL_ID = "prompts"
+
+interface NotifyBridge {
+  notify: (category: string, title: string, body: string, sessionId: string, channelId: string) => Promise<boolean>
+}
+
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
@@ -99,27 +111,39 @@ Notifications.setNotificationHandler({
 export async function setup(): Promise<boolean> {
   if (!Device.isDevice) return false
 
-  const { status: existing } = await Notifications.getPermissionsAsync()
-  if (existing === "granted") {
+  try {
+    const { status: existing } = await Notifications.getPermissionsAsync()
+    if (existing === "granted") {
+      await ensureChannel()
+      return true
+    }
+
+    const { status } = await Notifications.requestPermissionsAsync()
+    if (status !== "granted") return false
+
     await ensureChannel()
     return true
+  } catch (error) {
+    log.warn("notifications", "permission request failed:", error)
+    return false
   }
-
-  const { status } = await Notifications.requestPermissionsAsync()
-  if (status !== "granted") return false
-
-  await ensureChannel()
-  return true
 }
 
 export async function granted(): Promise<boolean> {
-  const { status } = await Notifications.getPermissionsAsync()
-  return status === "granted"
+  try {
+    const { status } = await Notifications.getPermissionsAsync()
+    return status === "granted"
+  } catch (error) {
+    // Must not reject: callers are fire-and-forget event handlers, and an
+    // unhandled rejection there is invisible on device.
+    log.warn("notifications", "permission check failed:", error)
+    return false
+  }
 }
 
 async function ensureChannel() {
   if (Platform.OS !== "android") return
-  await Notifications.setNotificationChannelAsync("prompts", {
+  await Notifications.setNotificationChannelAsync(CHANNEL_ID, {
     name: "Session Prompts & Updates",
     importance: Notifications.AndroidImportance.HIGH,
     vibrationPattern: [0, 250, 250, 250],
@@ -127,21 +151,62 @@ async function ensureChannel() {
   })
 }
 
+// A channel-aware trigger is expo's "deliver now, on this channel" form. With
+// `trigger: null` the native side silently falls back to expo's own channel.
+function immediateTrigger() {
+  return Platform.OS === "android" ? { channelId: CHANNEL_ID } : null
+}
+
 // ---------------------------------------------------------------------------
 // Send — single entry point, decides whether to fire
 // ---------------------------------------------------------------------------
 
-export async function send(payload: Payload) {
-  const prefs = preferences()
-  if (!prefs[payload.category]) return
-  if (AppState.currentState === "active") return
-  if (!(await granted())) return
+export interface SendOptions {
+  /**
+   * The caller already knows the app is in the background (the background
+   * watch only runs there), so the AppState gate is skipped. Without this a
+   * wrong/racy AppState reading silently swallows every background alert.
+   */
+  force?: boolean
+}
+
+/**
+ * A payload that arrived while the app was still technically in the foreground
+ * is held for a moment instead of being dropped: when you send a prompt and
+ * minimize, the first status events can land a fraction of a second before
+ * Android reports the transition. The window is deliberately short — a longer
+ * one turns into "a notification appears right after opening the app", which is
+ * exactly the noise the user asked to avoid.
+ */
+export const HOLD_TTL_MS = 3_000
+let held: Array<{ payload: Payload; at: number }> = []
+
+type AttemptOutcome = "posted" | "held" | "disabled" | "no-permission" | "deduped" | "failed"
+
+// Only failures and suppressions are logged: they are the only lines that mean
+// something in the connection diagnostics report, and a line per successful
+// prompt would flush that buffer.
+function record(category: Category, outcome: AttemptOutcome) {
+  if (outcome === "posted") return
+  log.info("notifications", `${category}: ${outcome}`)
+}
+
+export async function send(payload: Payload, options: SendOptions = {}) {
+  if (!preferences()[payload.category]) return record(payload.category, "disabled")
+
+  if (!options.force && AppState.currentState === "active") {
+    held.push({ payload, at: Date.now() })
+    if (held.length > 5) held.shift()
+    return record(payload.category, "held")
+  }
+
+  if (!(await granted())) return record(payload.category, "no-permission")
 
   if (payload.dedupeKey) {
     const now = Date.now()
     const lastSent = dedupeSentAt.get(payload.dedupeKey) || 0
     const cooldown = payload.dedupeCooldownMs ?? 30_000
-    if (now - lastSent < cooldown) return
+    if (now - lastSent < cooldown) return record(payload.category, "deduped")
     dedupeSentAt.set(payload.dedupeKey, now)
     // BUG-029: prune stale dedupe entries so the map doesn't grow unbounded
     // on long-lived sessions.
@@ -150,19 +215,65 @@ export async function send(payload: Payload) {
     }
   }
 
-  await Notifications.scheduleNotificationAsync({
-    content: {
-      title: payload.title,
-      body: payload.body,
-      data: {
-        category: payload.category,
-        sessionId: payload.sessionId,
-      } satisfies NotificationData as Record<string, unknown>,
-      sound: "default",
-      ...(Platform.OS === "android" ? { channelId: "prompts" } : {}),
-    },
-    trigger: null,
+  const result = await deliver(payload.title, payload.body, {
+    category: payload.category,
+    sessionId: payload.sessionId,
   })
+  record(payload.category, result.ok ? "posted" : "failed")
+}
+
+/**
+ * The app just left the foreground. Post whatever it was holding back — the
+ * user is no longer looking at the transcript.
+ */
+export function flushHeld() {
+  const now = Date.now()
+  const due = held.filter((entry) => now - entry.at <= HOLD_TTL_MS).map((entry) => entry.payload)
+  held = []
+  for (const payload of due) void send(payload, { force: true })
+}
+
+/**
+ * The app is on screen again. Anything still held was generated while the app
+ * was coming back (the event stream replays what happened while it was away) —
+ * the user is looking at the transcript, so it must not surface later.
+ */
+export function dropHeld() {
+  held = []
+}
+
+async function deliver(title: string, body: string, data: NotificationData): Promise<{ ok: boolean; error?: string }> {
+  try {
+    // A missing channel makes Android drop the notification silently.
+    await ensureChannel()
+
+    // One monochrome icon per category needs the native side: expo-notifications
+    // has a single small icon for the whole app (and it was a full-colour PNG,
+    // which Android paints as a white square).
+    const bridge = Platform.OS === "android" ? (NativeModules.Notify as NotifyBridge | undefined) : undefined
+    if (bridge) {
+      // Rejects with the native reason, which the catch below logs.
+      await bridge.notify(data.category, title, body, data.sessionId ?? "", CHANNEL_ID)
+      return { ok: true }
+    }
+
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title,
+        body,
+        data: data as unknown as Record<string, unknown>,
+        sound: "default",
+      },
+      trigger: immediateTrigger(),
+    })
+    return { ok: true }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    // Never let a failed notification take down the event handler that called
+    // it; the log line lands in the diagnostics report.
+    log.error("notifications", "could not show a notification:", message)
+    return { ok: false, error: message }
+  }
 }
 
 // ---------------------------------------------------------------------------

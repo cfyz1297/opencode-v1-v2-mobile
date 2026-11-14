@@ -39,7 +39,12 @@
       }
     },
     "notifications": {
-      "disabledNotice": "通知已在系统层面关闭。请在系统设置中启用通知以接收提醒。"
+      "status": {
+        "label": "Android 通知权限",
+        "granted": "已允许 — 通知会送达",
+        "blocked": "已被系统阻止。请在 Android 设置中允许 OpenCode 的通知。",
+        "openSettings": "打开"
+      }
     },
     "privacy": {
       "privacyPolicy": {
@@ -347,6 +352,10 @@
       "permission": "有工具正在等待你的批准",
       "question": "助手有一个问题",
       "reconnecting": "正在尝试重新连接你的服务器"
+    },
+    "keepAlive": {
+      "title": "会话运行中",
+      "body": "即使应用在后台，通知也会送达"
     }
   },
   "errorBoundary": {

@@ -9,6 +9,7 @@ import { createPartBatcher } from "../lib/part-batch"
 import { shouldApplyPartUpdate } from "../lib/part-order"
 import { countTurns, isWholeSession, keepLoadedHistory, messageLimitForTurns, trimToTurns } from "../lib/message-page"
 import { offlineHistory } from '../lib/history-storage'
+import { setKeepAlive } from "../lib/keep-alive"
 
 // Helper to convert API response to our internal format
 function parseMessages(response: MessageWithParts[]): { messages: Message[]; parts: Record<string, Part[]> } {
@@ -364,6 +365,11 @@ export const useSessions = create<SessionsState>((set, get) => ({
 
     try {
       set((state) => ({ sending: { ...state.sending, [session.id]: true }, error: null }))
+      // The busy status arrives over SSE, and that event is exactly what a
+      // locked phone stops receiving. Start the foreground service on the tap
+      // so a send-then-minimize keeps the process (and the background watch)
+      // alive from the first second.
+      setKeepAlive(true)
 
       const userMessage: Message = {
         id: `temp-${ts}`,

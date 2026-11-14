@@ -19,6 +19,7 @@ import { Ionicons } from "@expo/vector-icons"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { useKeyboardHeight } from "../../src/lib/use-keyboard-height"
 import { buildMessageData, type MessageDataItem } from "../../src/lib/revert-filter"
+import { splitAnswered } from "../../src/lib/answered-questions"
 import { bubbleFlags, runTotals } from "../../src/lib/message-run"
 import { shouldFollowBottom } from "../../src/lib/scroll-follow"
 import { useTranslation } from "react-i18next"
@@ -129,6 +130,10 @@ export default function SessionScreen() {
   // as soon as the response lands.
   const openModelPicker = useCallback(() => {
     if (useCatalog.getState().providers.length === 0) void useCatalog.getState().load()
+    // Same as the effort picker: the sheet opens without an input of its own,
+    // and an IME that is already up stays over it (gorhom only reacts to
+    // keyboard *changes* after mount), hiding the lower half of the list.
+    Keyboard.dismiss()
     modelSheetRef.current?.expand()
   }, [])
 
@@ -189,6 +194,9 @@ export default function SessionScreen() {
   const permissions = useEvents((s) => (sessionID ? s.permissions[sessionID] : undefined)) || []
   const questions = useEvents((s) => (sessionID ? s.questions[sessionID] : undefined)) || []
   const answeredQuestions = useEvents((s) => (sessionID ? s.answeredQuestions[sessionID] : undefined)) || []
+  // Cards stay where the question was asked (V2 names the message), not above
+  // the composer below the newest answer.
+  const answered = useMemo(() => splitAnswered(answeredQuestions), [answeredQuestions])
   const sessionBusy = useEvents((s) => (sessionID ? s.sessionStatus[sessionID]?.type === "busy" : false))
   const canStop = isSending || sessionBusy
 
@@ -995,16 +1003,28 @@ export default function SessionScreen() {
               inverted
               keyExtractor={(item) => item.message.id}
               renderItem={({ item, index }) => (
-                <MessageBubble
-                  message={item.message}
-                  parts={item.parts}
-                  isDark={isDark}
-                  continued={flags[index]?.continued}
-                  showMeta={flags[index]?.showMeta}
-                  totals={totals[index]}
-                  onLongPress={handleMessageLongPress}
-                  onRevert={handleMessageRevert}
-                />
+                <View>
+                  <MessageBubble
+                    message={item.message}
+                    parts={item.parts}
+                    isDark={isDark}
+                    continued={flags[index]?.continued}
+                    showMeta={flags[index]?.showMeta}
+                    totals={totals[index]}
+                    onLongPress={handleMessageLongPress}
+                    onRevert={handleMessageRevert}
+                  />
+                  {/* Answered questions sit under the message that asked them;
+                      the record's tool metadata names that message. */}
+                  {answered.byMessage.get(item.message.id)?.map((answer) => (
+                    <AnsweredQuestionCard
+                      key={answer.request.id}
+                      request={answer.request}
+                      answers={answer.answers}
+                      isDark={isDark}
+                    />
+                  ))}
+                </View>
               )}
               contentContainerStyle={s.messageList}
               onScroll={handleScroll}
@@ -1069,9 +1089,9 @@ export default function SessionScreen() {
             />
           ))}
 
-          {/* Answered questions stay in place — the user can re-read what
-              they picked at any point in the run, not for 2.5 seconds. */}
-          {answeredQuestions.map((item) => (
+          {/* Answered questions without a tool reference (V1) stay above the
+              composer — there is nowhere to place them in the transcript. */}
+          {answered.unplaced.map((item) => (
             <AnsweredQuestionCard
               key={item.request.id}
               request={item.request}

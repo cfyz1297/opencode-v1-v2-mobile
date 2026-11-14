@@ -39,7 +39,12 @@
       }
     },
     "notifications": {
-      "disabledNotice": "Notifications are disabled at the system level. Enable them in Settings to receive alerts."
+      "status": {
+        "label": "Android notification permission",
+        "granted": "Allowed — notifications will arrive",
+        "blocked": "Blocked by Android. Allow notifications for OpenCode in system settings.",
+        "openSettings": "Open"
+      }
     },
     "privacy": {
       "privacyPolicy": {
@@ -347,6 +352,10 @@
       "permission": "A tool is waiting for your approval",
       "question": "The assistant has a question",
       "reconnecting": "Trying to reconnect to your server"
+    },
+    "keepAlive": {
+      "title": "Session running",
+      "body": "Notifications will arrive even when the app is in the background"
     }
   },
   "errorBoundary": {

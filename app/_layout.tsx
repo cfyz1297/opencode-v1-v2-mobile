@@ -114,9 +114,14 @@ function RootLayout() {
     const sub = AppState.addEventListener("change", (next) => {
       if (next === "background") {
         backgroundedAt = Date.now()
+        // Anything that arrived while the user was still on screen is now
+        // unseen: post it instead of dropping it (notifications.flushHeld).
+        notifications.flushHeld()
       } else if (next === "active" && backgroundedAt !== null) {
         const elapsed = Date.now() - backgroundedAt
         backgroundedAt = null
+        // Whatever was held while returning is already visible on screen.
+        notifications.dropHeld()
         useEvents.getState().resumeFromBackground(elapsed)
         // The provider/agent catalog is loaded once per connection. If that
         // one request ran while the phone was locked or the server was down,

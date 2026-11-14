@@ -1,0 +1,20 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Exclamation mark in a triangle, drawn as an outline: a status-bar icon is
+         a monochrome mask, so solid shapes read better than filled ones. -->
+    <path
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="1.8"
+        android:strokeLineJoin="round"
+        android:fillColor="#00000000"
+        android:pathData="M12,3.2 L21.4,19.6 L2.6,19.6 Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M11.1,9.1 h1.8 v5.6 h-1.8 z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M11.1,16.2 h1.8 v1.9 h-1.8 z" />
+</vector>
