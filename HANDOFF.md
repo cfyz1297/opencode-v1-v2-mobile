@@ -25,7 +25,8 @@
 
 - **0.3.16 откачена.** Удаление канала сразу после `startForeground` роняло приложение — система снимает с сервиса foreground-состояние, когда исчезает его уведомление. Весь код возвращён к 0.3.15.
 - **Убрана только карточка «Сессия выполняется».** После `startForeground` вызывается `NotificationManager.cancel(NOTIFICATION_ID)`: карточка исчезает, сервис остаётся foreground (система и так разрешает смахивать такие уведомления с Android 13), процесс и headless-задача продолжают жить. Канал не трогается — именно его удаление и было причиной краша. Правка — три строки в `plugins/native/keepalive/KeepAliveService.kt`.
-- Тесты: 720 passed, 0 failed; `typecheck` чистый; `check:versions` — 0.3.17 (82). Отчёт безопасности: `docs/security-review-0.3.17.md`.
+- **Текст сообщений больше не обрезается на Android 15+.** RN 0.88 меряет `<Text>` StaticLayout'ом с переносом по advance'ам, а рисующий его TextView на Android 15+ (targetSdk 35+) переносит по bounds'ам глифов (`TextView#USE_BOUNDS_FOR_WIDTH`); последняя строка уезжает за измеренную высоту и обрезается. В 0.89 это чинит `ReactTextView` (facebook/react-native#58280), но здесь сборка идёт на готовом `react-android` AAR, поэтому тот же флаг выключен через `android:textViewStyle` в теме (`OpencodeAdvanceTextView`, `plugins/with-native-customizations.js`). Инвариант — `src/lib/android-text-clipping.test.ts`.
+- Тесты: 724 passed, 0 failed; покрытие 95.14 % строк / 86.34 % ветвей / 95.40 % функций; `typecheck` чистый; `check:versions` — 0.3.17 (82). Отчёт безопасности: `docs/security-review-0.3.17.md`.
 
 ## Что вошло в 0.3.15
 
