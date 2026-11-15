@@ -456,6 +456,9 @@ export default function SessionScreen() {
       if (next !== "active" || !sessionID || !sessionClient) return
       void refreshPending(sessionClient, sessionID)
       void useSessions.getState().refreshMessages()
+      // Rows read title and status from childrenByParent; a child that
+      // finished while the app was backgrounded has no live event to say so.
+      void useSessions.getState().loadChildren(sessionID)
     })
     return () => sub.remove()
   }, [sessionID, sessionClient])

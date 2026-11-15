@@ -534,7 +534,16 @@ export const useSessions = create<SessionsState>((set, get) => ({
   },
 
   applyServerMessages: (response) => {
-    const { messages, parts } = parseMessages(response)
+    const { messages: fetched, parts: fetchedParts } = parseMessages(response)
+    // A resync fetch is only the newest page (the server's default is 50).
+    // Replacing the transcript with it dropped everything older — including
+    // the tool cards the subagent bar is derived from — until the session was
+    // reopened. Keep what the screen already shows and let the page update it.
+    const messages = keepLoadedHistory(fetched, get().messages, true)
+    const parts: Record<string, Part[]> = {}
+    for (const message of messages) {
+      parts[message.id] = fetchedParts[message.id] ?? get().parts[message.id] ?? []
+    }
     // Same temp reconciliation as refreshMessages: an optimistic message whose
     // server copy is in this transcript must not be duplicated.
     const merged = reconcileTemps(messages, parts, get().messages, get().parts)
@@ -550,15 +559,31 @@ export const useSessions = create<SessionsState>((set, get) => ({
     const refreshSeq = ++refreshSeqCounter
 
     try {
-      const response = await client.session.messages(session.id)
+      // Ask for the page the screen opens with, not the server's default 50:
+      // this refresh replaces the transcript on resume/reconnect, and a short
+      // page silently dropped every older message (and the subagent cards it
+      // carried) until the session was reopened.
+      const turns = pageSize()
+      const response = isWholeSession(turns)
+        ? await client.session.allMessages(session.id)
+        : await client.session.messages(session.id, { limit: messageLimitForTurns(turns) })
       if (refreshSeq !== refreshSeqCounter) return // stale result — discard
+      // The user may have opened another session while this was in flight;
+      // its transcript must not be replaced by the previous one.
+      if (get().currentSession?.id !== session.id) return
 
       const { messages: fetched, parts: fetchedParts } = parseMessages(response)
+      const page = trimToTurns(fetched, turns)
+      const messages = keepLoadedHistory(page.messages, get().messages, true)
+      const parts: Record<string, Part[]> = {}
+      for (const message of messages) {
+        parts[message.id] = fetchedParts[message.id] ?? get().parts[message.id] ?? []
+      }
       // Reconcile optimistic temps with the server list: a just-sent message
       // whose copy is not yet in the list keeps its temp (V2 has no
       // user-message SSE event), while temps already covered by the server
       // history are dropped instead of duplicating it on every reload.
-      const merged = reconcileTemps(fetched, fetchedParts, get().messages, get().parts)
+      const merged = reconcileTemps(messages, parts, get().messages, get().parts)
       set({
         messages: merged.messages,
         parts: { ...merged.parts },
