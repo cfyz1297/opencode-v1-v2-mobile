@@ -46,3 +46,65 @@ export function summarizeSubagents(
 export function subagentStatusKey(status: SubagentStatus): `chat.subagents.${SubagentStatus}` {
   return `chat.subagents.${status}`
 }
+
+/** A delegated subagent as the transcript knows it: no session data yet. */
+export interface SubagentRef {
+  sessionID: string
+  parentID?: string
+  agent?: string
+  title?: string
+}
+
+type PartLike = {
+  type: string
+  sessionID?: string
+  state?: {
+    input?: unknown
+    metadata?: Record<string, unknown>
+  }
+}
+
+function inputString(input: unknown, key: string): string | undefined {
+  if (typeof input !== "object" || input === null) return undefined
+  const value = (input as Record<string, unknown>)[key]
+  return typeof value === "string" && value.length > 0 ? value : undefined
+}
+
+/**
+ * Every delegated subagent in the transcript, in the order it was called. The
+ * child session id lives in the tool part's metadata (see v2-compat), so a
+ * transcript restored from the server lists exactly the subagents its cards do.
+ */
+export function collectSubagents(items: ReadonlyArray<{ parts: readonly PartLike[] }>): SubagentRef[] {
+  const out: SubagentRef[] = []
+  for (const item of items) {
+    for (const part of item.parts ?? []) {
+      if (part.type !== "tool") continue
+      const tool = (part as { tool?: string }).tool
+      if (tool !== "subagent" && tool !== "task") continue
+      const child = part.state?.metadata?.sessionID
+      if (typeof child !== "string" || child.length === 0) continue
+      if (out.some((ref) => ref.sessionID === child)) continue
+      out.push({
+        sessionID: child,
+        parentID: part.sessionID,
+        agent: inputString(part.state?.input, "agent"),
+        title: inputString(part.state?.input, "description") ?? inputString(part.state?.input, "prompt"),
+      })
+    }
+  }
+  return out
+}
+
+/**
+ * Call order with the ones still working pulled to the top: a running subagent
+ * must never be hidden under a finished one, however long the list grows.
+ */
+export function orderSubagents(
+  refs: readonly SubagentRef[],
+  statusOf: (ref: SubagentRef) => SubagentStatus,
+): SubagentRef[] {
+  const running = refs.filter((ref) => statusOf(ref) === "running")
+  const rest = refs.filter((ref) => statusOf(ref) !== "running")
+  return [...running, ...rest]
+}

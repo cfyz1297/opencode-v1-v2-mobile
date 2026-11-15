@@ -34,6 +34,8 @@ interface Props {
   agent?: string
   /** Shown until the child session arrives from the server. */
   fallbackTitle?: string
+  /** Distinguishes the transcript row from the one in the bar's list. */
+  testIDPrefix?: string
   isDark: boolean
 }
 
@@ -44,7 +46,7 @@ interface Props {
  *
  * The parent screen calls loadChildren on focus, so this row only reads.
  */
-export function SubagentRow({ sessionID, parentID, agent, fallbackTitle, isDark }: Props) {
+export function SubagentRow({ sessionID, parentID, agent, fallbackTitle, testIDPrefix = "subagent-row", isDark }: Props) {
   const { t } = useTranslation()
   const router = useRouter()
   const child = useSessions((s) =>
@@ -75,7 +77,7 @@ export function SubagentRow({ sessionID, parentID, agent, fallbackTitle, isDark 
       accessibilityRole="button"
       accessibilityLabel={t("chat.subagents.open", { title })}
       style={[s.row, isDark && s.rowDark]}
-      testID={`subagent-row-${sessionID}`}
+      testID={`${testIDPrefix}-${sessionID}`}
     >
       <View style={s.icon}>
         <Ionicons name="git-branch-outline" size={14} color={isDark ? "#a78bfa" : "#6d28d9"} />

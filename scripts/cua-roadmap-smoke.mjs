@@ -188,6 +188,15 @@ try {
   // The delegation row must be visible without expanding the card, show the
   // child's own status, and open the child session on tap.
   await waitFor('Ping task')
+  // The bar under the header counts what is working and what was delegated.
+  await waitFor('Subagents: 1')
+  screenshot('subagent-bar')
+  await tap('subagents-all')
+  await sleep(700)
+  await waitFor('subagent-bar-row-child-1')
+  screenshot('subagent-bar-open')
+  await tap('subagents-all')
+  await sleep(500)
   screenshot('subagent-row')
   // By testID: the tool card's own header also reads "Ping task", and tapping
   // that only expands the card — the earlier run failed exactly that way.

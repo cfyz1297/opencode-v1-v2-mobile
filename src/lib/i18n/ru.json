@@ -529,7 +529,9 @@
       "justNow": "только что",
       "minutesAgo": "{{count}} мин назад",
       "hoursAgo": "{{count}} ч назад",
-      "daysAgo": "{{count}} дн назад"
+      "daysAgo": "{{count}} дн назад",
+      "working": "В работе: {{count}}",
+      "total": "Сабагентов: {{count}}"
     }
   },
   "providers": {

@@ -22,6 +22,7 @@ import { buildMessageData, type MessageDataItem } from "../../src/lib/revert-fil
 import { splitAnswered, splitByMessage } from "../../src/lib/answered-questions"
 import { bubbleFlags, runTotals } from "../../src/lib/message-run"
 import { shouldFollowBottom } from "../../src/lib/scroll-follow"
+import { collectSubagents } from "../../src/lib/subagent-status"
 import { useTranslation } from "react-i18next"
 import * as ImagePicker from "expo-image-picker"
 import * as ImageManipulator from "expo-image-manipulator"
@@ -51,6 +52,7 @@ import { useCatalog } from "../../src/stores/catalog"
 import { useSpeech } from "../../src/lib/speech"
 import { adaptiveLayout } from '../../src/lib/adaptive-layout'
 import { TabletSessions } from '../../src/components/TabletSessions'
+import { SubagentBar } from "../../src/components/chat/SubagentBar"
 import { isSafeSessionId } from '../../src/lib/session-id'
 import { log } from "../../src/lib/logbuffer"
 
@@ -291,6 +293,12 @@ export default function SessionScreen() {
   // Consecutive assistant steps (one per tool call) render as one run: shared
   // header at the top, totals at the bottom, no repeated chrome per step.
   const flags = useMemo(() => bubbleFlags(messageData.map((item) => item.message.role)), [messageData])
+  // Every subagent this session delegated, in call order — the bar under the
+  // header counts them and lists them.
+  const subagentRefs = useMemo(
+    () => collectSubagents([...messageData].reverse()),
+    [messageData],
+  )
   // The footer reports what the whole run cost, not just its last step. Since
   // V2.2.5 the server reports cost 0 for paid models too, so price the steps
   // from the catalog instead.
@@ -997,6 +1005,11 @@ export default function SessionScreen() {
             <Text style={s.bannerText}>{t("session.banners.connected")}</Text>
           </View>
         )}
+
+        {/* Delegated subagents: what is working now, and everything this
+            session spawned. Above the transcript so background work is never
+            scrolled out of sight. */}
+        <SubagentBar refs={subagentRefs} isDark={isDark} />
 
         {/* Pending revert (from "Edit message") — offer a way back before it's
             cleaned up by the next prompt. */}
