@@ -13,7 +13,8 @@ License: MIT
 A native Android app (Expo / React Native, TypeScript) that drives a
 self-hosted `opencode serve` from a phone: streamed transcript, tool approvals,
 diffs, model and reasoning-effort switching, session history, offline read-only
-copy, biometric unlock.
+copy, biometric unlock, and subagent sessions that stay visible (and openable)
+while a delegated agent works.
 
 It is a fork of https://github.com/dzianisv/opencode-mobile (itself a mobile
 client for https://github.com/sst/opencode), with two differences that matter:
@@ -54,7 +55,7 @@ versions. Not published to Google Play or F-Droid.
 - `HANDOFF.md` — engineering state, what shipped and what is left
 - `docs/` — upstream review and security review
 
-Verification: `npm test` (651 tests, node built-in runner), `npm run typecheck`,
+Verification: `npm test` (746 tests, node built-in runner), `npm run typecheck`,
 `npm run check:versions`, `npm run test:coverage` (about 98% of lines).
 
 ## Optional

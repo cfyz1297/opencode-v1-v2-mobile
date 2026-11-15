@@ -8,9 +8,9 @@ A fork of [dzianisv/opencode-mobile](https://github.com/dzianisv/opencode-mobile
 
 The repository used to be called `opencode-mobile`; it was renamed to `opencode-v1-v2-mobile` in 0.3.0. Old links redirect, and the APK file name (`opencode-mobile-v2.apk`) is kept unchanged so the built-in update check and the release signature chain keep working.
 
-Version **0.3.7 (72)**. Installs over 0.3.6 — no uninstall needed.
+Version **0.3.20 (85)**. Installs over 0.3.17 — no uninstall needed.
 
-> **Status:** every build runs 667 automated tests plus an Android CUA smoke on an emulator. Not yet exercised against a real opencode 1.18.x server, and the tablet layout, tunnel wizard and offline history have been checked in code and on the emulator only.
+> **Status:** every build runs 746 automated tests plus an Android CUA smoke on an emulator. Not yet exercised against a real opencode 1.18.x server, and the tablet layout, tunnel wizard and offline history have been checked in code and on the emulator only.
 
 ## Is this the app you are looking for?
 
@@ -22,7 +22,7 @@ Version **0.3.7 (72)**. Installs over 0.3.6 — no uninstall needed.
 | A phone client for a server in **Termux**, on a laptop or a VPS | yes (LAN, Tailscale, Cloudflare, ngrok) |
 | Approve tools, read diffs, stop a run from the phone | yes |
 | No telemetry, no account, no Play Store | yes — APK from Releases only |
-| An iOS build | no (upstream removed it from this fork's scope) |
+| An iOS build | no — upstream still carries an iOS config, this fork removed it |
 
 Related projects: [dzianisv/opencode-mobile](https://github.com/dzianisv/opencode-mobile) (upstream, V1 only), [sst/opencode](https://github.com/sst/opencode) (the agent itself), `opencode serve` in Termux on Android.
 
@@ -74,6 +74,8 @@ V2 specifics (verified on 2.0.27): Basic authentication only as `opencode:<passw
 - Stop button follows the server's actual run status, so a run started elsewhere (app restarted, another device, opened mid-run) can still be interrupted.
 - Edit a message and roll the session back to it (`revert` / `unrevert`), or compact the history into a summary.
 - Pending tool approvals and agent questions appear inline; answered questions stay in the transcript collapsed to one line.
+- **Subagents are visible while they work.** A delegated agent runs in its own child session; the tool card that launched it shows a row with the task, the agent, a live status pill and a tap that opens the child transcript — in the same workspace as the parent. Two counters under the header show what the current batch is doing and how many subagents the session has delegated in total; the list puts running ones first. Child sessions never appear in the Recent list.
+- Text is laid out at the font's own metrics, so a paragraph's last line is not clipped on phones with a themed system font.
 - A failed run shows the server's reason in place of the answer instead of an empty bubble.
 - Message page size is counted in prompts (5 / 10 / 25 / 50 / **All**). "All" loads the whole transcript.
 
@@ -104,44 +106,49 @@ V2 specifics (verified on 2.0.27): Basic authentication only as `opencode:<passw
 
 ## How the fork differs from upstream
 
-The base is upstream [dzianisv/opencode-mobile](https://github.com/dzianisv/opencode-mobile) at tag `v0.4.15` (2026-08-14). From there the fork has its own version line and its own goals: one user, one server in Termux, one delivery channel — an APK.
+The base is [dzianisv/opencode-mobile](https://github.com/dzianisv/opencode-mobile) at tag `v0.4.15` (2026-08-14). The 1.x transport from `v0.4.16` and the header fix from `v0.4.17` were ported by hand. Upstream has since shipped `v0.4.16` … `v0.4.19`; those releases were read commit by commit and only what fits one user with one server was taken. From `v0.4.15` the fork runs its own version line, currently **0.3.20**.
 
-| What | Upstream | Fork |
+The intended setup is opencode `serve` running **in Termux on the same phone**, reached over `127.0.0.1` — that is why the app allows cleartext to the loopback address and keeps a foreground service alive for notifications. A remote server on the LAN, a Cloudflare tunnel or Tailscale works too; nothing in the app assumes a backend of its own.
+
+| What | Upstream (`v0.4.19`) | This fork (0.3.20) |
 |---|---|---|
-| Server API | API 1.x only (`/session`, `/global/*`) | **both**: 1.x (`/session`, `/global/*`) and 2.x (`/api/*`), auto-detected, forceable in Settings |
-| Version | 0.4.x | fork's own 0.3.x line, currently 0.3.7 (72) |
-| Signing and updates | new debug key per build in old versions | permanent keystore, installs in place |
-| Channels | Google Play, self-hosted F-Droid, APK, EAS | APK from GitHub Releases only |
-| Telemetry | Sentry (crash reports) + PostHog | both dependencies removed |
-| Languages | English, 简体中文 | + Russian (en / ru / zh-Hans with key parity check) |
-| Orientation | portrait only | any, tablet layout from 768 dp, two panes from 1000 dp |
-| Offline history | planned | available, encrypted with Keystore/Keychain |
-| Tunnel wizard | beta | Cloudflare (named tunnels) and ngrok, built-in wizard |
-| Models screen | none | search, groups, visibility — affects both pickers |
-| Connection status | "selected" means "active" | real server response, polled on focus and every 15 s |
+| Server API | 1.x only (`/session`, `/global/*`) | **both** 1.x and 2.x (`/api/*`), auto-detected, forceable in Settings |
+| Target | many users, app-store delivery | one user, one server, one channel: an APK |
+| Delivery | Google Play, self-hosted F-Droid, APK, EAS, iOS config still present | APK from GitHub Releases only; `eas.json`, store workflows, fastlane and the iOS target removed |
+| Telemetry | Sentry + PostHog | both dependencies and the Sentry plugin removed |
+| Languages | en / ru / zh-Hans, 322 keys each | same three, 461 keys each, with a parity test that fails the build when one drifts |
+| Orientation | portrait only | any; tablet layout from 768 dp, two panes from 1000 dp |
+| Offline history | none | encrypted read-only copy (Keystore / Keychain) |
+| Tunnel setup | connection form only | Cloudflare (named tunnels) and ngrok wizard |
+| Models screen | none | search, groups, visibility — feeds both pickers |
+| Connection status | "selected" is treated as active | real server response, polled on focus and every 15 s |
 | Run recovery | none | silence watchdog, transcript re-read, `GET /api/session/active` |
-| Model picker | search + groups | + favorites (starred section on top) |
+| Model picker | search + groups | + favourites (starred section on top) |
 | Session info | token count | context ring in the header, context bar, whole-session spend |
-| Sessions list | newest page | walks the server cursor, up to 800 roots |
+| Session list | newest page | walks the server cursor, up to 800 root sessions |
 | Tool rows | name + raw payload | command for `shell`, live progress title, input fallback, no empty expand |
-| Keyboard | JS inset | native IME inset in `MainActivity` |
+| Subagents | a "Subagents" section above the transcript: counts and rows, read-only | a row inside the card that launched it, always visible, tap opens the child session in the parent's workspace; two counters under the header (current batch / session total); children kept out of the Recent list |
+| Body text | explicit `lineHeight` | no `lineHeight`, so Android derives the line box from the font's own metrics — an explicit one clipped the last line (see 0.3.20) |
+| Keyboard | JS-computed inset | native IME inset reported from `MainActivity` |
 | New session folder | default | the selected project (`location.directory` in the request body) |
-| Tests | `node --test` over a glob | `scripts/run-tests.mjs` + 80 % coverage gate, CUA smoke on an emulator |
+| Background | notifications while the app runs | headless keep-alive service, server-side polling, per-category notification icons, `specialUse` foreground type |
+| Tests | `node --test` over a glob | `scripts/run-tests.mjs` + 80 % coverage gate + CUA smoke on an Android 15 emulator |
 
 What changed in the code:
 
-- **Adapter `src/lib/v2-compat.ts`**: V2 responses and events are normalized to the V1 shape, so stores and screens stayed as they were. V1 events (`session.status`, `message.part.updated`) are assembled from V2 deltas (`session.text.delta`, `session.reasoning.delta`, `session.tool.*`).
-- **SDK** switched to `/api/session`, `/api/event`, `/api/info`, `/api/permission/request`, `/api/fs/*`, `/api/project`, `/api/location`. Changing a session's model/agent goes through `POST /api/session/{id}/model` and `/agent`.
-- **V1 transport** (`src/lib/sdk-v1.ts`, `src/lib/api-detect.ts`): the same app works against an opencode 1.x server — `/session`, `/experimental/session`, `/session/{id}/prompt_async`, `/global/event`. The detected API is stored on the connection (`api`, `serverVersion`) and is invalidated when the URL changes. Ported from upstream PR #209 / release v0.4.16.
-- **Tool cards** (`src/lib/tool-view.ts`): the `shell` tool (2.x name) is rendered as a terminal with its command, the progress title from `session.tool.progress` is shown, and an empty output falls back to the tool input instead of an empty card.
+- **Adapter `src/lib/v2-compat.ts`**: V2 responses and events are normalized to the V1 shape, so stores and screens stayed as they were. V1 events (`session.status`, `message.part.updated`) are assembled from V2 deltas (`session.text.delta`, `session.reasoning.delta`, `session.tool.*`). Tool `state.metadata` is passed through, which is what lets a `subagent` card link to its child session.
+- **SDK** speaks `/api/session`, `/api/event`, `/api/info`, `/api/permission/request`, `/api/fs/*`, `/api/project`, `/api/location`. Changing a session's model or agent goes through `POST /api/session/{id}/model` and `/agent`. Children are fetched with `GET /api/session?parentID=…`, filtered server-side.
+- **V1 transport** (`src/lib/sdk-v1.ts`, `src/lib/api-detect.ts`): the same app works against an opencode 1.x server — `/session`, `/experimental/session`, `/session/{id}/prompt_async`, `/global/event`. The detected API is stored on the connection (`api`, `serverVersion`) and invalidated when the URL changes. Ported from upstream PR #209 / `v0.4.16`.
+- **Subagents** (`src/lib/subagent-status.ts`, `src/components/chat/SubagentRow.tsx`, `SubagentBar.tsx`): a delegation is visible while it runs and opens like any session. Status comes from the live run state, the child's `busy`/`idle` stamps, or a per-session error map — the last two matter because a child may have finished, or failed, before this client connected.
+- **Tool cards** (`src/lib/tool-view.ts`): the `shell` tool (2.x name) renders as a terminal with its command, the progress title from `session.tool.progress` is shown, an empty output falls back to the tool input, and only the header is pressable so a diff inside the card can be dragged sideways.
 - **Session stats** (`src/lib/session-stats.ts`, `src/components/chat/ContextRing.tsx`): one function computes tokens, context percentage and whole-session cost, shared by the header ring and the info panel so they cannot disagree.
-- **New screens and logic**: `app/history.tsx` (offline history), `app/models.tsx` (model visibility), `app/providers/*` (provider catalog and key-based connection through the server), `app/connection/tunnel.tsx` (tunnel wizard), `src/components/TabletSessions.tsx` (tablet), `src/lib/adaptive-layout.ts`, `src/lib/connection-health.ts`, `src/lib/connection-security.ts`, `src/lib/run-watchdog.ts`, `src/lib/stream-watchdog.ts`, `src/lib/keyboard-inset.ts`, `src/lib/message-page.ts` (page in prompts, `ALL_TURNS`, `keepLoadedHistory`), `src/lib/session-stats.ts`, `src/lib/tool-view.ts`, `src/lib/api-detect.ts`, `src/stores/model-favorites.ts`.
-- **V2 specifics**: agent questions go through V2 forms, compaction summaries are visible in the transcript, image attachments render as images, the chat follows the stream, the composer clears after a built-in command.
+- **New screens and logic**: `app/history.tsx` (offline history), `app/models.tsx` (model visibility), `app/providers/*` (provider catalog and key-based connection through the server), `app/connection/tunnel.tsx` (tunnel wizard), `src/components/TabletSessions.tsx` (tablet), `src/lib/adaptive-layout.ts`, `src/lib/connection-health.ts`, `src/lib/connection-security.ts`, `src/lib/run-watchdog.ts`, `src/lib/stream-watchdog.ts`, `src/lib/keyboard-inset.ts`, `src/lib/message-page.ts` (page in prompts, `ALL_TURNS`, `keepLoadedHistory`), `src/lib/session-stats.ts`, `src/lib/tool-view.ts`, `src/lib/api-detect.ts`, `src/lib/subagent-status.ts`, `src/stores/model-favorites.ts`.
+- **V2 specifics**: agent questions go through V2 forms and render under the message that asked them, compaction summaries are visible in the transcript, image attachments render as images, the chat follows the stream, the composer clears after a built-in command.
 - **Client isolation**: the SDK client is bound to its connection, so streamed messages and the selected model do not leak between servers.
 - **Removed along with the infrastructure**: `website/`, `docs-site/`, `fastlane/`, `fdroid/`, `distribution/`, `eas.json`, `.maestro/`, `.autopilot/`, `.supervisor/`, `.tasks/`, the iOS build and store-publishing workflows, the Sentry plugin and source-map upload.
 - **Security**: the `SYSTEM_ALERT_WINDOW` permission is blocked, passwords and offline copies are written with the `WHEN_UNLOCKED_THIS_DEVICE_ONLY` policy, and the connection form warns about a password over unencrypted `http://`. Approval and question notifications carry fixed text, not server-supplied tool names, paths or question bodies, because the notification shade is readable on a locked phone (upstream audit M-03, ported). Requests carry `ngrok-skip-browser-warning` / `Bypass-Tunnel-Reminder`, so a tunnel proxies the API instead of answering with its own interstitial page.
 
-What the fork does not have (by design or not yet): provider OAuth connections (API key only), OpenCode Cloud, iOS builds, stores and telemetry.
+What the fork does not have: provider OAuth connections (API key only), OpenCode Cloud, iOS builds, store publishing, telemetry.
 
 ## What is kept from upstream
 
@@ -180,7 +187,22 @@ A separate pure-Java client without Gradle (`aapt → ecj → d8 → apksigner`)
 ## Updates
 
 <details>
-<summary>Changelog by version (0.2.11 - 0.3.7)</summary>
+<summary>Changelog by version (0.2.11 - 0.3.20)</summary>
+
+### 0.3.20
+
+- **The last line of a message is no longer cut in half.** React Native implements `lineHeight` with spans, and `CustomLineHeightSpan` pins the bottom of a block's last line to the font's reported descent. A font whose glyphs reach below that descent — a themed system font on a real phone, unlike the emulator's Roboto — had the bottom of every paragraph's final line clipped, while inner lines only overlapped and looked fine. That is why the cut always landed on the last line, looked identical on every build, and never reproduced on the emulator at any density. `lineHeight` is no longer set, so Android derives the line box from the real font metrics.
+- **Code in an expanded tool card scrolls sideways.** The whole card was one `TouchableOpacity`: a tap or drag on a diff bubbled up as a press and collapsed the card, so the code did not "refuse to scroll", it disappeared under the finger. Only the header is pressable now, and the horizontal `ScrollView` sets `nestedScrollEnabled`, because the transcript is a vertical `FlatList` and Android hands a nested scroller the gesture only on a perfectly horizontal drag.
+- **Subagents are visible and can be opened.** A delegation used to leave no trace: the tool returns at dispatch time, so the parent looked idle while a child worked. The card that launched it now draws a row with the task, the agent, a live status pill (Running / Done / Failed / Idle) and a tap into the child transcript, in the parent's workspace. Two counters under the header show the current batch and the session total; running children come first. Child sessions stay out of the Recent list, and their status comes from the live run state or the child's `idle` stamp, so a subagent that finished before the app connected still reads Done.
+- **A question card is drawn where the question was asked** — under the message whose form asked it, and the transcript jumps to it — instead of above the composer, outside the transcript, where anyone scrolled up never saw it and the run looked hung.
+- **No more dark screen after a long background run.** `HeadlessJsTaskService` returns `START_REDELIVER_INTENT`, so Android restarted the keep-alive service after a process death and booted a *headless* React instance; the next launch then attached the Activity to a host started without one, the splash never hid and the app closed. It now returns `START_NOT_STICKY`. Separately, Android 15 caps `dataSync` foreground services at six hours per 24 and kills the app when the budget runs out — the service uses `specialUse` on API 34+ and stops itself on timeout.
+- **Smaller fixes from upstream:** a camera launch that throws no longer leaves the button dead, `aborted` from speech recognition is no longer reported as an error, and the event stream gives up after 15 s if the server never answers headers instead of showing "Connected" over a dead socket.
+
+### 0.3.17
+
+- **Background notifications.** React Native pauses its own JS timers when the app leaves the foreground, so nothing generated notifications. `KeepAliveService` is a headless task for the whole run and the watch polls the server instead of local state: completion, questions and permission requests reach a locked phone.
+- **Notification icons** per category (question, error, completed, permission) from a small native module, because Android draws a small icon as a monochrome mask and expo-notifications falls back to a white square.
+- **Answered questions stay under the message that asked them**; the "Session running" card is gone; the model picker dismisses the keyboard before opening; notifications fire only while the app is backgrounded, one per run, deduplicated.
 
 ### 0.3.7
 
@@ -343,7 +365,7 @@ A separate pure-Java client without Gradle (`aapt → ecj → d8 → apksigner`)
 - **Getting it running:** run `opencode serve` somewhere reachable, add the address in the app, done. LAN, Tailscale, Cloudflare Tunnel and ngrok all work.
 - **Requirements:** Android 7+ (minSdk 24), an opencode server 1.18+ or 2.x, network access to it.
 - **Code layout:** `app/` (Expo Router screens), `src/lib` (SDK, transport, pure helpers — most of it unit-tested), `src/stores` (zustand), `src/components` (UI). `HANDOFF.md` is the working engineering log; `docs/` holds the upstream review and the security review.
-- **Quality gates:** `npm test` (638 tests, node built-in runner), `npm run typecheck`, `npm run check:versions`, `npm run test:coverage` (≈98 % lines).
+- **Quality gates:** `npm test` (746 tests, node built-in runner), `npm run typecheck`, `npm run check:versions`, `npm run test:coverage` (≈98 % lines).
 - **Machine-readable summary:** [`llms.txt`](llms.txt).
 - **License:** MIT (inherited from upstream).
 
