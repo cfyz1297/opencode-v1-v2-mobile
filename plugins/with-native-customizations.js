@@ -7,7 +7,6 @@ const {
   withMainActivity,
   withMainApplication,
   withAndroidManifest,
-  withAndroidStyles,
   withDangerousMod,
   createRunOncePlugin,
 } = require('expo/config-plugins')
@@ -158,48 +157,6 @@ function withCleartextTraffic(config) {
   })
 }
 
-// --- Text clipping on Android 15+ --------------------------------------------
-//
-// RN 0.88 measures <Text> with a StaticLayout that breaks lines on glyph
-// advances; on Android 15+ (targetSdk 35+) the TextView that paints it breaks
-// on glyph bounds (TextView#USE_BOUNDS_FOR_WIDTH). With a font whose ink
-// overhangs its advance the drawn layout wraps one line later than the measured
-// one, and that line falls outside the measured height — the last line of a
-// message is clipped. Upstream fixed ReactTextView in 0.89
-// (facebook/react-native#58280); the prebuilt react-android AAR cannot be
-// patched here, but AppCompatTextView (ReactTextView's parent) resolves
-// android:textViewStyle from the theme, so the same switch is applied there.
-const ADVANCE_TEXT_STYLE = 'OpencodeAdvanceTextView'
-
-function applyAdvanceBasedTextStyle(xml) {
-  const styles = xml.resources.style
-  if (!Array.isArray(styles)) throw new Error('with-native-customizations: styles.xml has no <style> groups')
-
-  const existing = styles.find((group) => group.$?.name === ADVANCE_TEXT_STYLE)
-  if (existing) {
-    existing.$ = { name: ADVANCE_TEXT_STYLE, parent: 'android:Widget.TextView' }
-    existing.item = [{ $: { name: 'android:useBoundsForWidth' }, _: 'false' }]
-  } else {
-    styles.push({
-      $: { name: ADVANCE_TEXT_STYLE, parent: 'android:Widget.TextView' },
-      item: [{ $: { name: 'android:useBoundsForWidth' }, _: 'false' }],
-    })
-  }
-
-  const appTheme = styles.find((group) => group.$?.name === 'AppTheme')
-  if (!appTheme) throw new Error('with-native-customizations: AppTheme not found in styles.xml')
-  appTheme.item = (appTheme.item || []).filter((item) => item.$?.name !== 'android:textViewStyle')
-  appTheme.item.push({ $: { name: 'android:textViewStyle' }, _: `@style/${ADVANCE_TEXT_STYLE}` })
-  return xml
-}
-
-function withAdvanceBasedText(config) {
-  return withAndroidStyles(config, (cfg) => {
-    cfg.modResults = applyAdvanceBasedTextStyle(cfg.modResults)
-    return cfg
-  })
-}
-
 // --- Keep-alive foreground service -------------------------------------------
 //
 // Android freezes a backgrounded RN process, which kills the SSE socket the
@@ -249,6 +206,7 @@ function withKeepAliveManifest(config) {
     for (const name of [
       'android.permission.FOREGROUND_SERVICE',
       'android.permission.FOREGROUND_SERVICE_DATA_SYNC',
+      'android.permission.FOREGROUND_SERVICE_SPECIAL_USE',
     ]) {
       if (!permissions.some((permission) => permission.$['android:name'] === name)) {
         permissions.push({ $: { 'android:name': name } })
@@ -264,8 +222,19 @@ function withKeepAliveManifest(config) {
         $: {
           'android:name': `${KEEPALIVE_PACKAGE}.KeepAliveService`,
           'android:exported': 'false',
-          'android:foregroundServiceType': 'dataSync',
+          // dataSync for Android 9-13, specialUse from 14: Android 15 caps
+          // dataSync at 6h per 24 and kills the app when a long background run
+          // exhausts the budget.
+          'android:foregroundServiceType': 'dataSync|specialUse',
         },
+        property: [
+          {
+            $: {
+              'android:name': 'android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE',
+              'android:value': 'Keeps the live session stream open to post run notifications',
+            },
+          },
+        ],
       })
     }
     application.service = services
@@ -311,21 +280,15 @@ function withKeepAliveRegistration(config) {
 
 const plugin = createRunOncePlugin(
   (config) =>
-    withAdvanceBasedText(
-      withCleartextTraffic(
-        withImeReporter(
-          withKeepAliveRegistration(
-            withKeepAliveManifest(withKeepAliveSources(withReleaseSigning(config))),
-          ),
+    withCleartextTraffic(
+      withImeReporter(
+        withKeepAliveRegistration(
+          withKeepAliveManifest(withKeepAliveSources(withReleaseSigning(config))),
         ),
       ),
     ),
   'with-native-customizations',
   '1.0.0',
 )
-
-// Exported for src/lib/android-text-clipping.test.ts: prebuild runs the mods,
-// the test checks the XML transform itself.
-plugin.applyAdvanceBasedTextStyle = applyAdvanceBasedTextStyle
 
 module.exports = plugin

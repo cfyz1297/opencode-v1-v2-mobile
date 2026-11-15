@@ -24,7 +24,9 @@ test("the prebuild plugin declares the foreground service and its permissions", 
   const plugin = read("plugins/with-native-customizations.js")
   assert.match(plugin, /FOREGROUND_SERVICE/)
   assert.match(plugin, /FOREGROUND_SERVICE_DATA_SYNC/)
-  assert.match(plugin, /foregroundServiceType: 'dataSync'|foregroundServiceType': 'dataSync'/)
+  assert.match(plugin, /FOREGROUND_SERVICE_SPECIAL_USE/)
+  assert.match(plugin, /foregroundServiceType': 'dataSync\|specialUse'/)
+  assert.match(plugin, /PROPERTY_SPECIAL_USE_FGS_SUBTYPE/)
   assert.match(plugin, /KeepAliveService/)
   assert.match(plugin, /add\(KeepAlivePackage\(\)\)/)
 })
@@ -32,9 +34,23 @@ test("the prebuild plugin declares the foreground service and its permissions", 
 test("the service goes foreground with a type and is not exported", () => {
   const service = read("plugins/native/keepalive/KeepAliveService.kt")
   assert.match(service, /startForeground\(/)
+  // Android 15 caps dataSync at 6h per 24 and kills the app when a long
+  // background run exhausts the budget, so the type switches to specialUse.
+  assert.match(service, /FOREGROUND_SERVICE_TYPE_SPECIAL_USE/)
+  assert.match(service, /UPSIDE_DOWN_CAKE[\s\S]{0,200}FOREGROUND_SERVICE_TYPE_SPECIAL_USE/)
   assert.match(service, /FOREGROUND_SERVICE_TYPE_DATA_SYNC/)
+  // Without the callback the system terminates the app on a dataSync timeout.
+  assert.match(service, /override fun onTimeout\(startId: Int\)[\s\S]{0,80}stopSelf/)
   const plugin = read("plugins/with-native-customizations.js")
   assert.match(plugin, /'android:exported': 'false'/)
+})
+
+test("a killed process does not leave a headless React instance for the next launch", () => {
+  // HeadlessJsTaskService returns START_REDELIVER_INTENT: Android would restart
+  // the service after a process death and boot a headless React instance, and
+  // the next launch then shows the splash and closes.
+  const service = read("plugins/native/keepalive/KeepAliveService.kt")
+  assert.match(service, /super\.onStartCommand\(intent, flags, startId\)[\s\S]{0,600}START_NOT_STICKY/)
 })
 
 test("the service runs a headless JS task, which is what re-enables background timers", () => {

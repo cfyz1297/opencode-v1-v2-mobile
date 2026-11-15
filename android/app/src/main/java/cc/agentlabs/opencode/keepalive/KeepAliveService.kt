@@ -38,7 +38,26 @@ class KeepAliveService : HeadlessJsTaskService() {
     showOngoing(title, body)
     // Base class starts the headless task (and every task start posts the same
     // intent again, so this method always runs first).
-    return super.onStartCommand(intent, flags, startId)
+    super.onStartCommand(intent, flags, startId)
+    // HeadlessJsTaskService returns START_REDELIVER_INTENT, so after the process
+    // is killed Android restarts the service and boots a *headless* React
+    // instance in the background. The next launch then attaches an Activity to
+    // a React host that was started without one: the splash never hides and the
+    // app closes on its own. The task never completes by design, so redelivery
+    // buys nothing.
+    return START_NOT_STICKY
+  }
+
+  // Android 15 limits dataSync foreground services to 6 hours per 24, then kills
+  // the app unless the service stops itself. The type is specialUse from API 34
+  // (see showOngoing), which has no limit; this is the fallback for the older
+  // layout and for a device that still enforces the dataSync budget.
+  override fun onTimeout(startId: Int) {
+    stopSelf(startId)
+  }
+
+  override fun onTimeout(startId: Int, fgsType: Int) {
+    stopSelf(startId)
   }
 
   override fun getTaskConfig(intent: Intent?): HeadlessJsTaskConfig =
@@ -65,7 +84,17 @@ class KeepAliveService : HeadlessJsTaskService() {
         .build()
 
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-      startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+      // dataSync is capped at 6h/24h from Android 15 and the system kills the
+      // app when the budget runs out — exactly the "long background run" case
+      // this service exists for. specialUse (API 34+) has no limit and is the
+      // honest description: keeping the session's stream open to post alerts.
+      val type =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+          ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+        } else {
+          ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+        }
+      startForeground(NOTIFICATION_ID, notification, type)
     } else {
       startForeground(NOTIFICATION_ID, notification)
     }
