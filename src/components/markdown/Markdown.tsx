@@ -10,10 +10,20 @@ import { CodeBlock } from "./CodeBlock"
 // be selected — the flag was dead weight and only fed the accessibility tree.
 // Assistant bubbles are a plain View now (see MessageBubble), so selection works
 // again and the flag is back on every text node.
-class CustomRenderer extends Renderer {
+export class CustomRenderer extends Renderer {
+  // Every Text node carries the paragraph's own font metrics, including the
+  // wrapper the parser builds around a paragraph's inline runs
+  // (getNormalizedSiblingNodesForBlockAndInlineTokens calls text(nodes, {})).
+  // Without them that wrapper is laid out at the platform default font while
+  // its children use fontSize 15, so the wrapper's metrics decide the box the
+  // runs are painted into.
+  constructor(private readonly base: TextStyle) {
+    super()
+  }
+
   private plainText(children: string | ReactNode[], styles?: StyleProp<TextStyle>): ReactNode {
     return (
-      <Text key={this.getKey()} style={styles} selectable>
+      <Text key={this.getKey()} style={[this.base, styles]} selectable>
         {children}
       </Text>
     )
@@ -55,7 +65,14 @@ class CustomRenderer extends Renderer {
 const mono = Platform.OS === "ios" ? "Menlo" : "monospace"
 
 const lightTheme = {
-  text: { color: "#0a0a0a", fontSize: 15, lineHeight: 22 },
+  // No lineHeight anywhere in this theme. React Native implements lineHeight
+  // with CustomLineHeightSpan, whose chooseHeight() sets the last line's box to
+  // fm.bottom = fm.descent. A font that reports a shallower descent than its
+  // glyphs — any font but Roboto, i.e. a themed device font — then has the
+  // bottom of a paragraph's last line cut off, while interior lines only
+  // overlap and look fine. Letting Android derive the line box from the real
+  // font metrics is the only device-independent option.
+  text: { color: "#0a0a0a", fontSize: 15 },
   paragraph: { marginTop: 0, marginBottom: 8 },
   h1: { fontSize: 22, fontWeight: "700" as const, color: "#0a0a0a", marginBottom: 8, marginTop: 12 },
   h2: { fontSize: 19, fontWeight: "600" as const, color: "#0a0a0a", marginBottom: 6, marginTop: 10 },
@@ -91,8 +108,8 @@ const lightTheme = {
     // `transparent` rather than omitting the key: react-native-marked's own
     // codespan style carries a background, and only an explicit value
     // overrides it. bgColor 0 makes Android paint no rectangle at all.
-    // fontSize/lineHeight must stay inherited too (a nested Text that declares
-    // its own metrics shifts the box as well).
+    // fontSize must stay inherited too (a nested Text that declares its own
+    // metrics shifts the box as well).
     backgroundColor: "transparent",
     fontFamily: mono,
   },
@@ -145,7 +162,7 @@ export function Markdown({ children }: Props) {
   // the renderer to `children` resets the slugger per parse, so keys are
   // deterministic (and stable) for a given value, while re-renders with an
   // unchanged value stay memoized instead of creating a new renderer.
-  const renderer = useMemo(() => new CustomRenderer(), [children])
+  const renderer = useMemo(() => new CustomRenderer(theme.text), [children, theme])
 
   // react-native-marked's default <RNMarkdown> export renders blocks inside a
   // FlatList. Chat messages are rendered inside app/session/[id].tsx's own

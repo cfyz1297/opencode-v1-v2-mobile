@@ -293,7 +293,11 @@ const s = StyleSheet.create({
   },
   modelTagDark: { backgroundColor: "#2a2a2a", color: "#888888" },
 
-  messageText: { fontSize: 15, lineHeight: 22, color: "#0a0a0a" },
+  // No lineHeight: React Native's CustomLineHeightSpan forces the last line's
+  // box to fm.descent, which clips fonts whose glyphs reach below their
+  // reported descent (any device font but Roboto). Same rule as the markdown
+  // theme, see src/components/markdown/Markdown.tsx.
+  messageText: { fontSize: 15, color: "#0a0a0a" },
   markdownWrap: { marginHorizontal: -4 },
 
   tokens: { fontSize: 11, color: "#999999", marginTop: 8 },
