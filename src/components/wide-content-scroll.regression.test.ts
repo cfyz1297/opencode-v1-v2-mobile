@@ -43,3 +43,16 @@ test("DiffView and CodeBlock both source the config from the shared, unit-tested
   assert.match(diffView, /from ["']\.\.\/\.\.\/lib\/scroll-config["']/)
   assert.match(codeBlock, /from ["']\.\.\/\.\.\/lib\/scroll-config["']/)
 })
+
+test("a swipe inside an expanded tool card cannot collapse it", () => {
+  // The card used to be one TouchableOpacity, so a drag or a tap on the diff
+  // bubbled up as a press and toggled the card shut while the user was trying
+  // to scroll the code horizontally. Only the header may be pressable.
+  const src = readComponent("chat/ToolCallCard.tsx")
+  const pressableStart = src.indexOf("<TouchableOpacity")
+  const pressableEnd = src.indexOf("</TouchableOpacity>")
+  assert.ok(pressableStart >= 0 && pressableEnd > pressableStart)
+  const pressable = src.slice(pressableStart, pressableEnd)
+  assert.ok(pressable.includes("<View style={s.header}"), "the header is inside the pressable")
+  assert.ok(!pressable.includes("ToolDetail"), "the expanded detail is outside the pressable")
+})

@@ -10,9 +10,14 @@
 export interface HorizontalScrollConfig {
   horizontal: true
   showsHorizontalScrollIndicator: boolean
+  // Android: without this the enclosing vertical FlatList/ScrollView wins the
+  // gesture as soon as the thumb drifts a few pixels up or down, and the code
+  // looks unscrollable.
+  nestedScrollEnabled: true
 }
 
 export const WIDE_CONTENT_SCROLL_CONFIG: HorizontalScrollConfig = {
   horizontal: true,
   showsHorizontalScrollIndicator: true,
+  nestedScrollEnabled: true,
 }

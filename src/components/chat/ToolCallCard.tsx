@@ -341,39 +341,40 @@ export function ToolCallCard({ tool, isDark }: Props) {
   }, [hasDetail])
 
   return (
-    <TouchableOpacity
-      style={s.card}
-      onPress={toggle}
-      activeOpacity={hasDetail ? 0.7 : 1}
-    >
-      {/* Header row */}
-      <View style={s.header}>
-        <View style={s.headerLeft}>
-          <Ionicons name={icon as any} size={14} color={color} />
-          <Text
-            style={[s.name, isDark && s.nameDark, isCommand ? s.nameMono : null]}
-            numberOfLines={1}
-          >
-            {title}
-          </Text>
-          {elapsed && <Text style={[s.elapsed, isDark && s.elapsedDark]}>{elapsed}</Text>}
+    // Only the header is pressable. Wrapping the whole card meant that a swipe
+    // or a tap inside the expanded diff reached the Touchable and toggled the
+    // card shut — the code was there, it just vanished under the finger.
+    <View style={s.card}>
+      <TouchableOpacity onPress={toggle} activeOpacity={hasDetail ? 0.7 : 1}>
+        {/* Header row */}
+        <View style={s.header}>
+          <View style={s.headerLeft}>
+            <Ionicons name={icon as any} size={14} color={color} />
+            <Text
+              style={[s.name, isDark && s.nameDark, isCommand ? s.nameMono : null]}
+              numberOfLines={1}
+            >
+              {title}
+            </Text>
+            {elapsed && <Text style={[s.elapsed, isDark && s.elapsedDark]}>{elapsed}</Text>}
+          </View>
+          <View style={s.headerRight}>
+            {status === "running" && <ActivityIndicator size="small" color={color} />}
+            {status === "completed" && <Ionicons name="checkmark" size={14} color="#22c55e" />}
+            {status === "error" && <Ionicons name="close" size={14} color="#ef4444" />}
+            {hasDetail && (
+              <Ionicons
+                name={expanded ? "chevron-up" : "chevron-down"}
+                size={14}
+                color={isDark ? "#555555" : "#aaaaaa"}
+              />
+            )}
+          </View>
         </View>
-        <View style={s.headerRight}>
-          {status === "running" && <ActivityIndicator size="small" color={color} />}
-          {status === "completed" && <Ionicons name="checkmark" size={14} color="#22c55e" />}
-          {status === "error" && <Ionicons name="close" size={14} color="#ef4444" />}
-          {hasDetail && (
-            <Ionicons
-              name={expanded ? "chevron-up" : "chevron-down"}
-              size={14}
-              color={isDark ? "#555555" : "#aaaaaa"}
-            />
-          )}
-        </View>
-      </View>
 
-      {/* Error banner */}
-      {error && !expanded && <ErrorBanner message={error} isDark={isDark} />}
+        {/* Error banner */}
+        {error && !expanded && <ErrorBanner message={error} isDark={isDark} />}
+      </TouchableOpacity>
 
       {/* Expanded detail — grows with the row instead of scrolling inside it,
           so the transcript scrolls as one surface. */}
@@ -383,7 +384,7 @@ export function ToolCallCard({ tool, isDark }: Props) {
           <ToolDetail tool={tool} isDark={isDark} />
         </View>
       )}
-    </TouchableOpacity>
+    </View>
   )
 }
 
