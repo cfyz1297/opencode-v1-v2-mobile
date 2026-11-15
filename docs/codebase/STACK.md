@@ -2,7 +2,7 @@
 
 Проект: форк `cfyz1297/opencode-v1-v2-mobile` (до 0.3.0 назывался `opencode-mobile`) — Expo/React Native клиент к self-hosted `opencode serve`, работающий с **обоими** поколениями API: V1 (opencode 1.18.x) и V2 (opencode 2.x). Публикуется только как APK через GitHub Releases (`README.md`, `HANDOFF.md`).
 
-Актуально на 2026-11-07, коммит `b0d31bc` (после релиза 0.3.3; текущий `main`).
+Актуально на 2026-11-15, коммит `1fdfabc` (версия 0.3.20, versionCode 85; текущий `main`).
 
 ## Обязательные разделы
 
@@ -10,38 +10,38 @@
 
 | Область | Значение | Evidence |
 |---------|----------|----------|
-| Основной язык | TypeScript / TSX: 165 `.ts` + 41 `.tsx` (скан), плюс Kotlin (2 файла) для нативного Android-слоя | `docs/codebase/.codebase-scan.txt` (CODE METRICS), `android/app/src/main/java/cc/agentlabs/opencode/MainActivity.kt` |
-| Runtime приложения | React Native 0.81.5 на Hermes, новая архитектура (`newArchEnabled=true`, `hermesEnabled=true`), Expo SDK 54 | `package.json`, `android/gradle.properties` |
-| Runtime тестов / CI | Node.js 24+ (нативное type-stripping для `.test.ts`); на машине разработки — Node 26 | `.github/workflows/build.yml`, `scripts/run-tests.mjs` |
+| Основной язык | TypeScript / TSX: 185 `.ts` (включая 99 тестовых) + 44 `.tsx` по скану; Kotlin — 7 файлов нативного слоя в `android/` (копии тех же 5 в `plugins/native/keepalive/`) | `docs/codebase/.codebase-scan.txt` (CODE METRICS), `android/app/src/main/java/cc/agentlabs/opencode/` |
+| Runtime приложения | React Native **0.88.1** на Hermes, новая архитектура (`newArchEnabled=true`, `hermesEnabled=true`), **Expo SDK 58**, React 19.3.0, React Compiler включён (`experiments.reactCompiler`) | `package.json`, `android/gradle.properties`, `app.json` |
+| Runtime тестов / CI | Node.js 24+ (нативное type-stripping для `.test.ts`); job `test` в CI на Node 24, job `build` — Node 20 | `.github/workflows/build.yml`, `scripts/run-tests.mjs` |
 | Пакетный менеджер | npm; lockfile v3; `legacy-peer-deps=true` | `package-lock.json`, `.npmrc`, `.github/workflows/build.yml` |
 | Модульная система / сборка | Metro + `expo-router/entry` (JS), затем `expo prebuild` → Gradle `assembleRelease` (Android) | `package.json` (`main`), `metro.config.js`, `.github/workflows/build.yml` |
-| Версия приложения | **0.3.3, versionCode 68** | `package.json`, `app.json`, `android/app/build.gradle` |
-| Тесты | **651 тест, 0 падений**; покрытие 98.36 % строк / 86.22 % ветвей / 97.24 % функций | локальный прогон 2026-11-07 |
+| Версия приложения | **0.3.20, versionCode 85** | `package.json`, `app.json`, `android/app/build.gradle` |
+| Тесты | **746 тестов, 0 падений**; покрытие **98.23 % строк / 86.16 % ветвей / 96.43 % функций**; `npm run typecheck` — чисто | локальный прогон 2026-11-15 |
 
 ### 2) Продакшн-фреймворки и зависимости
 
-Только высокоуровневые (полный список — `package.json`).
+Только высокоуровневые (полный список — `package.json`). Версии Expo-модулей в SDK 58 выровнены по мажору (`~58.x`).
 
 | Зависимость | Версия | Роль в системе | Evidence |
 |-------------|--------|----------------|----------|
-| `expo` | `^54.0.0` | Платформа, нативные модули, prebuild | `package.json` |
-| `react-native` | `0.81.5` | UI-runtime, Hermes | `package.json` |
-| `react` | `19.1.0` | UI | `package.json` |
-| `expo-router` | `~6.0.22` | Файловый роутинг: `app/` = маршруты | `package.json`, `app/_layout.tsx` |
+| `expo` | `^58.0.0` | Платформа, нативные модули, prebuild | `package.json` |
+| `react-native` | `0.88.1` | UI-runtime, Hermes | `package.json` |
+| `react` | `19.3.0` | UI | `package.json` |
+| `expo-router` | `~58.0.31` | Файловый роутинг: `app/` = маршруты | `package.json`, `app/_layout.tsx` |
 | `zustand` | `^5.0.2` | Все глобальные сторы (`src/stores/*`) | `src/stores/sessions.ts` |
 | `i18next` + `react-i18next` | `^26.3.6` / `^17.0.10` | Локализация en / ru / zh-Hans | `src/lib/i18n/config.ts`, `src/lib/i18n/catalog-parity.test.ts` |
-| `expo-secure-store` | `~15.0.8` | Пароли серверов, настройки, офлайн-история | `src/stores/connections.ts`, `src/lib/history-storage.ts` |
+| `expo-secure-store` | `~58.0.3` | Пароли серверов, настройки, офлайн-история, недавние каталоги | `src/stores/connections.ts`, `src/lib/history-storage.ts` |
 | `@react-native-async-storage/async-storage` | `2.2.0` | Видимость и любимые модели, проверка обновлений | `src/lib/model-visibility.ts`, `src/stores/model-favorites.ts`, `src/lib/update-check.ts` |
-| `expo-notifications` | `~0.32.16` | Локальные уведомления (не push) | `src/lib/notifications.ts` |
-| `expo-local-authentication` | `~17.0.8` | Биометрический AppGate | `src/stores/auth.ts` |
-| `expo-image-picker`, `expo-image-manipulator` | `17.0.10`, `~14.0.8` | Вложения-изображения (JPEG + base64) | `app/session/[id].tsx` (`pickFromLibrary`) |
-| `expo-speech-recognition` | `3.0.1` | Голосовой ввод | `src/lib/speech.ts`, `app.json` |
+| `expo-notifications` | `~58.1.9` | Канал/разрешения уведомлений; на Android публикация идёт через собственный мост `Notify`, на iOS — через этот модуль | `src/lib/notifications.ts`, `plugins/native/keepalive/NotifyModule.kt` |
+| `expo-local-authentication` | `~58.0.3` | Биометрический AppGate | `src/stores/auth.ts` |
+| `expo-image-picker`, `expo-image-manipulator` | `~58.0.10`, `~58.0.16` | Вложения-изображения (JPEG + base64) | `app/session/[id].tsx` (`pickFromLibrary`) |
+| `expo-speech-recognition` | `~58.0.1` | Голосовой ввод | `src/lib/speech.ts`, `app.json` |
 | `react-native-marked` | `8.0.0` | Рендер Markdown ответов модели | `src/components/markdown/Markdown.tsx` |
-| `@gorhom/bottom-sheet` | `5.2.8` | Шиты: модель, каталог, уровень рассуждений, действия | `app/_layout.tsx`, `src/components/chat/VariantPicker.tsx` |
-| `react-native-svg` | `15.15.1` | Кольцо контекста в заголовке сессии | `src/components/chat/ContextRing.tsx` |
-| `react-native-reanimated`, `gesture-handler`, `screens`, `safe-area-context`, `worklets` | см. `package.json` | Анимации, жесты, навигация, инсеты | `package.json` |
+| `@gorhom/bottom-sheet` | `^5.2.14` | Шиты: модель, каталог, уровень рассуждений, действия | `app/_layout.tsx`, `src/components/chat/VariantPicker.tsx` |
+| `react-native-svg` | `15.16.0` | Кольцо контекста в заголовке сессии | `src/components/chat/ContextRing.tsx` |
+| `react-native-reanimated` / `worklets`, `gesture-handler`, `screens`, `safe-area-context` | `4.7.1` / `0.13.0`, `~3.3.0`, `~4.30.1`, `~5.11.1` | Анимации, жесты, навигация, инсеты | `package.json` |
 | `@expo/vector-icons` | `^15.0.3` | Иконки | `package.json` |
-| `expo-clipboard`, `expo-crypto`, `expo-device`, `expo-linking`, `expo-localization`, `expo-status-bar` | см. `package.json` | Буфер, UUID, инфо об устройстве, deep links, локаль, статус-бар | `package.json` |
+| `expo-clipboard`, `expo-constants`, `expo-crypto`, `expo-device`, `expo-font`, `expo-linking`, `expo-localization`, `expo-splash-screen`, `expo-status-bar`, `expo-system-ui` | `~58.x` | Буфер, константы, UUID, инфо об устройстве, шрифты, deep links, локаль, сплэш, статус-бар, системный UI | `package.json` |
 
 Отсутствуют намеренно (удалены в форке): `@sentry/react-native`, PostHog, `expo-store-review` — см. `README.md` и `metro.config.js`.
 
@@ -49,11 +49,12 @@
 
 | Инструмент | Назначение | Evidence |
 |------------|------------|----------|
-| `typescript ~5.9.2` (`tsc --noEmit`, `strict: true`) | Проверка типов | `package.json`, `tsconfig.json` |
+| `typescript ~6.0.3` (`tsc --noEmit`, `strict: true`, `allowImportingTsExtensions`) | Проверка типов; `include` покрывает и тесты | `package.json`, `tsconfig.json` |
 | `node:test` (встроенный) через `scripts/run-tests.mjs` | Тест-раннер; явный glob, отказ при нуле файлов | `scripts/run-tests.mjs` |
-| `--experimental-test-coverage` с порогами 80 % | Покрытие строк/ветвей/функций | `package.json` |
-| `scripts/check-version-parity.mjs` | Сверка версии в `package.json` ↔ `app.json` ↔ `android/app/build.gradle` | `scripts/check-version-parity.mjs` |
+| `--experimental-test-coverage` с порогами 80 % | Покрытие строк/ветвей/функций | `package.json` (`test:coverage`) |
+| `scripts/check-version-parity.mjs` | Сверка `package.json` ↔ `app.json` ↔ `android/app/build.gradle` | `scripts/check-version-parity.mjs` |
 | `scripts/cua-roadmap-smoke.mjs` | Android CUA smoke на эмуляторе (UIAutomator + фиктивный сервер) | `scripts/cua-roadmap-smoke.mjs` |
+| `plugins/with-native-customizations.js` | Единственный источник правды для нативных правок (подпись, IME, cleartext, keep-alive); `android/` перегенерируется prebuild'ом | `plugins/with-native-customizations.js:1-2` |
 | `gitleaks/gitleaks-action@v2` | Скан секретов в истории | `.github/workflows/security-scan.yml` |
 
 Линтера и форматтера в репозитории нет: `.eslintrc*`, `eslint.config.*`, `.prettierrc*`, `.editorconfig`, `.husky` отсутствуют, соответствующих зависимостей нет.
@@ -68,27 +69,29 @@ npm start                           # Expo dev server
 npm run android                     # dev-сборка (expo run:android)
 npx expo prebuild --platform android --no-install
 cd android && ./gradlew assembleRelease   # релизный APK
-npm test                            # 651 тест через scripts/run-tests.mjs
+npm test                            # 746 тестов через scripts/run-tests.mjs
 npm run test:coverage               # те же тесты + пороги 80 %
 npm run typecheck                   # tsc --noEmit
 npm run check:versions              # паритет версий в трёх файлах
 ```
 
-Перед релизом версия поднимается в четырёх местах: `package.json`, `app.json` (version и versionCode), `android/app/build.gradle` и литералы в `.github/workflows/build.yml` (шаг проверки собранного APK). Затем `check:versions` → тег `vX.Y.Z` → GitHub Release с `opencode-mobile-v2.apk` и `SHA256SUMS.txt`.
+Версия живёт в трёх местах: `package.json`, `app.json` (`version` + `android.versionCode`) и `android/app/build.gradle`. Литералов версии в workflow больше нет — шаг проверки APK читает ожидаемые значения из `app.json` (`EXPECTED_VERSION_CODE=$(node -p "require('./app.json').expo.android.versionCode")`). Релиз: тег `vX.Y.Z` → GitHub Release с `opencode-mobile-v2.apk` и `SHA256SUMS.txt`; сам релиз публикуется вручную (job публикации в workflow отсутствует).
 
 ### 5) Окружение и конфигурация
 
-- Источники конфигурации: `app.json` (Expo-манифест, permissions, plugins), `tsconfig.json`, `metro.config.js`, `android/gradle.properties`, `android/app/build.gradle`, `plugins/with-tablet-config-changes.js`, `.npmrc`.
+- Источники конфигурации: `app.json` (Expo-манифест, permissions, plugins), `tsconfig.json`, `metro.config.js`, `android/gradle.properties`, `plugins/with-tablet-config-changes.js`, `plugins/with-native-customizations.js`, `.npmrc`.
+- `android/` — **результат `expo prebuild`**, а не источник истины: с SDK 58 он перегенерируется на каждом прогоне, ручные правки теряются; нативные изменения вносятся плагином (`plugins/with-native-customizations.js:1-2`).
 - Переменные окружения, реально читаемые кодом:
-  - `RELEASE_STORE_FILE`, `RELEASE_STORE_PASSWORD`, `RELEASE_KEY_ALIAS`, `RELEASE_KEY_PASSWORD` — `android/app/build.gradle`; в CI из секретов `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`.
+  - `RELEASE_STORE_FILE`, `RELEASE_STORE_PASSWORD`, `RELEASE_KEY_ALIAS`, `RELEASE_KEY_PASSWORD` — `plugins/with-native-customizations.js` (блок `signingConfigs`); в CI из секретов `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD` (`.github/workflows/build.yml`).
 - `.env.example` / `.env.template` отсутствуют; `.env*` в `.gitignore`.
-- Ограничения деплоя: только Android APK; магазины и iOS-сборка удалены; подпись — постоянный keystore, иначе обновление «поверх» невозможно; при отсутствии секрета собирается debug-ключ.
+- Ограничения деплоя: только Android APK; магазины удалены; подпись — постоянный keystore, иначе обновление «поверх» невозможно; при отсутствии секрета собирается debug-ключ.
 
 ### 6) Evidence
 
 - `package.json`, `package-lock.json`, `app.json`, `tsconfig.json`, `metro.config.js`, `.npmrc`
 - `.github/workflows/build.yml`, `.github/workflows/security-scan.yml`
 - `android/app/build.gradle`, `android/gradle.properties`
+- `plugins/with-native-customizations.js`, `plugins/with-tablet-config-changes.js`
 - `scripts/run-tests.mjs`, `scripts/check-version-parity.mjs`, `scripts/cua-roadmap-smoke.mjs`
 - `src/stores/model-favorites.ts`, `src/components/chat/ContextRing.tsx`
 - `docs/codebase/.codebase-scan.txt`

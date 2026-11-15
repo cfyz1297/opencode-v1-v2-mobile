@@ -2,6 +2,10 @@
 === DIRECTORY TREE (max depth 3, source files only) ===
 .agents
 .agents/retro.md
+.expo
+.expo/web
+.expo/web/cache
+.expo/web/cache/production
 .github
 .github/workflows
 .github/workflows/build.yml
@@ -19,6 +23,7 @@ android
 android/.gitignore
 android/app
 android/app/build.gradle
+android/app/debug.keystore
 android/app/proguard-rules.pro
 android/app/src
 android/app/src/debug
@@ -32,7 +37,6 @@ android/gradle/wrapper/gradle-wrapper.properties
 android/gradle.properties
 android/gradlew
 android/gradlew.bat
-android/sentry.properties
 android/settings.gradle
 app
 app/(tabs)
@@ -79,6 +83,16 @@ docs/connection-status-validation.md
 docs/model-visibility-validation.md
 docs/run-resync-validation.md
 docs/security-review-0.2.21.md
+docs/security-review-0.3.10.md
+docs/security-review-0.3.11.md
+docs/security-review-0.3.12.md
+docs/security-review-0.3.13.md
+docs/security-review-0.3.14.md
+docs/security-review-0.3.15.md
+docs/security-review-0.3.17.md
+docs/security-review-0.3.2.md
+docs/security-review-0.3.8.md
+docs/security-review-0.3.9.md
 docs/security-review-server-api.md
 docs/upstream-review-2026-11-04.md
 llms.txt
@@ -86,6 +100,16 @@ metro.config.js
 package-lock.json
 package.json
 plugins
+plugins/native
+plugins/native/keepalive
+plugins/native/keepalive/KeepAliveModule.kt
+plugins/native/keepalive/KeepAlivePackage.kt
+plugins/native/keepalive/KeepAliveService.kt
+plugins/native/keepalive/NotifyModule.kt
+plugins/native/keepalive/NotifyPackage.kt
+plugins/native/res
+plugins/native/res/drawable
+plugins/with-native-customizations.js
 plugins/with-tablet-config-changes.js
 scripts
 scripts/check-version-parity.mjs
@@ -115,6 +139,8 @@ src/components/chat/ReasoningBlock.tsx
 src/components/chat/SessionInfo.tsx
 src/components/chat/SlashPopover.tsx
 src/components/chat/StatusIndicator.tsx
+src/components/chat/SubagentBar.tsx
+src/components/chat/SubagentRow.tsx
 src/components/chat/ToolCallCard.tsx
 src/components/chat/ToolRun.tsx
 src/components/chat/VariantPicker.tsx
@@ -122,10 +148,13 @@ src/components/chat/diff-compute.test.ts
 src/components/chat/diff-compute.ts
 src/components/chat/index.ts
 src/components/chat/message-bubble-error.test.ts
+src/components/chat/model-picker-shared.tsx
 src/components/markdown
 src/components/markdown/CodeBlock.tsx
 src/components/markdown/Markdown.tsx
 src/components/markdown/index.tsx
+src/components/markdown-inline-code.regression.test.ts
+src/components/subagent-bar-theme.test.ts
 src/components/wide-content-scroll.regression.test.ts
 src/lib
 src/lib/adaptive-layout.test.ts
@@ -138,8 +167,6 @@ src/lib/api-error.test.ts
 src/lib/api-error.ts
 src/lib/auth.test.ts
 src/lib/auth.ts
-src/lib/chatwoot.test.ts
-src/lib/chatwoot.ts
 src/lib/composer-and-questions.test.ts
 src/lib/composer-taps.regression.test.ts
 src/lib/connection-bootstrap.test.ts
@@ -150,7 +177,6 @@ src/lib/connection-security.ts
 src/lib/connections-screen.test.ts
 src/lib/custom-provider.test.ts
 src/lib/custom-provider.ts
-src/lib/demo-analytics.ts
 src/lib/demo-script.test.ts
 src/lib/demo-script.ts
 src/lib/diagnostics-classify.test.ts
@@ -164,6 +190,7 @@ src/lib/file-roots.ts
 src/lib/headers.test.ts
 src/lib/headers.ts
 src/lib/history-storage.ts
+src/lib/http.ts
 src/lib/i18n
 src/lib/i18n/catalog-parity.test.ts
 src/lib/i18n/config.ts
@@ -172,97 +199,60 @@ src/lib/i18n/locale-resolve.test.ts
 src/lib/i18n/locale-resolve.ts
 src/lib/i18n/ru.json
 src/lib/i18n/zh-Hans.json
-src/lib/keyboard-inset.test.ts
-src/lib/keyboard-inset.ts
-src/lib/links.test.ts
-src/lib/links.ts
-src/lib/logbuffer.test.ts
-src/lib/logbuffer.ts
-src/lib/message-merge.test.ts
-src/lib/message-merge.ts
-src/lib/message-page.test.ts
-src/lib/message-page.ts
-src/lib/message-run.test.ts
-src/lib/message-run.ts
-src/lib/model-picker-filter.test.ts
-src/lib/model-picker-filter.ts
-src/lib/model-selection.test.ts
-src/lib/model-selection.ts
-src/lib/model-visibility.test.ts
-src/lib/model-visibility.ts
-src/lib/models-screen.test.ts
-src/lib/notifications.ts
-src/lib/notify-format.test.ts
-src/lib/notify-format.ts
-src/lib/offline-history.test.ts
-src/lib/offline-history.ts
-src/lib/part-batch.test.ts
-src/lib/part-batch.ts
-src/lib/part-runs.test.ts
-src/lib/part-runs.ts
+src/lib/keep-alive-config.test.ts
 
 === STACK DETECTION (manifest files) ===
 
 --- package-lock.json ---
 {
   "name": "@opencode-ai/mobile",
-  "version": "0.2.27",
+  "version": "0.3.7",
   "lockfileVersion": 3,
   "requires": true,
   "packages": {
     "": {
       "name": "@opencode-ai/mobile",
-      "version": "0.2.27",
+      "version": "0.3.7",
       "dependencies": {
         "@expo/vector-icons": "^15.0.3",
-        "@gorhom/bottom-sheet": "5.2.8",
+        "@gorhom/bottom-sheet": "^5.2.14",
         "@react-native-async-storage/async-storage": "2.2.0",
         "@react-navigation/native": "^7.0.14",
-        "@tanstack/react-query": "^5.62.0",
-        "expo": "^54.0.0",
-        "expo-clipboard": "8.0.8",
-        "expo-crypto": "~15.0.9",
-        "expo-device": "~8.0.10",
-        "expo-image-manipulator": "~14.0.8",
-        "expo-image-picker": "17.0.10",
-        "expo-linking": "~8.0.11",
-        "expo-local-authentication": "~17.0.8",
-        "expo-localization": "~17.0.9",
-        "expo-notifications": "~0.32.16",
-        "expo-router": "~6.0.22",
-        "expo-secure-store": "~15.0.8",
-        "expo-speech-recognition": "3.0.1",
-        "expo-status-bar": "~3.0.9",
+        "expo": "^58.0.0",
+        "expo-clipboard": "~58.0.4",
+        "expo-constants": "~58.0.16",
+        "expo-crypto": "~58.0.8",
+        "expo-device": "~58.0.5",
+        "expo-font": "~58.0.12",
+        "expo-image-manipulator": "~58.0.16",
+        "expo-image-picker": "~58.0.10",
+        "expo-linking": "~58.0.17",
+        "expo-local-authentication": "~58.0.3",
+        "expo-localization": "~58.0.5",
+        "expo-notifications": "~58.1.9",
+        "expo-router": "~58.0.31",
+        "expo-secure-store": "~58.0.3",
+        "expo-speech-recognition": "~58.0.1",
+        "expo-splash-screen": "~58.0.14",
+        "expo-status-bar": "~58.0.5",
+        "expo-system-ui": "~58.0.7",
         "i18next": "^26.3.6",
-        "react": "19.1.0",
+        "react": "19.3.0",
         "react-i18next": "^17.0.10",
-        "react-native": "0.81.5",
-        "react-native-gesture-handler": "~2.28.0",
+        "react-native": "0.88.1",
+        "react-native-gesture-handler": "~3.3.0",
         "react-native-marked": "8.0.0",
-        "react-native-reanimated": "~4.1.1",
-        "react-native-safe-area-context": "~5.6.0",
-        "react-native-screens": "~4.16.0",
-        "react-native-svg": "15.15.1",
-        "react-native-worklets": "0.5.1",
+        "react-native-reanimated": "4.7.1",
+        "react-native-safe-area-context": "~5.11.1",
+        "react-native-screens": "~4.30.1",
+        "react-native-svg": "15.16.0",
+        "react-native-worklets": "0.13.0",
         "zustand": "^5.0.2"
       },
       "devDependencies": {
-        "@types/react": "~19.1.10",
-        "typescript": "~5.9.2"
-      }
-    },
-    "node_modules/@0no-co/graphql.web": {
-      "version": "1.3.4",
-      "resolved": "https://registry.npmjs.org/@0no-co/graphql.web/-/graphql.web-1.3.4.tgz",
-      "integrity": "sha512-imSwulOeDQodRy/olQmVEo2PiY6ntjkZ9eiGdw6lMYylh/tay9b7MusyJBmEnkL8GiKRKr6ltr+D42mY5bd8Bg==",
-      "license": "MIT",
-      "peerDependencies": {
-        "graphql": "^14.0.0 || ^15.0.0 || ^16.0.0 || ^17.0.0"
-      },
-      "peerDependenciesMeta": {
-        "graphql": {
-          "optional": true
-        }
+        "@types/node": "^24.19.2",
+        "@types/react": "~19.3.0",
+        "typescript": "~6.0.3"
       }
     },
     "node_modules/@babel/code-frame": {
@@ -284,12 +274,22 @@ src/lib/part-runs.ts
       "resolved": "https://registry.npmjs.org/@babel/compat-data/-/compat-data-7.29.7.tgz",
       "integrity": "sha512-locTkQyKvwIEgBzVrn8693ebc97F2U8ZHjbXwDXJ5Fn2TCpNwTlKcaKLkdHop5c/icOFE7qt7Q9JC5hnKNa6Gg==",
       "license": "MIT",
+      "engines": {
+        "node": ">=6.9.0"
+      }
+    },
+    "node_modules/@babel/core": {
+      "version": "7.29.7",
+      "resolved": "https://registry.npmjs.org/@babel/core/-/core-7.29.7.tgz",
+      "integrity": "sha512-RgHBCvtjbOK2gXSNBNIkNoEc9qoVEtau3hj8gEqKQuL3HZAibKarWFEI3Lfm6EYKkLalOh8eSrj9b+ch9H/VBA==",
+      "license": "MIT",
+      "dependencies": {
 
-[TRUNCATED] Showing first 80 of 10200 lines.
+[TRUNCATED] Showing first 80 of 8176 lines.
 --- package.json ---
 {
   "name": "@opencode-ai/mobile",
-  "version": "0.3.0",
+  "version": "0.3.20",
   "private": true,
   "main": "expo-router/entry",
   "scripts": {
@@ -304,40 +304,44 @@ src/lib/part-runs.ts
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
-    "@gorhom/bottom-sheet": "5.2.8",
+    "@gorhom/bottom-sheet": "^5.2.14",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-navigation/native": "^7.0.14",
-    "@tanstack/react-query": "^5.62.0",
-    "expo": "^54.0.0",
-    "expo-clipboard": "8.0.8",
-    "expo-crypto": "~15.0.9",
-    "expo-device": "~8.0.10",
-    "expo-image-manipulator": "~14.0.8",
-    "expo-image-picker": "17.0.10",
-    "expo-linking": "~8.0.11",
-    "expo-local-authentication": "~17.0.8",
-    "expo-localization": "~17.0.9",
-    "expo-notifications": "~0.32.16",
-    "expo-router": "~6.0.22",
-    "expo-secure-store": "~15.0.8",
-    "expo-speech-recognition": "3.0.1",
-    "expo-status-bar": "~3.0.9",
+    "expo": "^58.0.0",
+    "expo-clipboard": "~58.0.4",
+    "expo-constants": "~58.0.16",
+    "expo-crypto": "~58.0.8",
+    "expo-device": "~58.0.5",
+    "expo-font": "~58.0.12",
+    "expo-image-manipulator": "~58.0.16",
+    "expo-image-picker": "~58.0.10",
+    "expo-linking": "~58.0.17",
+    "expo-local-authentication": "~58.0.3",
+    "expo-localization": "~58.0.5",
+    "expo-notifications": "~58.1.9",
+    "expo-router": "~58.0.31",
+    "expo-secure-store": "~58.0.3",
+    "expo-speech-recognition": "~58.0.1",
+    "expo-splash-screen": "~58.0.14",
+    "expo-status-bar": "~58.0.5",
+    "expo-system-ui": "~58.0.7",
     "i18next": "^26.3.6",
-    "react": "19.1.0",
+    "react": "19.3.0",
     "react-i18next": "^17.0.10",
-    "react-native": "0.81.5",
-    "react-native-gesture-handler": "~2.28.0",
+    "react-native": "0.88.1",
+    "react-native-gesture-handler": "~3.3.0",
     "react-native-marked": "8.0.0",
-    "react-native-reanimated": "~4.1.1",
-    "react-native-safe-area-context": "~5.6.0",
-    "react-native-screens": "~4.16.0",
-    "react-native-svg": "15.15.1",
-    "react-native-worklets": "0.5.1",
+    "react-native-reanimated": "4.7.1",
+    "react-native-safe-area-context": "~5.11.1",
+    "react-native-screens": "~4.30.1",
+    "react-native-svg": "15.16.0",
+    "react-native-worklets": "0.13.0",
     "zustand": "^5.0.2"
   },
   "devDependencies": {
-    "@types/react": "~19.1.10",
-    "typescript": "~5.9.2"
+    "@types/node": "^24.19.2",
+    "@types/react": "~19.3.0",
+    "typescript": "~6.0.3"
   },
   "expo": {
     "install": {
@@ -365,73 +369,73 @@ No .env.example or .env.template found. Identify required environment variables 
 src/components/chat/MessageBubble.tsx:42: // TODO: Replace with streamdown-rn once React 19 types PR lands - it has
 
 === GIT RECENT COMMITS (last 20) ===
-2a97e60 docs: make the repo findable for people and for AI agents
-f8a2d20 docs: record 0.3.0 release (APK hash, run id) and the inherited gh-pages site
-000ff00 Merge feat/server-api-v1: 0.3.0 — V1+V2 server support, favorites, context ring
-3126900 chore: release 0.3.0 — both APIs, new name, keyboard-safe variant picker
-86a9bf5 fix: price the session during a run; unclip the attachment remove badge
-2f71c0b feat: context ring in the header, session-wide cost, "whole session" page
-ab22dd7 feat: favorite models in the picker; fix blank tool cards
-86c6da5 docs: upstream review — what was ported, what the fork already had, what was skipped
-19a9185 docs: note the session-cursor loop bound in the security review
-f84e482 fix(v1): page the global session list instead of taking the newest 100
-687dbf1 fix: stop hiding sessions past the server's newest 50
-4f9d4bd fix: keep loaded history, unfreeze the stop button, unstick the attach tap
-598e457 feat: speak the v1 server API too, with an auto/manual switch
-948ac3f docs: record 0.2.30 release in HANDOFF
-4d74dc4 fix(chat): show why a run failed instead of an empty bubble
-eb8dcb8 docs: record 0.2.29 release in HANDOFF
-74eecc3 fix(chat): send mid-run, keep answered questions, count pages in prompts
-e913b68 docs: карта кодовой базы в docs/codebase
-5837958 docs: record 0.2.28 release in HANDOFF
-0cf0833 chore(release): 0.2.28 (62)
+1fdfabc docs: rewrite the upstream comparison from verified facts, update README
+6312a2c style(subagents): right-aligned, larger counters with a real dark theme
+e0013ae feat(subagents): the left counter is the current batch, not the running count
+adc4637 chore(release): 0.3.20
+a8dd955 feat(subagents): counter bar under the header with the running subagents
+651929e fix(subagents): keep idle/busy stamps and tap the row, not the card header
+fe0a01f feat(chat): show delegated subagents in the transcript and link to them
+862cfc1 chore(release): 0.3.18
+a03d2ec fix(chat): let the diff scroll — the card was eating the gesture
+84d08e0 fix(chat): stop clipping the last line by not overriding line spacing
+fa53b31 fix(chat): draw a question card under the message that asked it
+c1b4d8f fix(keepalive): survive long background runs and process death
+d960b24 fix(chat): stop clipping the last text line on Android 15+
+32c152f Merge pull request #8 from cfyz1297/fix/answered-questions-and-notifications
+4a563a5 fix(keepalive): revert 0.3.16, hide the card by cancelling the notification
+5ca8568 fix(keepalive): remove the foreground-service card for real
+26be99c ci: keep the release APK artifact for three days
+df61066 chore(settings): remove the test notification and the notification log block
+c6d1af6 feat(notifications): per-category monochrome icons, hide the keep-alive card
+6b1594e fix(background): run a headless JS task, React Native stops timers when paused
 
 === HIGH-CHURN FILES (last 90 days, top 20) ===
-  29 README.md
-  28 package.json
-  27 app.json
-  26 android/app/build.gradle
-  24 HANDOFF.md
-  22 app/session/[id].tsx
-  21 .github/workflows/build.yml
-  17 src/lib/sdk.ts
-  16 src/lib/i18n/en.json
-  16 src/lib/i18n/ru.json
-  16 src/lib/i18n/zh-Hans.json
-  13 src/stores/sessions.ts
+  51 package.json
+  50 app.json
+  49 android/app/build.gradle
+  46 HANDOFF.md
+  38 README.md
+  34 app/session/[id].tsx
+  28 .github/workflows/build.yml
+  24 src/lib/i18n/en.json
+  24 src/lib/i18n/ru.json
+  24 src/lib/i18n/zh-Hans.json
+  20 README.ru.md
+  19 scripts/cua-roadmap-smoke.mjs
+  19 src/lib/sdk.ts
+  19 src/stores/events.ts
+  16 src/stores/sessions.ts
+  16 package-lock.json
+  13 src/lib/v2-compat.ts
+  13 app/_layout.tsx
   13 distribution/whatsnew/whatsnew-en-US
-  13 scripts/cua-roadmap-smoke.mjs
-  11 src/stores/events.ts
-  10 README.ru.md
-  10 src/lib/sdk.integration.test.ts
-  10 src/lib/v2-compat.ts
-  10 src/stores/connections.ts
-   9 src/lib/v2-compat.test.ts
+  12 src/lib/v2-compat.test.ts
 
 === MONOREPO SIGNALS ===
 No monorepo signals detected.
 
 === CODE METRICS ===
-Total files scanned: 284
-Total lines of code: 42330
+Total files scanned: 375
+Total lines of code: 43644
 
 Files by language:
-  TypeScript: 165
-  Other: 74
-  TypeScript/React: 41
-  JavaScript: 2
-  Kotlin: 2
+  TypeScript: 185
+  Other: 131
+  TypeScript/React: 44
+  Kotlin: 12
+  JavaScript: 3
 
 Top 10 largest files:
-package-lock.json: 375.4KB
-android/app/src/main/res/drawable-xxxhdpi/splashscreen_logo.png: 65.0KB
-app/session/[id].tsx: 53.5KB
+package-lock.json: 299.2KB
+README.ru.md: 71.2KB
+HANDOFF.md: 64.6KB
+app/session/[id].tsx: 60.1KB
 app/(tabs)/index.tsx: 52.1KB
 assets/icon-appstore.png: 51.1KB
-README.ru.md: 48.3KB
-android/app/src/main/res/drawable-xxhdpi/splashscreen_logo.png: 46.0KB
-android/gradle/wrapper/gradle-wrapper.jar: 42.7KB
-HANDOFF.md: 39.0KB
+android/gradle/wrapper/gradle-wrapper.jar: 45.1KB
+README.md: 43.9KB
+src/stores/events.ts: 39.2KB
 src/lib/i18n/ru.json: 38.8KB
 
 === CI/CD PIPELINES ===
