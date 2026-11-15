@@ -34,7 +34,7 @@ export interface V2SessionInfo {
   cost?: number
   tokens?: { input?: number; output?: number; reasoning?: number; cache?: { read?: number; write?: number } }
   location?: { directory?: string }
-  time?: { created?: number; updated?: number; archived?: number }
+  time?: { created?: number; updated?: number; archived?: number; busy?: number; idle?: number }
   revert?: { messageID: string; partID?: string }
 }
 
@@ -128,6 +128,11 @@ export function mapSession(raw: V2SessionInfo | null | undefined, fallbackDirect
       created: source.time?.created ?? 0,
       updated: source.time?.updated ?? source.time?.created ?? 0,
       archived: source.time?.archived,
+      // Inside-mapSession fields, not decoration: a subagent row reads `idle` to
+      // tell "finished before this app connected" from "never started", and
+      // dropping it made every completed child read as Idle.
+      busy: source.time?.busy,
+      idle: source.time?.idle,
     },
     revert:
       source.revert?.messageID != null

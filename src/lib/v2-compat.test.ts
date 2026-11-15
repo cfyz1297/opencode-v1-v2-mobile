@@ -75,6 +75,11 @@ describe("mapSession", () => {
   it("falls back to the fallback directory when v2 has no location", () => {
     assert.equal(mapSession({ id: "ses_2", projectID: "p" }, "/fallback").directory, "/fallback")
   })
+  it("keeps busy/idle stamps — a subagent row's Done status depends on them", () => {
+    const session = mapSession({ id: "ses_3", projectID: "p", time: { created: 1, updated: 2, busy: 3, idle: 4 } })
+    assert.equal(session.time.busy, 3)
+    assert.equal(session.time.idle, 4)
+  })
 })
 
 describe("mapMessages", () => {

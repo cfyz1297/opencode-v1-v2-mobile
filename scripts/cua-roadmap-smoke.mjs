@@ -189,7 +189,9 @@ try {
   // child's own status, and open the child session on tap.
   await waitFor('Ping task')
   screenshot('subagent-row')
-  await tap('Ping task')
+  // By testID: the tool card's own header also reads "Ping task", and tapping
+  // that only expands the card — the earlier run failed exactly that way.
+  await tap('subagent-row-child-1')
   await waitFor('CHILD_ANSWER_77')
   screenshot('subagent-child-session')
   adb('shell', 'input', 'keyevent', 'KEYCODE_BACK')
