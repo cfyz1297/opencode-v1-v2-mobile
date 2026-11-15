@@ -26,9 +26,30 @@ export function toolTitle(tool: ToolLike, fallback: string): string {
   return (
     (isShellTool(tool.tool) ? toolCommand(tool.state?.input) : undefined) ||
     tool.state?.title ||
+    // A delegation's own name is what the reader needs ("Ping task"), and the
+    // server leaves it in the input rather than in a progress title.
+    delegatedDescription(tool) ||
     tool.tool ||
     fallback
   )
+}
+
+/** Description of the delegated task, if this tool launches a subagent. */
+export function delegatedDescription(tool: ToolLike): string | undefined {
+  if (tool.tool !== "subagent" && tool.tool !== "task") return undefined
+  const input = tool.state?.input
+  if (typeof input !== "object" || input === null) return undefined
+  const description = (input as Record<string, unknown>).description
+  return typeof description === "string" && description.length > 0 ? description : undefined
+}
+
+/** Delegated agent name ("general", "explore"), when the tool reports one. */
+export function delegatedAgent(tool: ToolLike): string | undefined {
+  if (tool.tool !== "subagent" && tool.tool !== "task") return undefined
+  const input = tool.state?.input
+  if (typeof input !== "object" || input === null) return undefined
+  const agent = (input as Record<string, unknown>).agent
+  return typeof agent === "string" && agent.length > 0 ? agent : undefined
 }
 
 function nonEmptyJson(value: unknown): string | undefined {

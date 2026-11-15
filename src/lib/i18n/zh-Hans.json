@@ -518,6 +518,18 @@
       "open": "会话信息与上下文占用",
       "totalCost": "本次会话总花费",
       "freeSession": "无费用"
+    },
+    "subagents": {
+      "title": "子代理",
+      "running": "运行中",
+      "done": "完成",
+      "failed": "失败",
+      "idle": "空闲",
+      "open": "打开子代理会话 {{title}}",
+      "justNow": "刚刚",
+      "minutesAgo": "{{count}} 分钟前",
+      "hoursAgo": "{{count}} 小时前",
+      "daysAgo": "{{count}} 天前"
     }
   },
   "providers": {

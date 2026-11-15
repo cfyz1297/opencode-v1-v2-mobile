@@ -4,7 +4,8 @@ import { Ionicons } from "@expo/vector-icons"
 import { useTranslation } from "react-i18next"
 import type { Part } from "../../lib/sdk"
 import { DiffView } from "./DiffView"
-import { isShellTool, toolCommand, toolDetailText, toolTitle } from "../../lib/tool-view"
+import { SubagentRow } from "./SubagentRow"
+import { delegatedAgent, delegatedDescription, isShellTool, toolCommand, toolDetailText, toolTitle } from "../../lib/tool-view"
 import { formatToolDuration } from "../../lib/tool-duration"
 
 const TOOL_ICONS: Record<string, string> = {
@@ -275,6 +276,7 @@ function ToolDetail({ tool, isDark }: { tool: Part; isDark: boolean }) {
     case "websearch":
       return <WebfetchDetail input={input} isDark={isDark} />
     case "task":
+    case "subagent":
       return <TaskDetail input={input} isDark={isDark} />
     case "todowrite":
       return <TodoDetail input={input} isDark={isDark} />
@@ -335,6 +337,10 @@ export function ToolCallCard({ tool, isDark }: Props) {
     !!error
   const title = toolTitle(tool, t("chat.toolCallCard.fallbackTitle"))
   const isCommand = isShellTool(tool.tool) && !!toolCommand(tool.state?.input)
+  // The subagent tool dispatches a child session and returns immediately, so
+  // its row is the only place the running agent is visible from the transcript.
+  const rawChildID = tool.state?.metadata?.sessionID
+  const childSessionID = typeof rawChildID === "string" && rawChildID.length > 0 ? rawChildID : undefined
 
   const toggle = useCallback(() => {
     if (hasDetail) setExpanded((v) => !v)
@@ -375,6 +381,19 @@ export function ToolCallCard({ tool, isDark }: Props) {
         {/* Error banner */}
         {error && !expanded && <ErrorBanner message={error} isDark={isDark} />}
       </TouchableOpacity>
+
+      {/* The delegated child session, always visible (not behind the chevron):
+          a background subagent that only shows up after expanding a card is the
+          same "invisible work" the row exists to fix. */}
+      {childSessionID && (
+        <SubagentRow
+          sessionID={childSessionID}
+          parentID={tool.sessionID}
+          agent={delegatedAgent(tool)}
+          fallbackTitle={delegatedDescription(tool)}
+          isDark={isDark}
+        />
+      )}
 
       {/* Expanded detail — grows with the row instead of scrolling inside it,
           so the transcript scrolls as one surface. */}

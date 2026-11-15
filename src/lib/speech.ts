@@ -86,11 +86,17 @@ export function useSpeech(onResult: (text: string) => void): SpeechState & Speec
   }, [])
 
   // Stop the native recognition session when the screen unmounts — otherwise
-  // the mic stays hot in the background. abort() is a no-op when not listening.
+  // the mic stays hot in the background. abort() is NOT a no-op when idle:
+  // Android emits a module-global "aborted" event that every mounted session
+  // screen receives, so only abort when this hook actually started listening.
+  const listeningRef = useRef(false)
+  useEffect(() => {
+    listeningRef.current = listening
+  }, [listening])
   useEffect(() => {
     return () => {
       userStarted.current = false
-      ExpoSpeechRecognitionModule.abort()
+      if (listeningRef.current) ExpoSpeechRecognitionModule.abort()
     }
   }, [])
 

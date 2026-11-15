@@ -275,6 +275,9 @@ function assistantParts(m: V2MessageBody, sid: string): Part[] {
           input: state.input,
           output,
           title: state.metadata?.title,
+          // The `subagent` tool reports its child session in metadata; without
+          // it the transcript cannot link to the session that is doing the work.
+          metadata: state.metadata,
           error: state.error
             ? { message: state.error.message ?? state.error.type ?? "error" }
             : undefined,

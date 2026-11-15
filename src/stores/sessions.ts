@@ -65,6 +65,11 @@ interface SessionsState {
   messages: Message[]
   parts: Record<string, Part[]>
   isLoading: boolean
+  // Subagent sessions, keyed by the session that spawned them. Loaded when a
+  // session screen opens and kept current by session.created events; children
+  // never enter `sessions`, which backs the root list only.
+  childrenByParent: Record<string, Session[]>
+  childrenLoading: Record<string, boolean>
   // Per-session optimistic sending flag — bridging gap between user tap and SSE busy
   sending: Record<string, boolean>
   loadingMore: boolean
@@ -73,6 +78,10 @@ interface SessionsState {
 
   // Actions
   loadSessions: () => Promise<void>
+  /** Fetch the subagent sessions of one parent (see childrenByParent). */
+  loadChildren: (parentID: string) => Promise<void>
+  /** Merge a child session delivered by a session.created event. */
+  addChildSession: (session: Session) => void
   selectSession: (sessionID: string, directory?: string) => Promise<void>
   loadOlderMessages: () => Promise<void>
   createSession: (title?: string) => Promise<Session | null>
@@ -128,6 +137,8 @@ function clientFor(directory?: string): Client | null {
 
 export const useSessions = create<SessionsState>((set, get) => ({
   sessions: [],
+  childrenByParent: {},
+  childrenLoading: {},
   currentSession: null,
   messages: [],
   parts: {},
@@ -159,12 +170,50 @@ export const useSessions = create<SessionsState>((set, get) => ({
       // BUG-010: merge by ID instead of wholesale replace — a session.created SSE
       // event that landed mid-flight must not be clobbered by a stale list fetch.
       const existingById = new Map(get().sessions.map((s) => [s.id, s]))
-      sessions.forEach((s) => existingById.set(s.id, s))
+      // A child must never be resurrected into the root list by a merge: drop
+      // any row that a live session.created already routed to childrenByParent.
+      sessions.filter((s) => !s.parentID).forEach((s) => existingById.set(s.id, s))
       set({ sessions: [...existingById.values()], isLoading: false })
     } catch (error) {
       if (epoch !== connectionEpoch) return
       set({ error: "Failed to load sessions", isLoading: false })
     }
+  },
+
+  loadChildren: async (parentID) => {
+    if (!parentID) return
+    const connState = useConnections.getState()
+    // Directory-less on purpose: the server resolves the parent's own location,
+    // so a child that lives in another workspace is still returned.
+    const client = connState.clientForDirectory(undefined) || connState.client
+    if (!client) return
+    set((state) => ({ childrenLoading: { ...state.childrenLoading, [parentID]: true } }))
+    try {
+      const children = await client.session.children(parentID)
+      set((state) => ({
+        childrenByParent: { ...state.childrenByParent, [parentID]: children },
+        childrenLoading: { ...state.childrenLoading, [parentID]: false },
+      }))
+    } catch {
+      // A failed fetch keeps whatever rows the event stream already delivered;
+      // the section simply has nothing to add this time.
+      set((state) => ({ childrenLoading: { ...state.childrenLoading, [parentID]: false } }))
+    }
+  },
+
+  addChildSession: (session) => {
+    const parentID = session.parentID
+    if (!parentID) return
+    set((state) => {
+      const current = state.childrenByParent[parentID] || []
+      const exists = current.some((s) => s.id === session.id)
+      return {
+        childrenByParent: {
+          ...state.childrenByParent,
+          [parentID]: exists ? current.map((s) => (s.id === session.id ? session : s)) : [session, ...current],
+        },
+      }
+    })
   },
 
   selectSession: async (sessionID, directory) => {

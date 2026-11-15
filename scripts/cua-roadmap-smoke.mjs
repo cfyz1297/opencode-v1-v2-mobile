@@ -96,6 +96,9 @@ function screenshot(name) {
 }
 const now = Date.now()
 const session = { id: 'roadmap-session', title: 'ROADMAP_SESSION', location: { directory: '/fixture' }, time: { created: now, updated: now } }
+// Delegated child session: same workspace as the parent, finished before the
+// app connected (idle stamp, no live status) — the row must still read "Done".
+const childSession = { id: 'child-1', parentID: 'roadmap-session', title: 'Ping task', location: { directory: '/fixture' }, time: { created: now, updated: now + 3, idle: now + 3 } }
 const other = { ...session, id: 'tablet-session-two', title: 'TABLET_SESSION_TWO', location: { directory: '/other' } }
 const requests = []
 const server = createServer((req, res) => {
@@ -110,13 +113,29 @@ const server = createServer((req, res) => {
   }
   let data
   if (path === '/api/info') data = { healthy: true, version: 'fixture-v2' }
+  // V2 filters children server-side; the app relies on that for subagent rows.
+  else if (path === '/api/session' && new URL(req.url, 'http://localhost').searchParams.get('parentID') === 'roadmap-session') data = { data: [childSession] }
+  else if (path === '/api/session/child-1') data = { data: childSession }
+  else if (path === '/api/session/child-1/message') data = { data: [{ id: 'c1', type: 'assistant', time: { created: now, completed: now }, content: [{ type: 'text', text: 'CHILD_ANSWER_77' }] }] }
+  else if (path === '/api/session/child-1/form' || path === '/api/session/child-1/permission' || path === '/api/session/child-1/diff') data = { data: [] }
   else if (path === '/api/location') data = { directory: '/fixture', project: { directory: '/fixture' } }
   else if (path === '/api/session') data = { data: [session, other] }
   else if (path === '/api/session/tablet-session-two') data = { data: other }
   else if (path === '/api/session/tablet-session-two/message') data = { data: [{ id: 'a2', type: 'assistant', time: { created: now, completed: now }, content: [{ type: 'text', text: 'TABLET_SECOND_ANSWER_44' }] }] }
   else if (path === '/api/session/roadmap-session') data = { data: session }
   else if (path === '/api/session/roadmap-session/message') data = { data: [
-    { id: 'a1', type: 'assistant', time: { created: now + 1, completed: now + 2 }, content: [{ type: 'text', text: 'OFFLINE_ANSWER_42' }] },
+    { id: 'a1', type: 'assistant', time: { created: now + 1, completed: now + 2 }, content: [
+      { type: 'text', text: 'OFFLINE_ANSWER_42' },
+      // A delegation: the child id travels in metadata, which is what makes
+      // the transcript row link to the child session.
+      { id: 'p_sub', type: 'tool', name: 'subagent', state: {
+        status: 'completed',
+        input: { agent: 'general', description: 'Ping task', prompt: 'Reply with PING' },
+        content: [{ type: 'text', text: 'The subagent is working in the background' }],
+        metadata: { sessionID: 'child-1', status: 'running' },
+        time: { start: now + 1, end: now + 2 },
+      } },
+    ] },
     { id: 'u1', type: 'user', time: { created: now }, text: 'OFFLINE_QUESTION_42' },
   ] }
   else if (path === '/api/agent') data = { data: [{ id: 'build', name: 'Build', mode: 'primary' }] }
@@ -166,6 +185,16 @@ try {
   await waitFor('OFFLINE_ANSWER_42')
   await sleep(2500)
   screenshot('session-phone')
+  // The delegation row must be visible without expanding the card, show the
+  // child's own status, and open the child session on tap.
+  await waitFor('Ping task')
+  screenshot('subagent-row')
+  await tap('Ping task')
+  await waitFor('CHILD_ANSWER_77')
+  screenshot('subagent-child-session')
+  adb('shell', 'input', 'keyevent', 'KEYCODE_BACK')
+  await sleep(800)
+  await waitFor('OFFLINE_ANSWER_42')
   // The chips are the only way to change model and reasoning effort, and a
   // sheet that silently never opens is invisible to the unit tests. Tapping
   // them, and checking the label really follows the choice, is the regression

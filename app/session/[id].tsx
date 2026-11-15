@@ -429,6 +429,9 @@ export default function SessionScreen() {
           ? connState.clientForDirectory(current.directory) ?? connState.client
           : connState.client
         if (c) refreshPending(c, id)
+        // Subagent rows in the transcript read from this map; a fresh run can
+        // have dispatched children while this screen was closed.
+        void useSessions.getState().loadChildren(id)
       })
       return () => {
         cancelled = true
@@ -654,7 +657,18 @@ export default function SessionScreen() {
       Alert.alert(t("session.alerts.cameraPermissionTitle"), t("session.alerts.cameraPermissionMessage"))
       return
     }
-    const result = await ImagePicker.launchCameraAsync({ quality: 1 })
+    // Same failure mode as the photo picker above: a ROM without a camera
+    // activity rejects the launch before any UI, and an unhandled rejection
+    // made the button do nothing at all.
+    let result
+    try {
+      result = await ImagePicker.launchCameraAsync({ quality: 1 })
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err)
+      log.error("ImagePicker", "camera launch failed:", reason)
+      Alert.alert(t("session.alerts.imageFailedTitle"), `${t("session.alerts.imageFailedMessage")}\n\n${reason}`)
+      return
+    }
     if (result.canceled) return
     const a = result.assets[0]
     try {

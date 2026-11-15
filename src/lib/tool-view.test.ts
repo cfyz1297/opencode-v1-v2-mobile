@@ -1,6 +1,6 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
-import { isShellTool, toolCommand, toolDetailText, toolTitle } from "./tool-view.ts"
+import { delegatedAgent, delegatedDescription, isShellTool, toolCommand, toolDetailText, toolTitle } from "./tool-view.ts"
 
 test("the 2.x `shell` tool is treated as a terminal command", () => {
   // Upstream servers name it `shell`; only `bash` used to match, so the row
@@ -41,4 +41,16 @@ test("string payloads are shown as-is and unserialisable input cannot throw", ()
   const circular: Record<string, unknown> = {}
   circular.self = circular
   assert.equal(toolDetailText(circular, undefined), undefined)
+})
+
+test("a subagent row is titled by the delegated task, not the tool name", () => {
+  const tool = { tool: "subagent", state: { input: { agent: "general", description: "Ping task", prompt: "..." } } }
+  assert.equal(toolTitle(tool, "Tool"), "Ping task")
+  assert.equal(delegatedDescription(tool), "Ping task")
+  assert.equal(delegatedAgent(tool), "general")
+  // 1.x called the same tool `task`; both must read the same way.
+  assert.equal(toolTitle({ tool: "task", state: { input: { description: "Explore repo" } } }, "Tool"), "Explore repo")
+  // A missing description must not turn into an empty header.
+  assert.equal(toolTitle({ tool: "subagent", state: { input: {} } }, "Tool"), "subagent")
+  assert.equal(delegatedAgent({ tool: "read", state: { input: { agent: "x" } } }), undefined)
 })

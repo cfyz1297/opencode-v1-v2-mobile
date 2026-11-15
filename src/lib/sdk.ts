@@ -63,6 +63,10 @@ export interface Session {
     updated: number
     compacting?: number
     archived?: number
+    // Stamped by the V2 server when a run starts/finishes. `idle` is the only
+    // evidence that a subagent session finished before this app connected.
+    busy?: number
+    idle?: number
   }
   summary?: {
     additions: number
@@ -153,6 +157,9 @@ export interface Part {
     title?: string
     error?: { message: string }
     time?: { start?: number; end?: number }
+    // Provider-supplied extras. `subagent` puts the child session id here
+    // (metadata.sessionID), which is what lets the transcript link to it.
+    metadata?: Record<string, unknown>
   }
   // Timing
   time?: { start?: number; end?: number }
@@ -222,6 +229,11 @@ export interface HealthResponse {
 }
 
 export { ApiError }
+
+// A stream that has not answered with headers by now is not going to: the
+// caller reports "connected" as soon as this resolves, so an indefinite wait
+// shows a healthy banner over a dead socket.
+const CONNECT_TIMEOUT_MS = 15_000
 
 function createV2Client(config: ClientConfig) {
   // Session IDs and switch choices belong to this connection. Sharing this
@@ -301,8 +313,28 @@ function createV2Client(config: ClientConfig) {
         // hold every event until the connection closes.
         headers["Accept-Encoding"] = "identity"
 
+        // The caller's signal stays authoritative for the whole stream; the
+        // connect timer needs its own controller so it can fire once and then
+        // stop mattering. Aborting the controller aborts the fetch the same way.
+        const connectController = new AbortController()
+        const forwardAbort = () => connectController.abort()
+        if (signal?.aborted) connectController.abort()
+        signal?.addEventListener("abort", forwardAbort)
+
         // Must use expo/fetch for ReadableStream support on native
-        const response = await expoFetch(url, { headers, signal })
+        //
+        // Headers must arrive within CONNECT_TIMEOUT_MS: a black-holed host
+        // accepts the socket and then never answers, so without this the
+        // stream hangs forever, no event ever arrives, and the caller has
+        // already reported "connected". Aborting here turns that into a normal
+        // reconnect cycle.
+        const connectTimeout = setTimeout(() => connectController.abort(), CONNECT_TIMEOUT_MS)
+        let response
+        try {
+          response = await expoFetch(url, { headers, signal: connectController.signal })
+        } finally {
+          clearTimeout(connectTimeout)
+        }
         if (!response.ok || !response.body) {
           throw apiErrorFor(response.status, `Failed to connect to event stream: ${response.status}`)
         }
@@ -367,6 +399,7 @@ function createV2Client(config: ClientConfig) {
           }
         } finally {
           reader.releaseLock()
+          signal?.removeEventListener("abort", forwardAbort)
         }
       },
     },
@@ -441,6 +474,20 @@ function createV2Client(config: ClientConfig) {
       get: (sessionID: string) => getSession(sessionID),
 
       list: listSessionsShaped,
+
+      // Direct children of one session (the `subagent` tool's sessions). V2
+      // filters server-side and, unlike the global list, keeps the requested
+      // parent: paging that list client-side would need every session on the
+      // server to find a handful of children.
+      children: async (parentID: string): Promise<Session[]> => {
+        const query = new URLSearchParams({ parentID, limit: "100" })
+        const body = await request<{ data?: V2SessionInfo[]; cursor?: { next?: string | null } }>(
+          config,
+          `/api/session?${query.toString()}`,
+        )
+        const rows = Array.isArray(body?.data) ? body.data : []
+        return rows.map((s) => mapSession(s, config.directory))
+      },
 
       create: async (params?: { title?: string }) => {
         // V2 creates the session at the server's own cwd when `location` is

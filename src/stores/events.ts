@@ -33,6 +33,9 @@ interface EventsState {
   lastDisconnectAt: number | null
   sessionStatus: Record<string, SessionStatus>
   statusText: Record<string, string>
+  // Last error per session, kept for the subagent row: a child that failed
+  // shows why without opening it. Cleared when that session starts a new run.
+  sessionErrors: Record<string, string>
   // Permissions & questions (pending per session)
   permissions: Record<
     string,
@@ -502,6 +505,7 @@ export const useEvents = create<EventsState>((set, get) => ({
   lastDisconnectAt: null,
   sessionStatus: {},
   statusText: {},
+  sessionErrors: {},
   permissions: {},
   questions: {},
   answeredQuestions: {},
@@ -664,6 +668,11 @@ export const useEvents = create<EventsState>((set, get) => ({
 
               set((state) => ({
                 sessionStatus: { ...state.sessionStatus, [sessionID]: status },
+                // A failed child stops showing "failed" once it runs again.
+                sessionErrors:
+                  status.type === "busy" && state.sessionErrors[sessionID]
+                    ? Object.fromEntries(Object.entries(state.sessionErrors).filter(([id]) => id !== sessionID))
+                    : state.sessionErrors,
                 // Clear status text when idle
                 statusText: status.type === "idle" ? { ...state.statusText, [sessionID]: "" } : state.statusText,
               }))
@@ -744,6 +753,13 @@ export const useEvents = create<EventsState>((set, get) => ({
             case "session.created": {
               const info = props.info as Session | undefined
               if (!info) break
+              // A subagent's session belongs to its parent, not to the Recent
+              // list: route it to the parent's children and stop. Without this
+              // every dispatched subagent popped up as a top-level session.
+              if (info.parentID) {
+                useSessions.getState().addChildSession(info)
+                break
+              }
               // Add to sessions list
               useSessions.setState((state) => {
                 const exists = state.sessions.some((s) => s.id === info.id)
@@ -768,6 +784,11 @@ export const useEvents = create<EventsState>((set, get) => ({
                 ...(state.currentSession?.id === sessionID
                   ? { error: error?.message || "Session error occurred" }
                   : {}),
+              }))
+              // Kept regardless of which session is open: the subagent row for
+              // this session reads it from the transcript.
+              set((state) => ({
+                sessionErrors: { ...state.sessionErrors, [sessionID]: error?.message || "Session error occurred" },
               }))
               if (useSessions.getState().currentSession?.id === sessionID) {
                 useSessions.getState().refreshMessages()
@@ -892,6 +913,7 @@ export const useEvents = create<EventsState>((set, get) => ({
       lastDisconnectAt: null,
       sessionStatus: {},
       statusText: {},
+      sessionErrors: {},
       permissions: {},
       questions: {},
       answeredQuestions: {},

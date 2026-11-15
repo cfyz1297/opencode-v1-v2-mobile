@@ -518,6 +518,18 @@
       "open": "Session info and context usage",
       "totalCost": "Total spent on this session",
       "freeSession": "no cost"
+    },
+    "subagents": {
+      "title": "Subagent",
+      "running": "Running",
+      "done": "Done",
+      "failed": "Failed",
+      "idle": "Idle",
+      "open": "Open subagent session {{title}}",
+      "justNow": "just now",
+      "minutesAgo": "{{count}} min ago",
+      "hoursAgo": "{{count}} h ago",
+      "daysAgo": "{{count}} d ago"
     }
   },
   "providers": {
