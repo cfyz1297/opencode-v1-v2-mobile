@@ -218,6 +218,20 @@ try {
   await waitFor('All: 3')
   screenshot('subagent-bar')
 
+  // Dark theme: the counters were white text on a light fill, i.e. invisible.
+  // Night mode recreates the activity, so reopen the session before the shot.
+  adb('shell', 'cmd', 'uimode', 'night', 'yes')
+  await sleep(1500)
+  await open('session/roadmap-session')
+  await waitFor('Now: 2')
+  await sleep(800)
+  screenshot('subagent-bar-dark')
+  adb('shell', 'cmd', 'uimode', 'night', 'no')
+  await sleep(1500)
+  await open('session/roadmap-session')
+  await waitFor('Now: 2')
+  await sleep(600)
+
   await tap('subagents-current')
   await sleep(700)
   await waitFor('subagent-bar-row-child-new')

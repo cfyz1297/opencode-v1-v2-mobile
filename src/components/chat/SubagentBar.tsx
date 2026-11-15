@@ -61,13 +61,20 @@ export function SubagentBar({ refs, isDark }: Props) {
           activeOpacity={0.7}
           accessibilityRole="button"
           accessibilityLabel={t("chat.subagents.now", { count: current.length })}
-          style={[s.button, open === "current" && s.buttonOpen, running > 0 && s.buttonActive]}
+          style={[
+            s.button,
+            isDark && s.buttonDark,
+            open === "current" && s.buttonOpen,
+            open === "current" && isDark && s.buttonOpenDark,
+            running > 0 && s.buttonActive,
+            running > 0 && isDark && s.buttonActiveDark,
+          ]}
           testID="subagents-current"
         >
           {running > 0 ? (
-            <ActivityIndicator size="small" color="#f59e0b" />
+            <ActivityIndicator size={18} color="#f59e0b" />
           ) : (
-            <Ionicons name="checkmark-circle-outline" size={16} color="#22c55e" />
+            <Ionicons name="checkmark-circle-outline" size={18} color="#22c55e" />
           )}
           <Text style={[s.buttonText, isDark && s.buttonTextDark]} numberOfLines={1}>
             {t("chat.subagents.now", { count: current.length })}
@@ -79,17 +86,22 @@ export function SubagentBar({ refs, isDark }: Props) {
           activeOpacity={0.7}
           accessibilityRole="button"
           accessibilityLabel={t("chat.subagents.total", { count: refs.length })}
-          style={[s.button, open === "all" && s.buttonOpen]}
+          style={[
+            s.button,
+            isDark && s.buttonDark,
+            open === "all" && s.buttonOpen,
+            open === "all" && isDark && s.buttonOpenDark,
+          ]}
           testID="subagents-all"
         >
-          <Ionicons name="git-branch-outline" size={14} color={isDark ? "#a78bfa" : "#6d28d9"} />
+          <Ionicons name="git-branch-outline" size={17} color={isDark ? "#a78bfa" : "#6d28d9"} />
           <Text style={[s.buttonText, isDark && s.buttonTextDark]} numberOfLines={1}>
             {t("chat.subagents.total", { count: refs.length })}
           </Text>
           <Ionicons
             name={open === "all" ? "chevron-up" : "chevron-down"}
-            size={12}
-            color={isDark ? "#666666" : "#999999"}
+            size={14}
+            color={isDark ? "#888888" : "#999999"}
           />
         </TouchableOpacity>
       </View>
@@ -122,19 +134,26 @@ export function SubagentBar({ refs, isDark }: Props) {
 const s = StyleSheet.create({
   wrap: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#e5e5e5", paddingHorizontal: 12 },
   wrapDark: { borderBottomColor: "#2a2a2a" },
-  buttons: { flexDirection: "row", gap: 8, paddingVertical: 6 },
+  // Right-aligned and a touch larger than body text: the counters are status,
+  // read at a glance, not labels to hunt for on the left.
+  buttons: { flexDirection: "row", justifyContent: "flex-end", gap: 10, paddingVertical: 8 },
   button: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-    borderRadius: 12,
+    gap: 6,
+    paddingHorizontal: 13,
+    paddingVertical: 7,
+    borderRadius: 16,
     backgroundColor: "#f2f2f2",
   },
+  // The dark theme needs its own fills: white text on the light grey above was
+  // invisible, and the amber "working" pill needs a dark amber, not cream.
+  buttonDark: { backgroundColor: "#262626" },
   buttonOpen: { borderWidth: 1, borderColor: "#c4b5fd" },
+  buttonOpenDark: { borderColor: "#7c3aed" },
   buttonActive: { backgroundColor: "#fef3c7" },
-  buttonText: { fontSize: 11, fontWeight: "600", color: "#0a0a0a" },
+  buttonActiveDark: { backgroundColor: "#3d2f12" },
+  buttonText: { fontSize: 13, fontWeight: "600", color: "#0a0a0a" },
   buttonTextDark: { color: "#ffffff" },
   list: { maxHeight: 260, marginBottom: 6 },
   listContent: { paddingBottom: 2 },
