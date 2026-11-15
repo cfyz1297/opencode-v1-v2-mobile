@@ -530,8 +530,8 @@
       "minutesAgo": "{{count}} 分钟前",
       "hoursAgo": "{{count}} 小时前",
       "daysAgo": "{{count}} 天前",
-      "working": "运行中：{{count}}",
-      "total": "子代理：{{count}}"
+      "total": "全部：{{count}}",
+      "now": "当前：{{count}}"
     }
   },
   "providers": {

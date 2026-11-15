@@ -4,7 +4,12 @@ import { Ionicons } from "@expo/vector-icons"
 import { useTranslation } from "react-i18next"
 import { useEvents } from "../../stores/events"
 import { useSessions } from "../../stores/sessions"
-import { deriveSubagentStatus, orderSubagents, type SubagentRef } from "../../lib/subagent-status"
+import {
+  deriveSubagentStatus,
+  orderSubagents,
+  visibleSubagents,
+  type SubagentRef,
+} from "../../lib/subagent-status"
 import { SubagentRow } from "./SubagentRow"
 
 interface Props {
@@ -12,18 +17,23 @@ interface Props {
   isDark: boolean
 }
 
+type View_ = "current" | "all"
+
 /**
- * Two counters under the header: what is working right now, and everything this
- * session has delegated. Tapping either opens the same list — running rows
- * first, then call order — because "who is working" and "who worked" are the
- * same question asked at two moments.
+ * Two counters under the header:
  *
- * Rendered only when the session has delegated at least once, so a plain chat
- * keeps its full height.
+ *   left  — the current batch: the subagents delegated by the latest prompt,
+ *           running and just finished alike, plus anything still working from
+ *           an earlier prompt (a long-running child must not vanish when a new
+ *           batch starts). Spinner while any of them works, check once none does.
+ *   right — every subagent this session has delegated, in call order.
+ *
+ * Both open the same list component over their own set, running rows first, so
+ * "who is working" and "who worked" stay one tap apart.
  */
 export function SubagentBar({ refs, isDark }: Props) {
   const { t } = useTranslation()
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState<View_ | null>(null)
   const live = useEvents((s) => s.sessionStatus)
   const errors = useEvents((s) => s.sessionErrors)
   const children = useSessions((s) => s.childrenByParent)
@@ -36,22 +46,23 @@ export function SubagentBar({ refs, isDark }: Props) {
       live[ref.sessionID],
       errors[ref.sessionID],
     )
-  const running = refs.filter((ref) => statusOf(ref) === "running").length
-  const ordered = orderSubagents(refs, statusOf)
 
-  const toggle = () => setOpen((value) => !value)
+  const current = visibleSubagents(refs, statusOf)
+  const running = refs.filter((ref) => statusOf(ref) === "running").length
+  const shown = open === "all" ? orderSubagents(refs, statusOf) : orderSubagents(current, statusOf)
+
+  const toggle = (view: View_) => setOpen((value) => (value === view ? null : view))
 
   return (
     <View style={[s.wrap, isDark && s.wrapDark]}>
       <View style={s.buttons}>
-        {/* What is running now: spinner while it works, check once nothing is. */}
         <TouchableOpacity
-          onPress={toggle}
+          onPress={() => toggle("current")}
           activeOpacity={0.7}
           accessibilityRole="button"
-          accessibilityLabel={t("chat.subagents.working", { count: running })}
-          style={[s.button, running > 0 && s.buttonActive]}
-          testID="subagents-running"
+          accessibilityLabel={t("chat.subagents.now", { count: current.length })}
+          style={[s.button, open === "current" && s.buttonOpen, running > 0 && s.buttonActive]}
+          testID="subagents-current"
         >
           {running > 0 ? (
             <ActivityIndicator size="small" color="#f59e0b" />
@@ -59,17 +70,16 @@ export function SubagentBar({ refs, isDark }: Props) {
             <Ionicons name="checkmark-circle-outline" size={16} color="#22c55e" />
           )}
           <Text style={[s.buttonText, isDark && s.buttonTextDark]} numberOfLines={1}>
-            {t("chat.subagents.working", { count: running })}
+            {t("chat.subagents.now", { count: current.length })}
           </Text>
         </TouchableOpacity>
 
-        {/* Everything this session delegated. */}
         <TouchableOpacity
-          onPress={toggle}
+          onPress={() => toggle("all")}
           activeOpacity={0.7}
           accessibilityRole="button"
           accessibilityLabel={t("chat.subagents.total", { count: refs.length })}
-          style={s.button}
+          style={[s.button, open === "all" && s.buttonOpen]}
           testID="subagents-all"
         >
           <Ionicons name="git-branch-outline" size={14} color={isDark ? "#a78bfa" : "#6d28d9"} />
@@ -77,22 +87,22 @@ export function SubagentBar({ refs, isDark }: Props) {
             {t("chat.subagents.total", { count: refs.length })}
           </Text>
           <Ionicons
-            name={open ? "chevron-up" : "chevron-down"}
+            name={open === "all" ? "chevron-up" : "chevron-down"}
             size={12}
             color={isDark ? "#666666" : "#999999"}
           />
         </TouchableOpacity>
       </View>
 
-      {open && (
+      {open !== null && (
         <ScrollView
           style={s.list}
-          // Long sessions can delegate many times; the bar must not eat the
+          // A long session can delegate many times; the bar must not eat the
           // transcript, so the list stops at about six rows and scrolls.
           contentContainerStyle={s.listContent}
           nestedScrollEnabled
         >
-          {ordered.map((ref) => (
+          {shown.map((ref) => (
             <SubagentRow
               key={ref.sessionID}
               sessionID={ref.sessionID}
@@ -122,6 +132,7 @@ const s = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: "#f2f2f2",
   },
+  buttonOpen: { borderWidth: 1, borderColor: "#c4b5fd" },
   buttonActive: { backgroundColor: "#fef3c7" },
   buttonText: { fontSize: 11, fontWeight: "600", color: "#0a0a0a" },
   buttonTextDark: { color: "#ffffff" },

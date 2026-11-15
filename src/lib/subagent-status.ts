@@ -28,7 +28,14 @@ export function deriveSubagentStatus(
 ): SubagentStatus {
   if (error) return "failed"
   if (live?.type === "busy" || live?.type === "retry") return "running"
-  if (child?.time?.idle) return "done"
+  // No live status (a cold open, or a child that never emitted an event to this
+  // client): the run stamps are the next best evidence. A busy stamp newer than
+  // the idle one means the child is still working — without this a running
+  // subagent read as Idle until it happened to emit the next event.
+  const busy = child?.time?.busy
+  const idle = child?.time?.idle
+  if (busy !== undefined && (idle === undefined || busy > idle)) return "running"
+  if (idle) return "done"
   return "idle"
 }
 
@@ -53,6 +60,12 @@ export interface SubagentRef {
   parentID?: string
   agent?: string
   title?: string
+  /**
+   * Which user turn delegated it. One turn can spawn several subagents (a
+   * fan-out), and the next turn starts a new wave — that is the boundary the
+   * "current" button uses.
+   */
+  wave: number
 }
 
 type PartLike = {
@@ -74,10 +87,18 @@ function inputString(input: unknown, key: string): string | undefined {
  * Every delegated subagent in the transcript, in the order it was called. The
  * child session id lives in the tool part's metadata (see v2-compat), so a
  * transcript restored from the server lists exactly the subagents its cards do.
+ *
+ * `items` must be chronological. Each user message opens a new wave, so
+ * subagents delegated by one prompt group together and a later prompt starts
+ * the next batch.
  */
-export function collectSubagents(items: ReadonlyArray<{ parts: readonly PartLike[] }>): SubagentRef[] {
+export function collectSubagents(
+  items: ReadonlyArray<{ message?: { role?: string }; parts: readonly PartLike[] }>,
+): SubagentRef[] {
   const out: SubagentRef[] = []
+  let wave = 0
   for (const item of items) {
+    if (item.message?.role === "user") wave++
     for (const part of item.parts ?? []) {
       if (part.type !== "tool") continue
       const tool = (part as { tool?: string }).tool
@@ -90,10 +111,25 @@ export function collectSubagents(items: ReadonlyArray<{ parts: readonly PartLike
         parentID: part.sessionID,
         agent: inputString(part.state?.input, "agent"),
         title: inputString(part.state?.input, "description") ?? inputString(part.state?.input, "prompt"),
+        wave,
       })
     }
   }
   return out
+}
+
+/**
+ * What the "current" button opens: the latest wave (running and just finished
+ * alike) plus anything still working from an earlier wave — a long-running
+ * subagent must never disappear from the counter when a new batch starts.
+ */
+export function visibleSubagents(
+  refs: readonly SubagentRef[],
+  statusOf: (ref: SubagentRef) => SubagentStatus,
+): SubagentRef[] {
+  if (refs.length === 0) return []
+  const latest = refs.reduce((max, ref) => Math.max(max, ref.wave), refs[0].wave)
+  return refs.filter((ref) => ref.wave === latest || statusOf(ref) === "running")
 }
 
 /**

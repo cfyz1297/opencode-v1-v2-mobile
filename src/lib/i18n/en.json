@@ -530,8 +530,8 @@
       "minutesAgo": "{{count}} min ago",
       "hoursAgo": "{{count}} h ago",
       "daysAgo": "{{count}} d ago",
-      "working": "Working: {{count}}",
-      "total": "Subagents: {{count}}"
+      "total": "All: {{count}}",
+      "now": "Now: {{count}}"
     }
   },
   "providers": {

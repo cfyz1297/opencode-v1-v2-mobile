@@ -97,8 +97,27 @@ function screenshot(name) {
 const now = Date.now()
 const session = { id: 'roadmap-session', title: 'ROADMAP_SESSION', location: { directory: '/fixture' }, time: { created: now, updated: now } }
 // Delegated child session: same workspace as the parent, finished before the
-// app connected (idle stamp, no live status) — the row must still read "Done".
-const childSession = { id: 'child-1', parentID: 'roadmap-session', title: 'Ping task', location: { directory: '/fixture' }, time: { created: now, updated: now + 3, idle: now + 3 } }
+// Three delegated subagents, one per user turn, so the bar can be checked
+// against the real question: which of them belong to "now"?
+//   child-old   wave 1, idle stamp        -> Done, and only in "All"
+//   child-busy  wave 2, busy, no idle     -> Running, and still in "Now"
+//   child-new   wave 3, idle stamp        -> Done, the current batch
+const childOld = { id: 'child-old', parentID: 'roadmap-session', title: 'Old task', location: { directory: '/fixture' }, time: { created: now, updated: now + 3, idle: now + 3 } }
+const childBusy = { id: 'child-busy', parentID: 'roadmap-session', title: 'Busy task', location: { directory: '/fixture' }, time: { created: now + 10, updated: now + 10, busy: now + 10 } }
+const childNew = { id: 'child-new', parentID: 'roadmap-session', title: 'New task', location: { directory: '/fixture' }, time: { created: now + 20, updated: now + 23, idle: now + 23 } }
+const childSessions = [childOld, childBusy, childNew]
+// A `subagent` tool part as the V2 server reports it: the child id travels in
+// metadata, which is what lets a card or the bar link to the child session.
+const delegationPart = (id, childID, description) => ({
+  id, type: 'tool', name: 'subagent',
+  state: {
+    status: 'completed',
+    input: { agent: 'general', description, prompt: `Do ${description}` },
+    content: [{ type: 'text', text: 'The subagent is working in the background' }],
+    metadata: { sessionID: childID, status: 'running' },
+    time: { start: now + 1, end: now + 2 },
+  },
+})
 const other = { ...session, id: 'tablet-session-two', title: 'TABLET_SESSION_TWO', location: { directory: '/other' } }
 const requests = []
 const server = createServer((req, res) => {
@@ -114,27 +133,32 @@ const server = createServer((req, res) => {
   let data
   if (path === '/api/info') data = { healthy: true, version: 'fixture-v2' }
   // V2 filters children server-side; the app relies on that for subagent rows.
-  else if (path === '/api/session' && new URL(req.url, 'http://localhost').searchParams.get('parentID') === 'roadmap-session') data = { data: [childSession] }
-  else if (path === '/api/session/child-1') data = { data: childSession }
-  else if (path === '/api/session/child-1/message') data = { data: [{ id: 'c1', type: 'assistant', time: { created: now, completed: now }, content: [{ type: 'text', text: 'CHILD_ANSWER_77' }] }] }
-  else if (path === '/api/session/child-1/form' || path === '/api/session/child-1/permission' || path === '/api/session/child-1/diff') data = { data: [] }
+  else if (path === '/api/session' && new URL(req.url, 'http://localhost').searchParams.get('parentID') === 'roadmap-session') data = { data: childSessions }
+  // Each child opens like any other session, with its own transcript.
+  else if (/^\/api\/session\/child-(old|busy|new)$/.test(path)) data = { data: childSessions.find((c) => c.id === path.split('/').pop()) }
+  else if (/^\/api\/session\/child-(old|busy|new)\/message$/.test(path)) data = { data: [{ id: 'c1', type: 'assistant', time: { created: now, completed: now }, content: [{ type: 'text', text: `CHILD_ANSWER_${path.includes('busy') ? 'BUSY' : '77'}` }] }] }
+  else if (/^\/api\/session\/child-(old|busy|new)\/(form|permission|diff)$/.test(path)) data = { data: [] }
   else if (path === '/api/location') data = { directory: '/fixture', project: { directory: '/fixture' } }
   else if (path === '/api/session') data = { data: [session, other] }
   else if (path === '/api/session/tablet-session-two') data = { data: other }
   else if (path === '/api/session/tablet-session-two/message') data = { data: [{ id: 'a2', type: 'assistant', time: { created: now, completed: now }, content: [{ type: 'text', text: 'TABLET_SECOND_ANSWER_44' }] }] }
   else if (path === '/api/session/roadmap-session') data = { data: session }
+  // Newest first, as the V2 endpoint returns them. Each user turn opens a wave:
+  // (u1, a1) -> child-old, (u2, a2) -> child-busy, (u3, a3) -> child-new.
   else if (path === '/api/session/roadmap-session/message') data = { data: [
-    { id: 'a1', type: 'assistant', time: { created: now + 1, completed: now + 2 }, content: [
+    { id: 'a3', type: 'assistant', time: { created: now + 21, completed: now + 22 }, content: [
       { type: 'text', text: 'OFFLINE_ANSWER_42' },
-      // A delegation: the child id travels in metadata, which is what makes
-      // the transcript row link to the child session.
-      { id: 'p_sub', type: 'tool', name: 'subagent', state: {
-        status: 'completed',
-        input: { agent: 'general', description: 'Ping task', prompt: 'Reply with PING' },
-        content: [{ type: 'text', text: 'The subagent is working in the background' }],
-        metadata: { sessionID: 'child-1', status: 'running' },
-        time: { start: now + 1, end: now + 2 },
-      } },
+      delegationPart('p_sub_new', 'child-new', 'New task'),
+    ] },
+    { id: 'u3', type: 'user', time: { created: now + 20 }, text: 'OFFLINE_QUESTION_43' },
+    { id: 'a2', type: 'assistant', time: { created: now + 11, completed: now + 12 }, content: [
+      { type: 'text', text: 'DELEGATED_SECOND' },
+      delegationPart('p_sub_busy', 'child-busy', 'Busy task'),
+    ] },
+    { id: 'u2', type: 'user', time: { created: now + 10 }, text: 'OFFLINE_QUESTION_44' },
+    { id: 'a1', type: 'assistant', time: { created: now + 1, completed: now + 2 }, content: [
+      { type: 'text', text: 'DELEGATED_FIRST' },
+      delegationPart('p_sub_old', 'child-old', 'Old task'),
     ] },
     { id: 'u1', type: 'user', time: { created: now }, text: 'OFFLINE_QUESTION_42' },
   ] }
@@ -185,23 +209,42 @@ try {
   await waitFor('OFFLINE_ANSWER_42')
   await sleep(2500)
   screenshot('session-phone')
-  // The delegation row must be visible without expanding the card, show the
-  // child's own status, and open the child session on tap.
-  await waitFor('Ping task')
-  // The bar under the header counts what is working and what was delegated.
-  await waitFor('Subagents: 1')
+  // The delegation rows are visible without expanding the cards.
+  await waitFor('New task')
+  // "Now" is the latest batch plus anything still working from before:
+  // child-new (wave 3) + child-busy (wave 2, still running). child-old is done
+  // and belongs to an earlier batch, so it must NOT be counted here.
+  await waitFor('Now: 2')
+  await waitFor('All: 3')
   screenshot('subagent-bar')
+
+  await tap('subagents-current')
+  await sleep(700)
+  await waitFor('subagent-bar-row-child-new')
+  await waitFor('subagent-bar-row-child-busy')
+  assert.ok(
+    !snapshot().includes('subagent-bar-row-child-old'),
+    'a finished subagent from an earlier batch stays out of the current list',
+  )
+  screenshot('subagent-bar-current')
+  await tap('subagents-current')
+  await sleep(400)
+
+  // "All" is every subagent of the session, call order, running first.
   await tap('subagents-all')
   await sleep(700)
-  await waitFor('subagent-bar-row-child-1')
+  for (const id of ['child-old', 'child-busy', 'child-new']) {
+    await waitFor(`subagent-bar-row-${id}`)
+  }
   screenshot('subagent-bar-open')
   await tap('subagents-all')
-  await sleep(500)
+  await sleep(400)
   screenshot('subagent-row')
-  // By testID: the tool card's own header also reads "Ping task", and tapping
-  // that only expands the card — the earlier run failed exactly that way.
-  await tap('subagent-row-child-1')
-  await waitFor('CHILD_ANSWER_77')
+
+  // A child that never emitted an event still reads Running from its busy
+  // stamp, and opens like any session.
+  await tap('subagent-row-child-busy')
+  await waitFor('CHILD_ANSWER_BUSY')
   screenshot('subagent-child-session')
   adb('shell', 'input', 'keyevent', 'KEYCODE_BACK')
   await sleep(800)

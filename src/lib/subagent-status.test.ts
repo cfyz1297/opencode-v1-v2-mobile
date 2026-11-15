@@ -2,9 +2,10 @@
 // "finished" without the parent tool part, which completes at dispatch time.
 import { test } from "node:test"
 import assert from "node:assert/strict"
-import { collectSubagents, deriveSubagentStatus, orderSubagents, summarizeSubagents } from "./subagent-status.ts"
+import { collectSubagents, deriveSubagentStatus, orderSubagents, summarizeSubagents, visibleSubagents } from "./subagent-status.ts"
 
 const child = (idle?: number) => ({ time: { created: 1, updated: 2, ...(idle ? { idle } : {}) } })
+const stamped = (busy: number, idle?: number) => ({ time: { created: 1, updated: 2, busy, ...(idle ? { idle } : {}) } })
 
 test("a child with a live busy status is running even though it has no idle stamp", () => {
   assert.equal(deriveSubagentStatus(child(), { type: "busy" }, undefined), "running")
@@ -60,4 +61,52 @@ test("a running subagent is never buried under finished ones", () => {
   ])
   const ordered = orderSubagents(refs, (ref) => (ref.sessionID === "c3" ? "running" : "done"))
   assert.deepEqual(ordered.map((r) => r.sessionID), ["c3", "c1", "c2"])
+})
+
+// A wave is one user turn: the prompt that delegated the batch.
+const turn = (role: string, parts: unknown[]) => ({ message: { role }, parts: parts as never })
+const done = () => "done" as const
+const busy = () => "running" as const
+
+test("one subagent in the only turn: one in the current batch", () => {
+  const refs = collectSubagents([turn("user", []), turn("assistant", [part("c1")])])
+  const current = visibleSubagents(refs, done)
+  assert.equal(current.length, 1)
+  assert.equal(refs.length, 1)
+})
+
+test("three in one turn, two finished: all three stay in the current batch", () => {
+  const refs = collectSubagents([
+    turn("user", []),
+    turn("assistant", [part("c1", 1), part("c2", 2), part("c3", 3)]),
+  ])
+  const statusOf = (ref: { sessionID: string }) => (ref.sessionID === "c3" ? busy() : done())
+  const current = visibleSubagents(refs, statusOf)
+  assert.deepEqual(current.map((r) => r.sessionID), ["c1", "c2", "c3"])
+  assert.deepEqual(orderSubagents(current, statusOf).map((r) => r.sessionID), ["c3", "c1", "c2"])
+})
+
+test("a new turn shows its own batch plus the subagent still working from the last one", () => {
+  const refs = collectSubagents([
+    turn("user", []),
+    turn("assistant", [part("old-done", 1), part("old-running", 2)]),
+    // The user asks again while old-running is still going.
+    turn("user", []),
+    turn("assistant", [part("new-1", 3), part("new-2", 4)]),
+  ])
+  const statusOf = (ref: { sessionID: string }) =>
+    ref.sessionID === "old-running" || ref.sessionID === "new-2" ? busy() : done()
+  const current = visibleSubagents(refs, statusOf)
+  // The earlier finished one drops out; the earlier running one stays.
+  assert.deepEqual(current.map((r) => r.sessionID), ["old-running", "new-1", "new-2"])
+  // "All" still lists every one of them.
+  assert.equal(refs.length, 4)
+})
+
+test("without a live status, a busy stamp newer than idle means still working", () => {
+  // The cold-open case: no event reached this client, but the run stamps did.
+  assert.equal(deriveSubagentStatus(stamped(10), undefined, undefined), "running")
+  assert.equal(deriveSubagentStatus(stamped(10, 5), undefined, undefined), "running")
+  // A run that started and then finished reads as done.
+  assert.equal(deriveSubagentStatus(stamped(5, 10), undefined, undefined), "done")
 })

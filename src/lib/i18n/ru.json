@@ -530,8 +530,8 @@
       "minutesAgo": "{{count}} мин назад",
       "hoursAgo": "{{count}} ч назад",
       "daysAgo": "{{count}} дн назад",
-      "working": "В работе: {{count}}",
-      "total": "Сабагентов: {{count}}"
+      "total": "Всего: {{count}}",
+      "now": "Сейчас: {{count}}"
     }
   },
   "providers": {
