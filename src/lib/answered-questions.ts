@@ -44,18 +44,17 @@ export function formatAnswer(answers: readonly string[][]): string {
 }
 
 /**
- * Group answered questions by the message that asked them. The chat renders
- * each group right after that message's bubble, which is where the question
- * appeared; entries without a tool reference (V1) stay unplaced and are drawn
- * above the composer as before.
+ * Group requests by the message that asked them. Entries without a tool
+ * reference (V1) stay unplaced.
  */
-export function splitAnswered<R extends AnsweredQuestionRequest>(
-  list: readonly AnsweredQuestion<R>[],
-): { byMessage: Map<string, Array<AnsweredQuestion<R>>>; unplaced: Array<AnsweredQuestion<R>> } {
-  const byMessage = new Map<string, Array<AnsweredQuestion<R>>>()
-  const unplaced: Array<AnsweredQuestion<R>> = []
+export function splitByMessage<R>(
+  list: readonly R[],
+  requestOf: (item: R) => AnsweredQuestionRequest,
+): { byMessage: Map<string, R[]>; unplaced: R[] } {
+  const byMessage = new Map<string, R[]>()
+  const unplaced: R[] = []
   for (const item of list) {
-    const messageID = item.request.tool?.messageID
+    const messageID = requestOf(item).tool?.messageID
     if (!messageID) {
       unplaced.push(item)
       continue
@@ -65,4 +64,16 @@ export function splitAnswered<R extends AnsweredQuestionRequest>(
     else byMessage.set(messageID, [item])
   }
   return { byMessage, unplaced }
+}
+
+/**
+ * Group answered questions by the message that asked them. The chat renders
+ * each group right after that message's bubble, which is where the question
+ * appeared; entries without a tool reference (V1) stay unplaced and are drawn
+ * above the composer as before.
+ */
+export function splitAnswered<R extends AnsweredQuestionRequest>(
+  list: readonly AnsweredQuestion<R>[],
+): { byMessage: Map<string, AnsweredQuestion<R>[]>; unplaced: Array<AnsweredQuestion<R>> } {
+  return splitByMessage(list, (item) => item.request)
 }

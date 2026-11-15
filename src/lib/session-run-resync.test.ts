@@ -636,6 +636,26 @@ test("a permission request created while backgrounded reaches the shade", async 
   assert.equal(app.notified.filter((n) => n.category === "permissions").length, 1)
 })
 
+test("a question from another session never lands in the one on screen", async () => {
+  const app = harness()
+  app.setActive([SESSION])
+  app.setBusy()
+  app.connect()
+  await app.settle()
+  await app.push(busyEvent)
+
+  // A second session asks; the viewed transcript must stay clean.
+  const OTHER = "ses_other"
+  await app.push({ type: "question.asked", properties: { id: "q2", sessionID: OTHER, questions: [] } })
+
+  assert.deepEqual(app.events.getState().questions[SESSION] ?? [], [])
+  assert.equal(app.events.getState().questions[OTHER]?.length, 1)
+  // The alert names the session that asked, so a tap opens the right one.
+  const alerts = app.notified.filter((n) => n.category === "questions")
+  assert.equal(alerts.length, 1)
+  assert.equal(alerts[0].sessionId, OTHER)
+})
+
 test("the same prompt never notifies twice, whether it arrives over SSE or the poll", async () => {
   const app = harness()
   app.setActive([SESSION])

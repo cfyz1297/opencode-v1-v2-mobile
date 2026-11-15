@@ -19,7 +19,7 @@ import { Ionicons } from "@expo/vector-icons"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { useKeyboardHeight } from "../../src/lib/use-keyboard-height"
 import { buildMessageData, type MessageDataItem } from "../../src/lib/revert-filter"
-import { splitAnswered } from "../../src/lib/answered-questions"
+import { splitAnswered, splitByMessage } from "../../src/lib/answered-questions"
 import { bubbleFlags, runTotals } from "../../src/lib/message-run"
 import { shouldFollowBottom } from "../../src/lib/scroll-follow"
 import { useTranslation } from "react-i18next"
@@ -197,6 +197,10 @@ export default function SessionScreen() {
   // Cards stay where the question was asked (V2 names the message), not above
   // the composer below the newest answer.
   const answered = useMemo(() => splitAnswered(answeredQuestions), [answeredQuestions])
+  // A pending question blocks the run, so it must never be off-screen: it is
+  // drawn under the message that asked it (like the answered card) and the
+  // transcript jumps to it when it arrives.
+  const pending = useMemo(() => splitByMessage(questions, (q) => q), [questions])
   const sessionBusy = useEvents((s) => (sessionID ? s.sessionStatus[sessionID]?.type === "busy" : false))
   const canStop = isSending || sessionBusy
 
@@ -458,6 +462,16 @@ export default function SessionScreen() {
     }, 5000)
     return () => clearInterval(timer)
   }, [shouldPollPending, sessionID, sessionClient])
+
+  // A pending question blocks the run, and the card sits under the message that
+  // asked it. Jump there when it arrives: a prompt the user has to hunt for is
+  // a prompt that stalls the session.
+  const pendingCount = questions.length
+  useEffect(() => {
+    if (pendingCount === 0) return
+    followBottomRef.current = true
+    flatListRef.current?.scrollToOffset({ offset: 0, animated: true })
+  }, [pendingCount])
 
   // Sync model chip from latest assistant message
   useEffect(() => {
@@ -1024,6 +1038,19 @@ export default function SessionScreen() {
                       isDark={isDark}
                     />
                   ))}
+                  {/* An unanswered question keeps the run blocked until it is
+                      answered, so it is drawn in place too — at the bottom of
+                      the transcript it was invisible whenever the user had
+                      scrolled up. */}
+                  {pending.byMessage.get(item.message.id)?.map((request) => (
+                    <QuestionPrompt
+                      key={request.id}
+                      request={request}
+                      isDark={isDark}
+                      onReply={(answers) => handleQuestionReply(request.id, answers)}
+                      onReject={() => handleQuestionReject(request.id)}
+                    />
+                  ))}
                 </View>
               )}
               contentContainerStyle={s.messageList}
@@ -1100,7 +1127,9 @@ export default function SessionScreen() {
             />
           ))}
 
-          {questions.map((q) => (
+          {/* Pending questions without a tool reference (V1) stay above the
+              composer; placed ones are drawn under the asking message. */}
+          {pending.unplaced.map((q) => (
             <QuestionPrompt
               key={q.id}
               request={q}

@@ -87,7 +87,9 @@ test("the question card scrolls so the composer stays visible", () => {
   const promptAreaEnd = source.indexOf("</ScrollView>", promptAreaStart + 1)
   assert.ok(promptAreaStart > 0 && promptAreaEnd > promptAreaStart, "prompts are wrapped in a shrinkable ScrollView")
 
-  const questionsAt = source.indexOf("<QuestionPrompt")
+  // Placed questions render under the asking message; only unplaced ones sit in
+  // this area, so look for the first card after the area starts.
+  const questionsAt = source.indexOf("<QuestionPrompt", promptAreaStart)
   assert.ok(questionsAt > promptAreaStart && questionsAt < promptAreaEnd, "question cards live inside the scroll area")
 
   const composerAt = source.indexOf("s.inputContainer,")
