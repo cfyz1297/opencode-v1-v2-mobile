@@ -14,6 +14,15 @@ function snapshot() {
   adb('shell', 'uiautomator', 'dump', '/sdcard/window.xml')
   return adb('shell', 'cat', '/sdcard/window.xml')
 }
+// Navigator counter as "N / M": read the node text when Android exposes the
+// testID as resource-id, fall back to the accessibility label otherwise.
+function counterValue(xml) {
+  const node = (xml.match(/<node\b[^>]*>/g) ?? []).find(n => n.includes('resource-id="nav-counter"'))
+  const text = node?.match(/text="([^"]*)"/)?.[1]
+  if (text) return text
+  const label = xml.match(/content-desc="Message (\d+) of (\d+)"/)
+  return label ? `${label[1]} / ${label[2]}` : undefined
+}
 function tapBounds(xml, predicate) {
   const node = xml.match(/<node\b[^>]*>/g)?.find(predicate)
   if (!node) return false
@@ -118,6 +127,17 @@ const delegationPart = (id, childID, description) => ({
     time: { start: now + 1, end: now + 2 },
   },
 })
+// A tool step as the V2 server reports it — five of these across two messages
+// are what the merged activity spoiler has to count as one line.
+const shellPart = (id, command) => ({
+  id, type: 'tool', name: 'shell',
+  state: {
+    status: 'completed',
+    input: { command },
+    content: [{ type: 'text', text: 'ok' }],
+    time: { start: now + 1, end: now + 2 },
+  },
+})
 const other = { ...session, id: 'tablet-session-two', title: 'TABLET_SESSION_TWO', location: { directory: '/other' } }
 const requests = []
 const server = createServer((req, res) => {
@@ -146,7 +166,21 @@ const server = createServer((req, res) => {
   // Newest first, as the V2 endpoint returns them. Each user turn opens a wave:
   // (u1, a1) -> child-old, (u2, a2) -> child-busy, (u3, a3) -> child-new.
   else if (path === '/api/session/roadmap-session/message') data = { data: [
+    // The newest turn arrives as three consecutive assistant steps (no user
+    // message between them). They must render as ONE row: "Steps 1" before
+    // the answer, then the delegation, then "Steps 5" for the 2+3 calls after
+    // it — that total only exists if the steps were merged.
+    { id: 'a5', type: 'assistant', time: { created: now + 24, completed: now + 25 }, content: [
+      shellPart('p_a5_1', 'ls a'),
+      shellPart('p_a5_2', 'ls b'),
+      shellPart('p_a5_3', 'ls c'),
+    ] },
+    { id: 'a4', type: 'assistant', time: { created: now + 23, completed: now + 24 }, content: [
+      shellPart('p_a4_1', 'git status'),
+      shellPart('p_a4_2', 'git diff'),
+    ] },
     { id: 'a3', type: 'assistant', time: { created: now + 21, completed: now + 22 }, content: [
+      shellPart('p_a3_1', 'pwd'),
       { type: 'text', text: 'OFFLINE_ANSWER_42' },
       delegationPart('p_sub_new', 'child-new', 'New task'),
     ] },
@@ -160,7 +194,9 @@ const server = createServer((req, res) => {
       { type: 'text', text: 'DELEGATED_FIRST' },
       delegationPart('p_sub_old', 'child-old', 'Old task'),
     ] },
-    { id: 'u1', type: 'user', time: { created: now }, text: 'OFFLINE_QUESTION_42' },
+    // Long enough that the list really scrolls at 400x800, so the navigator
+    // has something to move through.
+    { id: 'u1', type: 'user', time: { created: now }, text: `OFFLINE_QUESTION_42\n${'FILLER_LINE\n'.repeat(20)}` },
   ] }
   else if (path === '/api/agent') data = { data: [{ id: 'build', name: 'Build', mode: 'primary' }] }
   else if (path === '/api/model/default') data = {}
@@ -267,6 +303,43 @@ try {
   // sheet that silently never opens is invisible to the unit tests. Tapping
   // them, and checking the label really follows the choice, is the regression
   // guard for "model and effort selection stopped working".
+  // Activity spoiler: three consecutive assistant steps are ONE row — "Steps 1"
+  // before the answer and "Steps 5" after it. Per-message spoilers could never
+  // reach 5, and the screen used to show "Steps: 1" once per step.
+  await waitFor('Steps 5')
+  const stepLines = (snapshot().match(/text="Steps \d+"/g) ?? []).length
+  assert.equal(stepLines, 2, 'a run shows one step line per text boundary, not one per message')
+  screenshot('activity-spoiler')
+
+  // Navigator (#214): hidden at rest, shown by a scroll, one tap = one message.
+  assert.ok(!snapshot().includes('nav-counter'), 'navigator stays hidden while the user is not scrolling')
+  const dimensions = adb('shell', 'wm', 'size')
+  const [, width, height] = dimensions.match(/Override size: (\d+)x(\d+)/) ?? dimensions.match(/Physical size: (\d+)x(\d+)/) ?? []
+  assert.ok(width && height)
+  adb('shell', 'input', 'swipe', String(Math.floor(+width / 2)), String(Math.floor(+height * 0.75)), String(Math.floor(+width / 2)), String(Math.floor(+height * 0.35)), '300')
+  await waitFor('nav-counter')
+  await waitFor('nav-up')
+  await waitFor('nav-down')
+  await waitFor('nav-latest')
+  screenshot('navigator-shown')
+  const counterBefore = counterValue(snapshot())
+  assert.match(counterBefore ?? '', /^\d+ \/ \d+$/, 'counter reads N / M')
+  await tap('nav-up')
+  await sleep(900)
+  const counterAfter = counterValue(snapshot())
+  assert.equal(
+    Number.parseInt(counterAfter, 10),
+    Number.parseInt(counterBefore, 10) - 1,
+    `one tap moves exactly one message (${counterBefore} -> ${counterAfter})`,
+  )
+  screenshot('navigator-one-up')
+  await tap('nav-latest')
+  await sleep(900)
+  await waitFor('OFFLINE_ANSWER_42')
+  await sleep(1400)
+  assert.ok(!snapshot().includes('nav-counter'), 'navigator hides once scrolling stops')
+  screenshot('navigator-hidden')
+
   await tap('model-chip')
   await waitFor('Select Model')
   await waitFor('Fixture Two')

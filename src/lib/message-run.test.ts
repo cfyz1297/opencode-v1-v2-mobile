@@ -1,46 +1,13 @@
-// Consecutive assistant messages — one per tool step — used to render as a
-// stack of full bubbles: repeated "Assistant + model" header and a token/cost
-// line for every single `shell` call. A long run of tool calls turned into a
-// screenful of identical chrome.
+// Tokens and money for a whole run.
 //
-// The chat list is an inverted FlatList, so its data is newest-first:
-// `index - 1` is the newer neighbour in reading order, `index + 1` the older.
-// Inside a run, the header belongs to the oldest bubble (top of the run on
-// screen) and the token/cost totals to the newest one (bottom).
+// Every assistant step is its own message and carries only its own usage, so
+// the footer used to report the cost of the final roundtrip — a ten-step run
+// looked like it cost a fraction of what it did. The newest step of a run gets
+// the sum over every assistant message back to the previous user turn; all
+// other indices get nothing. The chat list data is newest-first.
 import { test } from "node:test"
 import assert from "node:assert/strict"
-import { bubbleFlags, runTotals } from "./message-run.ts"
-
-test("a lone assistant message shows its header and its token/cost line", () => {
-  // Reading order: user, assistant -> inverted ["assistant", "user"].
-  assert.deepEqual(bubbleFlags(["user", "assistant"]), [
-    { continued: false, showMeta: true },
-    { continued: false, showMeta: true },
-  ])
-})
-
-test("a run of assistant steps keeps one header and one token line", () => {
-  // Reading order: user, A1, A2, A3 -> inverted [A3, A2, A1, user].
-  assert.deepEqual(bubbleFlags(["assistant", "assistant", "assistant", "user"]), [
-    { continued: true, showMeta: true }, //  A3 — newest step, owns the totals
-    { continued: true, showMeta: false }, // A2 — continuation
-    { continued: false, showMeta: false }, // A1 — oldest step, shows the header
-    { continued: false, showMeta: true }, //  user
-  ])
-})
-
-test("runs break on user and system rows between assistant steps", () => {
-  // Reading order: A, user, A, A -> inverted [A, A, user, A].
-  const flags = bubbleFlags(["assistant", "assistant", "user", "assistant"])
-  assert.deepEqual(flags[0], { continued: true, showMeta: true })
-  assert.deepEqual(flags[1], { continued: false, showMeta: false })
-  assert.deepEqual(flags[2], { continued: false, showMeta: true })
-  assert.deepEqual(flags[3], { continued: false, showMeta: true })
-})
-
-test("empty list yields no flags", () => {
-  assert.deepEqual(bubbleFlags([]), [])
-})
+import { runTotals } from "./message-run.ts"
 
 // The footer used to show only the last step's own cost, so a ten-step run
 // reported a fraction of what it actually cost. Totals belong to the newest

@@ -152,9 +152,6 @@
       "abortFailedMessage": "The server did not accept the interrupt. The run is still going — check the server."
     },
     "nav": {
-      "previous": "Previous",
-      "next": "Next",
-      "latest": "Latest",
       "previousLabel": "Previous message",
       "nextLabel": "Next message",
       "latestLabel": "Latest message",
@@ -549,7 +546,10 @@
       "now": "Now: {{count}}"
     },
     "activity": {
-      "steps": "Steps: {{n}}"
+      "steps_one": "{{count}} step",
+      "steps_few": "{{count}} steps",
+      "steps_many": "{{count}} steps",
+      "steps_other": "{{count}} steps"
     }
   },
   "providers": {

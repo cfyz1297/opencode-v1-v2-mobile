@@ -25,8 +25,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { useKeyboardHeight } from "../../src/lib/use-keyboard-height"
 import { buildMessageData, type MessageDataItem } from "../../src/lib/revert-filter"
 import { splitAnswered, splitByMessage } from "../../src/lib/answered-questions"
-import { bubbleFlags, runTotals } from "../../src/lib/message-run"
-import { shouldFollowBottom, shouldShowNavStrip } from "../../src/lib/scroll-follow"
+import { runTotals } from "../../src/lib/message-run"
+import { shouldFollowBottom } from "../../src/lib/scroll-follow"
 import { collectSubagents } from "../../src/lib/subagent-status"
 import { useTranslation } from "react-i18next"
 import * as ImagePicker from "expo-image-picker"
@@ -59,7 +59,14 @@ import { adaptiveLayout } from '../../src/lib/adaptive-layout'
 import { TabletSessions } from '../../src/components/TabletSessions'
 import { SubagentBar } from "../../src/components/chat/SubagentBar"
 import { isSafeSessionId } from '../../src/lib/session-id'
+import { NAV_PANEL_IDLE_MS } from "../../src/lib/nav-panel"
 import { MessageNavigation } from "../../src/lib/message-navigation"
+import {
+  buildTranscriptRows,
+  rowMessage,
+  rowMessages,
+  rowParts,
+} from "../../src/lib/transcript-rows"
 import { log } from "../../src/lib/logbuffer"
 
 
@@ -223,9 +230,16 @@ export default function SessionScreen() {
   const shouldPollPending = sessionBusy || isSending
 
   const shortDir = getShortDir(currentSession?.directory)
-  // Docked navigation strip (#214): visible past its own threshold, and only
-  // with more than one message to walk between.
+  // Navigator panel (#214): visible while the user scrolls the transcript and
+  // for a beat after, hidden at rest. A nav tap counts as activity too, so the
+  // panel does not vanish between two taps.
   const [showNavStrip, setShowNavStrip] = useState(false)
+  const navIdleTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const wakeNavPanel = useCallback(() => {
+    setShowNavStrip(true)
+    if (navIdleTimer.current) clearTimeout(navIdleTimer.current)
+    navIdleTimer.current = setTimeout(() => setShowNavStrip(false), NAV_PANEL_IDLE_MS)
+  }, [])
   // Whether new/streaming content should keep the transcript pinned to the
   // newest message. False once the user scrolls up, true again at the bottom.
   const followBottomRef = useRef(true)
@@ -317,9 +331,10 @@ export default function SessionScreen() {
     () => buildMessageData(messages || [], parts || {}, revertMessageID, messageDataCache.current),
     [messages, parts, revertMessageID],
   )
-  // Consecutive assistant steps (one per tool call) render as one run: shared
-  // header at the top, totals at the bottom, no repeated chrome per step.
-  const flags = useMemo(() => bubbleFlags(messageData.map((item) => item.message.role)), [messageData])
+  // Consecutive assistant steps (one per tool call) are ONE row: the parts of
+  // the whole run are read in order, so the activity spoiler counts the steps
+  // between two answers instead of repeating "Steps: 1" per message.
+  const rows = useMemo(() => buildTranscriptRows(messageData), [messageData])
   // Every subagent this session delegated, in call order — the bar under the
   // header counts them and lists them.
   const subagentRefs = useMemo(
@@ -436,6 +451,7 @@ export default function SessionScreen() {
   )
 
   const scrollToBottom = useCallback((animated = true) => {
+    wakeNavPanel()
     followBottomRef.current = true
     // Reset the logical viewport before the native callback arrives, so a
     // stale scroll event queued mid-jump can't resurrect the old position.
@@ -836,7 +852,6 @@ export default function SessionScreen() {
       const { contentOffset, layoutMeasurement } = event.nativeEvent
       followBottomRef.current = shouldFollowBottom(contentOffset.y)
       nav.observe(contentOffset.y, layoutMeasurement.height)
-      setShowNavStrip(shouldShowNavStrip(contentOffset.y))
       setCurrentNavIndex((prev) => {
         const next = nav.current()
         return prev === next ? prev : next
@@ -858,13 +873,7 @@ export default function SessionScreen() {
   // renders a visible bubble. Banners, prompts and status live outside the
   // FlatList, so there are no invisible in-list rows to skip; the filter stays
   // explicit so a future role can't silently join the navigation set.
-  const navigableIds = useMemo(
-    () =>
-      messageData
-        .filter((item) => item.message.role === "user" || item.message.role === "assistant")
-        .map((item) => item.message.id),
-    [messageData],
-  )
+  const navigableIds = useMemo(() => rows.map((row) => row.id), [rows])
   nav.sync(navigableIds)
 
   const seekMessage = useCallback(() => {
@@ -887,6 +896,7 @@ export default function SessionScreen() {
   )
 
   const moveMessage = useCallback((direction: 1 | -1) => {
+    wakeNavPanel()
     // Previous at the oldest loaded message with older pages still on the
     // server: load the next batch instead of going nowhere, then advance into
     // it when it lands (see the effect below). handleLoadMore owns the
@@ -913,7 +923,7 @@ export default function SessionScreen() {
     navAttempts.current = 0
     setCurrentNavIndex(nav.current())
     seekMessage()
-  }, [messageData, loadingMore, nav, seekMessage])
+  }, [rows, loadingMore, nav, seekMessage])
 
   // Streaming append, batch landed or revert: re-derive the current message
   // from the same id, so the counter stays anchored while the list shifts.
@@ -922,7 +932,7 @@ export default function SessionScreen() {
       const next = nav.current()
       return prev === next ? prev : next
     })
-  }, [messageData, nav])
+  }, [rows, nav])
 
   // New session: drop any in-flight seek, target and anchor — the frames
   // belong to the previous transcript.
@@ -933,6 +943,7 @@ export default function SessionScreen() {
     setCurrentNavIndex(-1)
     return () => {
       if (navRetry.current) clearTimeout(navRetry.current)
+      if (navIdleTimer.current) clearTimeout(navIdleTimer.current)
     }
   }, [id, nav])
 
@@ -1063,8 +1074,7 @@ export default function SessionScreen() {
   const prevDisabled = navIndex < 0 || (navIndex >= navTotal - 1 && !hasMore)
   const nextDisabled = navIndex <= 0
   const prevLoading = loadingMore && navIndex >= 0 && navIndex >= navTotal - 1
-  const navStripVisible = !isLoading && showNavStrip && navTotal > 1
-  const compactNav = window.width < 360
+  const navPanelVisible = !isLoading && showNavStrip && navTotal > 1
   // Full text for the reconnect banner's Copy action: same two lines it shows.
   const reconnectCopyText = lastDisconnectReason
     ? `${t("session.banners.reconnecting", { attempt: reconnectAttempts })}\n${t("session.banners.lastError", { error: lastDisconnectReason })}`
@@ -1226,7 +1236,7 @@ export default function SessionScreen() {
           <View style={s.listWrap}>
             <FlatList
               ref={flatListRef}
-              data={messageData}
+              data={rows}
               inverted
               onLayout={(event) => {
                 nav.observe(nav.offset, event.nativeEvent.layout.height)
@@ -1237,50 +1247,60 @@ export default function SessionScreen() {
                 pendingNavLoad.current = false
                 nav.manual()
                 if (navRetry.current) clearTimeout(navRetry.current)
+                wakeNavPanel()
               }}
+              // Keep the panel up until the fling settles, then let it fade.
+              onScrollEndDrag={wakeNavPanel}
+              onMomentumScrollEnd={wakeNavPanel}
               onScrollToIndexFailed={({ index, averageItemLength }) => {
                 // Estimated jump toward the target so its rows mount; the
                 // seek retry loop settles on the real frame once it renders.
                 flatListRef.current?.scrollToOffset({ offset: averageItemLength * index, animated: false })
               }}
-              keyExtractor={(item) => item.message.id}
-              renderItem={({ item, index }) => (
-                <View onLayout={measureRow(item.message.id)}>
-                  <MessageBubble
-                    message={item.message}
-                    parts={item.parts}
-                    isDark={isDark}
-                    continued={flags[index]?.continued}
-                    showMeta={flags[index]?.showMeta}
-                    totals={totals[index]}
-                    onLongPress={handleMessageLongPress}
-                    onRevert={handleMessageRevert}
-                  />
-                  {/* Answered questions sit under the message that asked them;
-                      the record's tool metadata names that message. */}
-                  {answered.byMessage.get(item.message.id)?.map((answer) => (
-                    <AnsweredQuestionCard
-                      key={answer.request.id}
-                      request={answer.request}
-                      answers={answer.answers}
+              keyExtractor={(row) => row.id}
+              renderItem={({ item: row }) => {
+                const message = rowMessage(row)
+                const isUser = message.role === "user"
+                return (
+                  <View onLayout={measureRow(row.id)}>
+                    <MessageBubble
+                      message={message}
+                      parts={rowParts(row)}
                       isDark={isDark}
+                      totals={totals[row.index]}
+                      onLongPress={isUser ? handleMessageLongPress : undefined}
+                      onRevert={isUser ? handleMessageRevert : undefined}
                     />
-                  ))}
-                  {/* An unanswered question keeps the run blocked until it is
-                      answered, so it is drawn in place too — at the bottom of
-                      the transcript it was invisible whenever the user had
-                      scrolled up. */}
-                  {pending.byMessage.get(item.message.id)?.map((request) => (
-                    <QuestionPrompt
-                      key={request.id}
-                      request={request}
-                      isDark={isDark}
-                      onReply={(answers) => handleQuestionReply(request.id, answers)}
-                      onReject={() => handleQuestionReject(request.id)}
-                    />
-                  ))}
-                </View>
-              )}
+                    {/* Answered and pending questions sit under the message
+                        that asked them; a merged run may own several ids. */}
+                    {rowMessages(row).map((owned) => (
+                      <View key={owned.id}>
+                        {answered.byMessage.get(owned.id)?.map((answer) => (
+                          <AnsweredQuestionCard
+                            key={answer.request.id}
+                            request={answer.request}
+                            answers={answer.answers}
+                            isDark={isDark}
+                          />
+                        ))}
+                        {/* An unanswered question keeps the run blocked until
+                            it is answered, so it is drawn in place too — at
+                            the bottom of the transcript it was invisible
+                            whenever the user had scrolled up. */}
+                        {pending.byMessage.get(owned.id)?.map((request) => (
+                          <QuestionPrompt
+                            key={request.id}
+                            request={request}
+                            isDark={isDark}
+                            onReply={(answers) => handleQuestionReply(request.id, answers)}
+                            onReject={() => handleQuestionReject(request.id)}
+                          />
+                        ))}
+                      </View>
+                    ))}
+                  </View>
+                )
+              }}
               contentContainerStyle={s.messageList}
               onScroll={handleScroll}
               scrollEventThrottle={100}
@@ -1302,88 +1322,75 @@ export default function SessionScreen() {
                 ) : undefined
               }
             />
+            {/* Navigator (#214): floating pill row over the transcript, just
+                above the composer. Shown while the user scrolls and a moment
+                after, hidden otherwise so it never sits on the text. Order
+                left to right: counter, up one, down one, latest. */}
+            {navPanelVisible && (
+              <View style={[s.navPanel, isDark && s.navPanelDark]} testID="nav-panel">
+                <Text
+                  style={[s.navCounter, isDark && s.navCounterDark]}
+                  accessible
+                  accessibilityRole="text"
+                  accessibilityLabel={t("session.nav.counterLabel", { current: navCurrent, total: navTotal })}
+                  testID="nav-counter"
+                >
+                  {t("session.nav.counter", { current: navCurrent, total: `${navTotal}${hasMore ? "+" : ""}` })}
+                </Text>
+                <TouchableOpacity
+                  style={[s.navBtn, prevDisabled && s.navBtnDisabled]}
+                  onPress={() => moveMessage(1)}
+                  disabled={prevDisabled}
+                  accessibilityRole="button"
+                  accessibilityLabel={t("session.nav.previousLabel")}
+                  accessibilityState={{ disabled: prevDisabled }}
+                  testID="nav-up"
+                >
+                  {prevLoading ? (
+                    <ActivityIndicator size="small" color={isDark ? "#888888" : "#666666"} />
+                  ) : (
+                    <Ionicons name="chevron-up" size={16} color={isDark ? "#ffffff" : "#0a0a0a"} />
+                  )}
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[s.navBtn, nextDisabled && s.navBtnDisabled]}
+                  onPress={() => moveMessage(-1)}
+                  disabled={nextDisabled}
+                  accessibilityRole="button"
+                  accessibilityLabel={t("session.nav.nextLabel")}
+                  accessibilityState={{ disabled: nextDisabled }}
+                  testID="nav-down"
+                >
+                  <Ionicons name="chevron-down" size={16} color={isDark ? "#ffffff" : "#0a0a0a"} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[s.navBtn, s.navLatest, isDark && s.navLatestDark]}
+                  onPress={() => scrollToBottom(true)}
+                  accessibilityRole="button"
+                  accessibilityLabel={t("session.nav.latestLabel")}
+                  testID="nav-latest"
+                >
+                  <View style={s.navDoubleCaret}>
+                    <Ionicons
+                      name="chevron-down"
+                      size={12}
+                      style={{ marginBottom: -6 }}
+                      color={isDark ? "#0a0a0a" : "#ffffff"}
+                    />
+                    <Ionicons name="chevron-down" size={12} color={isDark ? "#0a0a0a" : "#ffffff"} />
+                  </View>
+                </TouchableOpacity>
+              </View>
+            )}
             {/* Empty state rendered OUTSIDE the inverted list to avoid the
                 inverted transform mirroring its text/icon (see #ui-mirror). */}
-            {messageData.length === 0 && (
+            {rows.length === 0 && (
               <View style={s.emptyOverlay} pointerEvents="none">
                 <Ionicons name="chatbubble-outline" size={48} color={isDark ? "#444444" : "#cccccc"} />
                 <Text style={[s.emptyText, isDark && s.metaDark]}>{t("session.empty.title")}</Text>
                 <Text style={[s.emptyHint, isDark && s.metaDark]}>{t("session.empty.hint")}</Text>
               </View>
             )}
-          </View>
-        )}
-
-        {/* Message navigation strip (#214) — one in-flow row below the list,
-            above StatusIndicator. In-flow by construction, so it can never
-            cover message text. Strip taps are plain button presses: they do
-            not blur the composer or dismiss the keyboard. Below 360dp
-            Previous/Next collapse to icon-only; the counter and Latest keep
-            their labels. */}
-        {navStripVisible && (
-          <View style={[s.navStrip, isDark && s.navStripDark]}>
-            <TouchableOpacity
-              style={[s.navPill, isDark && s.navPillDark, prevDisabled && s.navPillDisabled]}
-              onPress={() => moveMessage(1)}
-              disabled={prevDisabled}
-              accessibilityRole="button"
-              accessibilityLabel={t("session.nav.previousLabel")}
-              accessibilityState={{ disabled: prevDisabled }}
-              testID="nav-previous"
-            >
-              {prevLoading ? (
-                <ActivityIndicator size="small" color={isDark ? "#888888" : "#666666"} />
-              ) : (
-                <>
-                  <Ionicons name="chevron-up" size={18} color={isDark ? "#ffffff" : "#0a0a0a"} />
-                  {!compactNav && (
-                    <Text style={[s.navPillText, isDark && s.navPillTextDark]}>{t("session.nav.previous")}</Text>
-                  )}
-                </>
-              )}
-            </TouchableOpacity>
-            <Text
-              style={[s.navCounter, isDark && s.navCounterDark]}
-              accessible
-              accessibilityRole="text"
-              accessibilityLabel={t("session.nav.counterLabel", { current: navCurrent, total: navTotal })}
-            >
-              {t("session.nav.counter", { current: navCurrent, total: `${navTotal}${hasMore ? "+" : ""}` })}
-            </Text>
-            <TouchableOpacity
-              style={[s.navPill, isDark && s.navPillDark, nextDisabled && s.navPillDisabled]}
-              onPress={() => moveMessage(-1)}
-              disabled={nextDisabled}
-              accessibilityRole="button"
-              accessibilityLabel={t("session.nav.nextLabel")}
-              accessibilityState={{ disabled: nextDisabled }}
-              testID="nav-next"
-            >
-              {!compactNav && (
-                <Text style={[s.navPillText, isDark && s.navPillTextDark]}>{t("session.nav.next")}</Text>
-              )}
-              <Ionicons name="chevron-down" size={18} color={isDark ? "#ffffff" : "#0a0a0a"} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[s.navPill, s.navLatest, isDark && s.navLatestDark]}
-              onPress={() => scrollToBottom(true)}
-              accessibilityRole="button"
-              accessibilityLabel={t("session.nav.latestLabel")}
-              testID="nav-latest"
-            >
-              <View style={s.navDoubleCaret}>
-                <Ionicons
-                  name="chevron-down"
-                  size={14}
-                  style={{ marginBottom: -7 }}
-                  color={isDark ? "#0a0a0a" : "#ffffff"}
-                />
-                <Ionicons name="chevron-down" size={14} color={isDark ? "#0a0a0a" : "#ffffff"} />
-              </View>
-              <Text style={[s.navPillText, s.navLatestText, isDark && s.navLatestTextDark]}>
-                {t("session.nav.latest")}
-              </Text>
-            </TouchableOpacity>
           </View>
         )}
 
@@ -1600,40 +1607,47 @@ const s = StyleSheet.create({
 
   // Scroll button
   // Message navigation strip (#214) — docked in-flow row below the list.
-  navStrip: {
+  // Navigator (#214): a small floating pill row over the transcript, just
+  // above the composer. Translucent so text stays readable underneath; it is
+  // only on screen while the user is scrolling.
+  navPanel: {
+    position: "absolute",
+    right: 12,
+    bottom: 8,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
-    height: 56,
-    paddingHorizontal: 12,
-    borderTopWidth: 1,
-    borderTopColor: "#e5e5e5",
-    backgroundColor: "#ffffff",
+    gap: 2,
+    paddingHorizontal: 4,
+    paddingVertical: 3,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "#e2e2e2",
+    backgroundColor: "rgba(255,255,255,0.94)",
+    elevation: 3,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.12,
+    shadowRadius: 4,
   },
-  navStripDark: { borderTopColor: "#1a1a1a", backgroundColor: "#0a0a0a" },
-  navPill: {
-    flexDirection: "row",
+  navPanelDark: { borderColor: "#2a2a2a", backgroundColor: "rgba(18,18,18,0.94)" },
+  navBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
-    gap: 4,
-    minHeight: 44,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderWidth: 1,
-    borderColor: "#d4d4d4",
-    borderRadius: 22,
   },
-  navPillDark: { borderColor: "#404040" },
-  navPillDisabled: { opacity: 0.45 },
-  navPillText: { fontSize: 14, fontWeight: "600", color: "#0a0a0a" },
-  navPillTextDark: { color: "#ffffff" },
-  navCounter: { fontSize: 14, fontWeight: "700", color: "#666666" },
-  navCounterDark: { color: "#888888" },
-  navLatest: { backgroundColor: "#0a0a0a", borderColor: "#0a0a0a" },
-  navLatestDark: { backgroundColor: "#ffffff", borderColor: "#ffffff" },
-  navLatestText: { color: "#ffffff" },
-  navLatestTextDark: { color: "#0a0a0a" },
+  navBtnDisabled: { opacity: 0.35 },
+  navCounter: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#666666",
+    minWidth: 40,
+    textAlign: "center",
+  },
+  navCounterDark: { color: "#9a9a9a" },
+  navLatest: { backgroundColor: "#0a0a0a" },
+  navLatestDark: { backgroundColor: "#ffffff" },
   // Two stacked chevrons form the double-down Latest caret.
   navDoubleCaret: { flexDirection: "column", alignItems: "center" },
 

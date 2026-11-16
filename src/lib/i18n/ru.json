@@ -152,9 +152,6 @@
       "abortFailedMessage": "Сервер не принял запрос на прерывание. Выполнение продолжается — проверьте сервер."
     },
     "nav": {
-      "previous": "Назад",
-      "next": "Вперёд",
-      "latest": "В конец",
       "previousLabel": "Предыдущее сообщение",
       "nextLabel": "Следующее сообщение",
       "latestLabel": "Последнее сообщение",
@@ -549,7 +546,10 @@
       "now": "Сейчас: {{count}}"
     },
     "activity": {
-      "steps": "Шаги: {{n}}"
+      "steps_one": "{{count}} шаг",
+      "steps_few": "Шаги {{count}}",
+      "steps_many": "Шаги {{count}}",
+      "steps_other": "Шаги {{count}}"
     }
   },
   "providers": {

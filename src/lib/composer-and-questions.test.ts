@@ -27,7 +27,10 @@ test("the send-in-flight guard is released even when the send throws", () => {
 
 test("answered questions are kept in the transcript instead of a 2.5s echo", () => {
   assert.match(screen, /splitAnswered\(answeredQuestions\)/)
-  assert.match(screen, /answered\.byMessage\.get\(item\.message\.id\)/)
+  // Answers are placed per message id. A merged run owns several ids, so the
+  // row iterates its messages and looks each one up.
+  assert.match(screen, /rowMessages\(row\)\.map/)
+  assert.match(screen, /answered\.byMessage\.get\(owned\.id\)/)
   assert.match(screen, /<AnsweredQuestionCard/)
   // Rendering them above the composer put the card below every later answer,
   // detached from the question it answered.

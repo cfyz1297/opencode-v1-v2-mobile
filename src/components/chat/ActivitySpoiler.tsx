@@ -24,7 +24,7 @@ export function ActivitySpoiler({ reasoning, tools, isDark }: Props) {
   const running = tools.some((tool) => tool.state?.status === "running")
   const failed = tools.some((tool) => tool.state?.status === "error")
   const steps = tools.length + (reasoning ? 1 : 0)
-  const label = t("chat.activity.steps", { n: steps })
+  const label = t("chat.activity.steps", { count: steps })
 
   return (
     <View style={[s.block, isDark && s.blockDark]}>

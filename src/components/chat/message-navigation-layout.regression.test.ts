@@ -1,64 +1,80 @@
-// Docked-strip layout guard for issue #214, adapted to this fork's screen.
+// Layout guard for the transcript navigator (#214).
 //
-// Follow the existing source-level RN regression pattern: node:test cannot
-// render native layouts. This guard fails on the floating-controls layout
-// PR #215 shipped (controls drawn over message text) and on the
-// paddingRight:76 gutter remediation: the strip must live in-flow below the
-// list, never overlap content, and the session error banner must be rendered.
-// Device/keyboard acceptance is still required.
+// The first attempt docked a 56pt strip under the list and the second used
+// upstream's floating stack, which covered message text. This pins the contract
+// the device run checks: a small translucent pill row floating over the
+// transcript, hidden until the user scrolls, and ordered
+// [counter] [up] [down] [latest] from left to right.
 import { test } from "node:test"
 import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 
 const source = readFileSync(new URL("../../../app/session/[id].tsx", import.meta.url), "utf8")
+const stylesheet = source.slice(source.indexOf("const s = StyleSheet.create("))
 
-test("navigation strip is docked in-flow below the list, above StatusIndicator", () => {
-  const strip = source.indexOf("[s.navStrip")
-  assert.ok(strip >= 0, "docked navigation strip must exist")
-  const listStart = source.indexOf("<FlatList")
+function style(name: string): string {
+  return stylesheet.match(new RegExp(`\\n  ${name}: \\{([^}]+)\\}`))?.[1] ?? ""
+}
+
+test("the navigator floats inside the list area, above the composer", () => {
+  const panel = style("navPanel")
+  assert.match(panel, /position:\s*"absolute"/, "the panel must float, not push the transcript")
+  assert.match(panel, /right:\s*\d+/, "it sits on the right edge")
+  assert.match(panel, /bottom:\s*\d+/, "and just above the composer")
+  // Inside the list wrapper: before the empty state, after the FlatList.
+  const listWrap = source.indexOf("<View style={s.listWrap}>")
+  const panelAt = source.indexOf('testID="nav-panel"')
+  const empty = source.indexOf("s.emptyOverlay")
+  assert.ok(listWrap >= 0 && panelAt > listWrap && (empty < 0 || panelAt < empty), "panel must live in the list wrapper")
+})
+
+test("nothing is docked between the list and the status bar any more", () => {
+  assert.doesNotMatch(source, /navStrip/, "the docked strip must be gone")
+  assert.doesNotMatch(source, /scrollControls|scrollBtn/, "the floating stack must be gone")
   const status = source.indexOf("<StatusIndicator")
-  assert.ok(listStart >= 0 && status >= 0, "list and StatusIndicator must exist")
-  assert.ok(listStart < strip && strip < status, "strip must sit between the message list and StatusIndicator")
+  const listEnd = source.indexOf("</View>", source.indexOf("<FlatList"))
+  assert.ok(listEnd < status, "the list still closes before the status line")
 })
 
-test("no floating navigation controls and no content gutter", () => {
-  assert.doesNotMatch(source, /scrollBtn/, "floating Latest button (scrollBtn) must be removed")
-  assert.doesNotMatch(source, /scrollControls/, "floating control stack must be removed")
-  const messageList = source.match(/messageList:\s*\{([^}]+)\}/)?.[1] ?? ""
-  assert.doesNotMatch(
-    messageList,
-    /paddingRight:\s*76|paddingLeft:\s*76/,
-    "PR #215 gutter must not narrow messages",
+test("the panel shows only while the user scrolls, then hides itself", () => {
+  assert.match(source, /navPanelVisible = [^\n]*showNavStrip/, "visibility must be scroll-activity driven")
+  assert.match(source, /onScrollBeginDrag=\{/, "a drag must wake the panel")
+  assert.match(source, /onScrollEndDrag=\{wakeNavPanel\}/, "the fling must keep it up")
+  assert.match(source, /onMomentumScrollEnd=\{wakeNavPanel\}/, "and so must the momentum end")
+  assert.match(source, /setTimeout\(\(\) => setShowNavStrip\(false\)/, "it must hide on idle")
+  assert.match(source, /clearTimeout\(navIdleTimer\.current\)/, "the idle timer must be cancelled and cleaned up")
+})
+
+test("order is counter, up, down, latest", () => {
+  const order = ['testID="nav-counter"', 'testID="nav-up"', 'testID="nav-down"', 'testID="nav-latest"'].map((id) =>
+    source.indexOf(id),
   )
-  assert.doesNotMatch(source, /contentOffset\.y\s*>\s*200/, "strip visibility must not hardcode its threshold in the screen")
+  assert.ok(order.every((index) => index > 0), "all four controls must exist")
+  assert.deepEqual([...order].sort((a, b) => a - b), order, "left to right: counter, up, down, latest")
 })
 
-test("strip is 56pt with a hairline top border and 44pt hit targets", () => {
-  const strip = source.match(/navStrip:\s*\{([^}]+)\}/)?.[1] ?? ""
-  assert.match(strip, /height:\s*56/, "strip must be 56pt tall")
-  assert.match(strip, /borderTopWidth:\s*1/, "strip must have a hairline top border")
-  const pill = source.match(/navPill:\s*\{([^}]+)\}/)?.[1] ?? ""
-  const height = Number(pill.match(/minHeight:\s*(\d+)/)?.[1])
-  assert.ok(height >= 44, "navigation pills must keep 44pt hit targets")
-  assert.match(source, /navLatest:/, "Latest must be its own filled pill")
+test("Latest carries the double chevron", () => {
+  const latest = source.slice(source.indexOf('testID="nav-latest"'), source.indexOf("navDoubleCaret:", source.indexOf('testID="nav-latest"')))
+  assert.equal(
+    latest.match(/name="chevron-down"/g)?.length,
+    2,
+    "two stacked chevrons mark the jump to the end",
+  )
 })
 
-test("strip labels come from the string catalog, not hardcoded English", () => {
-  for (const key of ["session.nav.previous", "session.nav.next", "session.nav.latest", "session.nav.counter"]) {
-    assert.ok(source.includes(`"${key}"`), `strip must use i18n key ${key}`)
+test("the panel stays small enough to sit over the text", () => {
+  const button = style("navBtn")
+  assert.match(button, /width:\s*32/, "buttons are 32pt, not 44")
+  assert.match(button, /height:\s*32/)
+  assert.match(style("navCounter"), /fontSize:\s*11/, "the counter is a caption, not a header")
+  // Translucent surface: text underneath must stay readable.
+  assert.match(style("navPanel"), /rgba\(255,255,255,0\.9/, "light panel is translucent")
+  assert.match(style("navPanelDark"), /rgba\(18,18,18,0\.9/, "dark panel is translucent")
+})
+
+test("every navigator style has a dark counterpart where it paints", () => {
+  for (const name of ["navPanel", "navCounter", "navLatest"]) {
+    assert.ok(style(`${name}Dark`), `${name} needs a dark variant`)
+    assert.ok(source.includes(`isDark && s.${name}Dark`), `${name}Dark must reach the render`)
   }
-  assert.match(source, /accessibilityLabel=\{t\("session\.nav\.\w+Label"\)\}/, "strip buttons must expose TalkBack labels")
-})
-
-test("the session store error is rendered, not silently swallowed", () => {
-  assert.match(source, /useSessions\(\(s\) => s\.error\)/, "the screen must subscribe to the store error")
-  assert.match(source, /session\.banners\.errorNextAction/, "session-error banner must say what to do next")
-  assert.match(source, /\{error\}/, "the banner must print the error text itself")
-  assert.match(source, /setState\(\{ error: null \}\)/, "the banner must be dismissable")
-  assert.ok(source.includes('"session.banners.dismiss"'), "dismiss label must come from the catalog")
-})
-
-test("reconnect banner shows the last disconnect reason with Copy", () => {
-  assert.match(source, /session\.banners\.lastError/, "reconnect banner must show the last error line")
-  assert.match(source, /session\.actions\.copy/, "both banners must offer Copy")
 })

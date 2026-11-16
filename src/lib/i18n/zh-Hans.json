@@ -152,9 +152,6 @@
       "abortFailedMessage": "服务器未接受中断请求，任务仍在继续 — 请检查服务器。"
     },
     "nav": {
-      "previous": "上一条",
-      "next": "下一条",
-      "latest": "最新",
       "previousLabel": "上一条消息",
       "nextLabel": "下一条消息",
       "latestLabel": "最新消息",
@@ -549,7 +546,10 @@
       "now": "当前：{{count}}"
     },
     "activity": {
-      "steps": "步骤：{{n}}"
+      "steps_one": "{{count}} 步",
+      "steps_few": "{{count}} 步",
+      "steps_many": "{{count}} 步",
+      "steps_other": "{{count}} 步"
     }
   },
   "providers": {
