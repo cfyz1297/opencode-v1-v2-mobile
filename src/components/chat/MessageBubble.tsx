@@ -5,6 +5,7 @@ import * as Clipboard from "expo-clipboard"
 import { useTranslation } from "react-i18next"
 import { Markdown } from "../markdown"
 import { ActivitySpoiler } from "./ActivitySpoiler"
+import { ToolCallCard } from "./ToolCallCard"
 import { CompactionCard } from "./CompactionCard"
 import { groupParts } from "../../lib/part-runs"
 import type { RunTotals } from "../../lib/message-run"
@@ -143,6 +144,9 @@ export const MessageBubble = memo(
                 <Markdown>{item.part.text!}</Markdown>
               </View>
             )
+          }
+          if (item.kind === "delegation") {
+            return <ToolCallCard key={item.key} tool={item.tool} isDark={isDark} />
           }
           return (
             <ActivitySpoiler

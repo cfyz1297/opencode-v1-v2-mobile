@@ -37,6 +37,7 @@ function component() {
     "@expo/vector-icons": { Ionicons: "Ionicons" },
     "../markdown": { Markdown: "Markdown" },
     "./ActivitySpoiler": { ActivitySpoiler: "ActivitySpoiler" },
+    "./ToolCallCard": { ToolCallCard: "ToolCallCard" },
     "./CompactionCard": { CompactionCard: "CompactionCard" },
     "../../lib/part-runs": { groupParts: () => [] },
   }

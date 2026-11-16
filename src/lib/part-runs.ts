@@ -16,6 +16,10 @@ import type { Part } from "./sdk"
 export type PartItem =
   | { kind: "text"; key: string; part: Part }
   | { kind: "activity"; key: string; reasoning?: Part; tools: Part[] }
+  // A delegation draws its own row with a tap into the child session, so it
+  // must stay on screen at rest — folding it into the spoiler would undo the
+  // subagent timeline this app shows in the feed.
+  | { kind: "delegation"; key: string; tool: Part }
 
 // Text, reasoning and tool calls are the only parts the transcript renders;
 // step markers, snapshots, patches, subtasks, retries and agents are
@@ -56,6 +60,13 @@ export function groupParts(parts: Part[]): PartItem[] {
 
   for (const part of parts) {
     if (part.type === "tool") {
+      if (isDelegation(part)) {
+        // Closes the segment: the row that follows belongs to the delegation,
+        // not to the run that launched it.
+        flush()
+        items.push({ kind: "delegation", key: part.id, tool: part })
+        continue
+      }
       tools.push(part)
       continue
     }
@@ -76,6 +87,12 @@ export function groupParts(parts: Part[]): PartItem[] {
   }
   flush()
   return items
+}
+
+// A subagent launch is not a tool the user hides behind a spoiler: it is the
+// only place the child session is reachable from the transcript.
+export function isDelegation(tool: Part): boolean {
+  return tool.tool === "subagent" || tool.tool === "task"
 }
 
 // True when every call in the run is a shell command, which is what makes the
