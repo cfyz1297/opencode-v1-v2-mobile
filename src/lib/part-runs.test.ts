@@ -15,15 +15,12 @@ test("groupParts keeps the model's order instead of regrouping by type", () => {
     part("reasoning", { text: "next" }),
     part("tool", { tool: "shell" }),
   ]
-  // Text closes the group: the two shell calls after it are one row, and the
-  // reasoning between them must not split it. A segment always reads
-  // reasoning-then-tools, so the thought that came second leads its segment.
+  // Text is the only hard boundary: everything a step did between two answers
+  // is one activity block, so the transcript reads answer / activity / answer.
   assert.deepEqual(
     groupParts(parts).map((item) => item.kind),
-    ["reasoning", "text", "reasoning", "tools"],
+    ["activity", "text", "activity"],
   )
-  const tools = groupParts(parts)[3]
-  assert.equal(tools.kind === "tools" && tools.tools.length, 2)
 })
 
 test("groupParts folds reasoning split by tool calls into one block", () => {
@@ -36,20 +33,23 @@ test("groupParts folds reasoning split by tool calls into one block", () => {
   ])
   assert.deepEqual(
     items.map((item) => item.kind),
-    ["reasoning", "tools", "text"],
+    ["activity", "text"],
   )
-  const reasoning = items[0]
-  assert.equal(reasoning.kind === "reasoning" && reasoning.part.text, "first\n\nsecond")
+  const activity = items[0]
+  assert.equal(activity.kind === "activity" && activity.reasoning?.text, "first\n\nsecond")
   // A merged block spans several steps, so a per-block duration would lie.
-  assert.equal(reasoning.kind === "reasoning" && reasoning.part.time, undefined)
+  assert.equal(activity.kind === "activity" && activity.reasoning?.time, undefined)
+  assert.equal(activity.kind === "activity" && activity.tools.length, 2)
 })
 
 test("groupParts folds consecutive tool calls into one run", () => {
   const tools = [part("tool", { tool: "bash" }), part("tool", { tool: "bash" }), part("tool", { tool: "read" })]
   const items = groupParts([part("text", { text: "go" }), ...tools])
   assert.equal(items.length, 2)
-  assert.equal(items[1].kind, "tools")
-  assert.equal(items[1].kind === "tools" && items[1].tools.length, 3)
+  assert.equal(items[1].kind, "activity")
+  assert.equal(items[1].kind === "activity" && items[1].tools.length, 3)
+  // No reasoning in this segment: the block is tools-only.
+  assert.equal(items[1].kind === "activity" && items[1].reasoning, undefined)
 })
 
 test("groupParts does not join tool calls split by text", () => {
@@ -58,9 +58,10 @@ test("groupParts does not join tool calls split by text", () => {
     part("text", { text: "between" }),
     part("tool", { tool: "bash" }),
   ])
+  // The answer between them explains why the next batch started.
   assert.deepEqual(
     items.map((item) => item.kind),
-    ["tools", "text", "tools"],
+    ["activity", "text", "activity"],
   )
 })
 
@@ -79,6 +80,11 @@ test("groupParts drops bookkeeping and empty parts", () => {
 
 test("groupParts on an empty list is empty", () => {
   assert.deepEqual(groupParts([]), [])
+})
+
+test("an activity block carries its own id so it can keep expand state", () => {
+  const items = groupParts([part("tool", { tool: "shell", id: "tool-1" })])
+  assert.equal(items[0].kind === "activity" && items[0].key, "tool-1")
 })
 
 test("isCommandRun is true only for shell-only runs", () => {

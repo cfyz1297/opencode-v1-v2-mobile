@@ -547,6 +547,9 @@
       "daysAgo": "{{count}} 天前",
       "total": "全部：{{count}}",
       "now": "当前：{{count}}"
+    },
+    "activity": {
+      "steps": "步骤：{{n}}"
     }
   },
   "providers": {

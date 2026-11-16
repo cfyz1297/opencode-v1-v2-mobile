@@ -547,6 +547,9 @@
       "daysAgo": "{{count}} дн назад",
       "total": "Всего: {{count}}",
       "now": "Сейчас: {{count}}"
+    },
+    "activity": {
+      "steps": "Шаги: {{n}}"
     }
   },
   "providers": {

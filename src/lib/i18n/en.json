@@ -547,6 +547,9 @@
       "daysAgo": "{{count}} d ago",
       "total": "All: {{count}}",
       "now": "Now: {{count}}"
+    },
+    "activity": {
+      "steps": "Steps: {{n}}"
     }
   },
   "providers": {

@@ -4,8 +4,7 @@ import { Ionicons } from "@expo/vector-icons"
 import * as Clipboard from "expo-clipboard"
 import { useTranslation } from "react-i18next"
 import { Markdown } from "../markdown"
-import { ToolRun } from "./ToolRun"
-import { ReasoningBlock } from "./ReasoningBlock"
+import { ActivitySpoiler } from "./ActivitySpoiler"
 import { CompactionCard } from "./CompactionCard"
 import { groupParts } from "../../lib/part-runs"
 import type { RunTotals } from "../../lib/message-run"
@@ -135,9 +134,8 @@ export const MessageBubble = memo(
           </ScrollView>
         )}
 
-        {/* Assistant timeline: text, reasoning and tool runs in the order the
-            model produced them. Reasoning keeps a two-line preview; runs of
-            tool calls fold into one "Ran N commands" row. */}
+        {/* Assistant timeline: answers stay on screen, everything the model did
+            between them (thinking + tool calls) folds into one spoiler row. */}
         {items.map((item) => {
           if (item.kind === "text") {
             return (
@@ -146,12 +144,14 @@ export const MessageBubble = memo(
               </View>
             )
           }
-          if (item.kind === "reasoning") {
-            return (
-              <ReasoningBlock key={item.key} text={item.part.text!} time={item.part.time} isDark={isDark} />
-            )
-          }
-          return <ToolRun key={item.key} tools={item.tools} isDark={isDark} />
+          return (
+            <ActivitySpoiler
+              key={item.key}
+              reasoning={item.reasoning}
+              tools={item.tools}
+              isDark={isDark}
+            />
+          )
         })}
 
         {/* Why the run stopped. A failed run keeps its reason on the message

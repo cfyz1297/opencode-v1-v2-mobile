@@ -36,8 +36,7 @@ function component() {
     "react-i18next": { useTranslation: () => ({ t: (key: string) => key }) },
     "@expo/vector-icons": { Ionicons: "Ionicons" },
     "../markdown": { Markdown: "Markdown" },
-    "./ToolRun": { ToolRun: "ToolRun" },
-    "./ReasoningBlock": { ReasoningBlock: "ReasoningBlock" },
+    "./ActivitySpoiler": { ActivitySpoiler: "ActivitySpoiler" },
     "./CompactionCard": { CompactionCard: "CompactionCard" },
     "../../lib/part-runs": { groupParts: () => [] },
   }
