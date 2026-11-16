@@ -316,17 +316,27 @@ try {
   const dimensions = adb('shell', 'wm', 'size')
   const [, width, height] = dimensions.match(/Override size: (\d+)x(\d+)/) ?? dimensions.match(/Physical size: (\d+)x(\d+)/) ?? []
   assert.ok(width && height)
-  adb('shell', 'input', 'swipe', String(Math.floor(+width / 2)), String(Math.floor(+height * 0.75)), String(Math.floor(+width / 2)), String(Math.floor(+height * 0.35)), '300')
-  await waitFor('content-desc="Message ')
-  await waitFor('nav-up')
-  await waitFor('nav-down')
-  await waitFor('nav-latest')
+  // Inverted list: dragging the finger DOWN reveals older messages, and that
+  // drag is what has to wake the panel.
+  let shown
+  for (let i = 0; i < 3 && !shown; i++) {
+    adb('shell', 'input', 'swipe', String(Math.floor(+width / 2)), String(Math.floor(+height * 0.35)), String(Math.floor(+width / 2)), String(Math.floor(+height * 0.75)), '300')
+    await sleep(500)
+    const xml = snapshot()
+    if (xml.includes('content-desc="Message ')) shown = xml
+  }
+  assert.ok(shown, 'dragging the transcript shows the navigator')
+  for (const id of ['nav-up', 'nav-down', 'nav-latest']) {
+    assert.ok(shown.includes(`resource-id="${id}"`), `navigator exposes ${id}`)
+  }
   screenshot('navigator-shown')
-  const counterBefore = counterValue(snapshot())
+  const counterBefore = counterValue(shown)
   assert.match(counterBefore ?? '', /^\d+ \/ \d+$/, 'counter reads N / M')
+  // One tap = exactly one message, and the tap itself keeps the panel up.
   await tap('nav-up')
-  await sleep(900)
-  const counterAfter = counterValue(snapshot())
+  await sleep(800)
+  const after = await waitFor('nav-up')
+  const counterAfter = counterValue(after)
   assert.equal(
     Number.parseInt(counterAfter, 10),
     Number.parseInt(counterBefore, 10) - 1,
@@ -336,7 +346,7 @@ try {
   await tap('nav-latest')
   await sleep(900)
   await waitFor('OFFLINE_ANSWER_42')
-  await sleep(1400)
+  await sleep(3000)
   assert.ok(!snapshot().includes('content-desc="Message '), 'navigator hides once scrolling stops')
   screenshot('navigator-hidden')
 
