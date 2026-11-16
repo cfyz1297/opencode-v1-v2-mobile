@@ -101,7 +101,10 @@
       "reconnecting": "正在重新连接…（第 {{attempt}} 次尝试）",
       "connected": "已连接 ✓",
       "reverted": "消息已撤回 — 重新发送以确认",
-      "undo": "撤销"
+      "undo": "撤销",
+      "dismiss": "关闭",
+      "lastError": "上一个错误：{{error}}",
+      "errorNextAction": "请检查与服务器的连接，然后重新发送。"
     },
     "empty": {
       "title": "开始一段对话",
@@ -115,7 +118,9 @@
     },
     "actions": {
       "editMessage": "编辑消息",
-      "replace": "替换"
+      "replace": "替换",
+      "copy": "复制",
+      "copied": "已复制"
     },
     "alerts": {
       "messageActionsTitle": "消息操作",
@@ -145,6 +150,16 @@
       "speechErrorMessage": "无法使用语音输入。请检查麦克风权限后重试。",
       "abortFailedTitle": "无法停止运行",
       "abortFailedMessage": "服务器未接受中断请求，任务仍在继续 — 请检查服务器。"
+    },
+    "nav": {
+      "previous": "上一条",
+      "next": "下一条",
+      "latest": "最新",
+      "previousLabel": "上一条消息",
+      "nextLabel": "下一条消息",
+      "latestLabel": "最新消息",
+      "counter": "{{current}} / {{total}}",
+      "counterLabel": "第 {{current}} 条消息，共 {{total}} 条"
     }
   },
   "connection": {

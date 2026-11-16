@@ -10,7 +10,7 @@
 //
 // expo/fetch provides WinterCG-compliant fetch with ReadableStream support for SSE
 import { fetch as expoFetch } from "expo/fetch"
-import { SSEParser } from "./sse"
+import { CONNECT_TIMEOUT_MS, dialStream, SSEParser } from "./sse"
 import { ApiError, apiErrorFor } from "./api-error"
 import { createHeaders, fetchWithTimeout, request } from "./http"
 import { loadSessionList } from "./session-list"
@@ -105,7 +105,7 @@ export function createV1Client(config: ClientConfig) {
         delete headers["Content-Type"]
         headers["Accept-Encoding"] = "identity"
 
-        const response = await expoFetch(url, { headers, signal })
+        const response = await dialStream(expoFetch, url, { headers, signal }, CONNECT_TIMEOUT_MS)
         if (!response.ok || !response.body) {
           throw apiErrorFor(response.status, `Failed to connect to event stream: ${response.status}`)
         }

@@ -183,6 +183,7 @@ function harness() {
     "../lib/run-watchdog": { runsNeedingResync },
     "../lib/pending-questions": { reconcilePendingQuestions: (local: unknown) => local },
     "../lib/answered-questions": { recordAnswered: (list: unknown) => list },
+    "../lib/disconnect-reason": { disconnectReasonText: (reason: unknown) => String(reason) },
     "../lib/keep-alive": { setKeepAlive: () => {} },
     "../lib/logbuffer": {
       log: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} },

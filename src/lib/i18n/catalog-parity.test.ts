@@ -51,3 +51,14 @@ test("no translation value is an empty string", () => {
     }
   }
 })
+
+// A nested object where a string belongs still passes the key-set check above
+// (its children flatten to keys) and then renders as "[object Object]".
+test("every leaf is a string, not a nested locale map", () => {
+  for (const [name, catalog] of CATALOGS) {
+    for (const key of flattenKeys(catalog)) {
+      const value = key.split(".").reduce<unknown>((acc, part) => (acc as Record<string, unknown>)?.[part], catalog)
+      assert.equal(typeof value, "string", `${name}.json: "${key}" must be a string, got ${typeof value}`)
+    }
+  }
+})

@@ -10,6 +10,7 @@ import { isAuthError } from "../lib/api-error"
 import { isSessionActuallyIdle } from "../lib/session-status-reconcile"
 import { isStreamStalled, shouldReconnectOnResume } from "../lib/stream-watchdog"
 import { runsNeedingResync } from "../lib/run-watchdog"
+import { disconnectReasonText } from "../lib/disconnect-reason"
 import { reconcilePendingQuestions } from "../lib/pending-questions"
 import { recordAnswered, type AnsweredQuestion } from "../lib/answered-questions"
 import { setKeepAlive } from "../lib/keep-alive"
@@ -31,6 +32,10 @@ interface EventsState {
   authError: boolean
   reconnectAttempts: number
   lastDisconnectAt: number | null
+  // Last SSE disconnect reason as a short display string (#214 AF-4): shown
+  // as the second line of the reconnect banner, so the user sees *why* the
+  // stream dropped, not just the attempt count. Cleared once it is live again.
+  lastDisconnectReason: string | null
   sessionStatus: Record<string, SessionStatus>
   statusText: Record<string, string>
   // Last error per session, kept for the subagent row: a child that failed
@@ -503,6 +508,7 @@ export const useEvents = create<EventsState>((set, get) => ({
   authError: false,
   reconnectAttempts: 0,
   lastDisconnectAt: null,
+  lastDisconnectReason: null,
   sessionStatus: {},
   statusText: {},
   sessionErrors: {},
@@ -554,7 +560,7 @@ export const useEvents = create<EventsState>((set, get) => ({
       let resyncedAfterReconnect = false
       const stableTimer = setTimeout(() => {
         if (!currentController.signal.aborted) {
-          set({ reconnectAttempts: 0, lastDisconnectAt: null })
+          set({ reconnectAttempts: 0, lastDisconnectAt: null, lastDisconnectReason: null })
         }
       }, STABLE_CONNECTION_MS)
 
@@ -565,7 +571,7 @@ export const useEvents = create<EventsState>((set, get) => ({
         const reconnectAttempts = state.reconnectAttempts + 1
         const lastDisconnectAt = state.lastDisconnectAt ?? Date.now()
         const disconnectedFor = Date.now() - lastDisconnectAt
-        set({ connected: false, reconnectAttempts, lastDisconnectAt })
+        set({ connected: false, reconnectAttempts, lastDisconnectAt, lastDisconnectReason: disconnectReasonText(reason) })
 
         if (disconnectedFor >= PROLONGED_DISCONNECT_MS) {
           notify({
@@ -911,6 +917,7 @@ export const useEvents = create<EventsState>((set, get) => ({
       authError: false,
       reconnectAttempts: 0,
       lastDisconnectAt: null,
+      lastDisconnectReason: null,
       sessionStatus: {},
       statusText: {},
       sessionErrors: {},

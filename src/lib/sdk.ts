@@ -7,7 +7,7 @@
 // every method now talks to the opencode V2 HTTP API and maps payloads through
 // src/lib/v2-compat.ts so stores/screens stay untouched.
 import { fetch as expoFetch } from "expo/fetch"
-import { SSEParser } from "./sse"
+import { CONNECT_TIMEOUT_MS, dialStream, SSEParser } from "./sse"
 import { ApiError, apiErrorFor } from "./api-error"
 import { createHeaders, fetchWithTimeout, request } from "./http"
 import { detectServerApi, type ProbeRequest, type ServerApi, type ServerIdentity } from "./api-detect"
@@ -230,11 +230,6 @@ export interface HealthResponse {
 
 export { ApiError }
 
-// A stream that has not answered with headers by now is not going to: the
-// caller reports "connected" as soon as this resolves, so an indefinite wait
-// shows a healthy banner over a dead socket.
-const CONNECT_TIMEOUT_MS = 15_000
-
 function createV2Client(config: ClientConfig) {
   // Session IDs and switch choices belong to this connection. Sharing this
   // cache across clients can skip the first model switch on another server.
@@ -313,28 +308,14 @@ function createV2Client(config: ClientConfig) {
         // hold every event until the connection closes.
         headers["Accept-Encoding"] = "identity"
 
-        // The caller's signal stays authoritative for the whole stream; the
-        // connect timer needs its own controller so it can fire once and then
-        // stop mattering. Aborting the controller aborts the fetch the same way.
-        const connectController = new AbortController()
-        const forwardAbort = () => connectController.abort()
-        if (signal?.aborted) connectController.abort()
-        signal?.addEventListener("abort", forwardAbort)
-
-        // Must use expo/fetch for ReadableStream support on native
+        // Must use expo/fetch for ReadableStream support on native.
         //
-        // Headers must arrive within CONNECT_TIMEOUT_MS: a black-holed host
-        // accepts the socket and then never answers, so without this the
-        // stream hangs forever, no event ever arrives, and the caller has
-        // already reported "connected". Aborting here turns that into a normal
-        // reconnect cycle.
-        const connectTimeout = setTimeout(() => connectController.abort(), CONNECT_TIMEOUT_MS)
-        let response
-        try {
-          response = await expoFetch(url, { headers, signal: connectController.signal })
-        } finally {
-          clearTimeout(connectTimeout)
-        }
+        // Headers must arrive within CONNECT_TIMEOUT_MS (see dialStream): a
+        // black-holed host accepts the socket and then never answers, so
+        // without this the stream hangs forever, no event ever arrives, and
+        // the caller has already reported "connected". Aborting turns that
+        // into a normal reconnect cycle.
+        const response = await dialStream(expoFetch, url, { headers, signal }, CONNECT_TIMEOUT_MS)
         if (!response.ok || !response.body) {
           throw apiErrorFor(response.status, `Failed to connect to event stream: ${response.status}`)
         }
@@ -399,7 +380,6 @@ function createV2Client(config: ClientConfig) {
           }
         } finally {
           reader.releaseLock()
-          signal?.removeEventListener("abort", forwardAbort)
         }
       },
     },

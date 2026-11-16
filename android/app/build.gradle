@@ -92,8 +92,8 @@ android {
         applicationId 'cc.agentlabs.opencode'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 86
-        versionName "0.3.21"
+        versionCode 87
+        versionName "0.3.22"
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
     }

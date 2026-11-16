@@ -101,7 +101,10 @@
       "reconnecting": "Reconnecting… (attempt {{attempt}})",
       "connected": "Connected ✓",
       "reverted": "Message reverted — resend to confirm",
-      "undo": "Undo"
+      "undo": "Undo",
+      "dismiss": "Dismiss",
+      "lastError": "Last error: {{error}}",
+      "errorNextAction": "Check the server connection, then resend."
     },
     "empty": {
       "title": "Start a conversation",
@@ -115,7 +118,9 @@
     },
     "actions": {
       "editMessage": "Edit message",
-      "replace": "Replace"
+      "replace": "Replace",
+      "copy": "Copy",
+      "copied": "Copied"
     },
     "alerts": {
       "messageActionsTitle": "Message actions",
@@ -145,6 +150,16 @@
       "speechErrorMessage": "Could not use voice input. Check your microphone permission and try again.",
       "abortFailedTitle": "Could not stop the run",
       "abortFailedMessage": "The server did not accept the interrupt. The run is still going — check the server."
+    },
+    "nav": {
+      "previous": "Previous",
+      "next": "Next",
+      "latest": "Latest",
+      "previousLabel": "Previous message",
+      "nextLabel": "Next message",
+      "latestLabel": "Latest message",
+      "counter": "{{current}} / {{total}}",
+      "counterLabel": "Message {{current}} of {{total}}"
     }
   },
   "connection": {
