@@ -306,18 +306,18 @@ try {
   // Activity spoiler: three consecutive assistant steps are ONE row — "Steps 1"
   // before the answer and "Steps 5" after it. Per-message spoilers could never
   // reach 5, and the screen used to show "Steps: 1" once per step.
-  await waitFor('Steps 5')
-  const stepLines = (snapshot().match(/text="Steps \d+"/g) ?? []).length
+  await waitFor('5 steps')
+  const stepLines = (snapshot().match(/text="\d+ steps?"/g) ?? []).length
   assert.equal(stepLines, 2, 'a run shows one step line per text boundary, not one per message')
   screenshot('activity-spoiler')
 
   // Navigator (#214): hidden at rest, shown by a scroll, one tap = one message.
-  assert.ok(!snapshot().includes('nav-counter'), 'navigator stays hidden while the user is not scrolling')
+  assert.ok(!snapshot().includes('content-desc="Message '), 'navigator stays hidden while the user is not scrolling')
   const dimensions = adb('shell', 'wm', 'size')
   const [, width, height] = dimensions.match(/Override size: (\d+)x(\d+)/) ?? dimensions.match(/Physical size: (\d+)x(\d+)/) ?? []
   assert.ok(width && height)
   adb('shell', 'input', 'swipe', String(Math.floor(+width / 2)), String(Math.floor(+height * 0.75)), String(Math.floor(+width / 2)), String(Math.floor(+height * 0.35)), '300')
-  await waitFor('nav-counter')
+  await waitFor('content-desc="Message ')
   await waitFor('nav-up')
   await waitFor('nav-down')
   await waitFor('nav-latest')
@@ -337,7 +337,7 @@ try {
   await sleep(900)
   await waitFor('OFFLINE_ANSWER_42')
   await sleep(1400)
-  assert.ok(!snapshot().includes('nav-counter'), 'navigator hides once scrolling stops')
+  assert.ok(!snapshot().includes('content-desc="Message '), 'navigator hides once scrolling stops')
   screenshot('navigator-hidden')
 
   await tap('model-chip')
