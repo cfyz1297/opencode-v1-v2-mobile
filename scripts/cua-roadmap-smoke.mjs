@@ -329,11 +329,14 @@ try {
     throw new Error('dragging the transcript did not show the navigator')
   }
 
-  const shown = await wakeNavigator()
+  let shown = await wakeNavigator()
   for (const id of ['nav-up', 'nav-down', 'nav-latest']) {
     assert.ok(shown.includes(`resource-id="${id}"`), `navigator exposes ${id}`)
   }
+  // Evidence shot first, then wake it again: a screencap plus dump takes longer
+  // than the panel's grace period, so the tap has to come from a fresh dump.
   screenshot('navigator-shown')
+  shown = await wakeNavigator()
   const counterBefore = counterValue(shown)
   assert.match(counterBefore ?? '', /^\d+ \/ \d+$/, 'counter reads N / M')
   assert.ok(tapBounds(shown, n => n.includes('resource-id="nav-up"')), 'tap one message up')
