@@ -97,10 +97,26 @@ test("the navigator walks the user's own messages", () => {
   // unreliable; a question is a fixed anchor.
   assert.match(source, /userRowIds\(rows\)/, "targets come from the user rows")
   const viewable = source.slice(source.indexOf("const handleViewable"), source.indexOf("// Row frames for navigation."))
-  assert.match(viewable, /userAnchorIndex\(rows, top\)/, "the top visible row resolves to its question")
+  assert.match(viewable, /userAnchorIndex\(current, top\)/, "the top visible row resolves to its question")
   const jump = source.slice(source.indexOf("const jumpTo"), source.indexOf("const moveMessage"))
   assert.match(jump, /rowIndexById\.get\(id\)/, "the jump maps the question to a list index")
   assert.match(jump, /animated: false/, "an animated jump over a long transcript reads as a freeze")
+})
+
+test("the viewability handler cannot go stale", () => {
+  // FlatList captures the callback on mount, so closing over `rows` with a
+  // stable identity was a stale closure: the position never updated and the
+  // counter showed its placeholder (1 / 6) for every message.
+  const handler = source.slice(source.indexOf("const handleViewable"), source.indexOf("const jumpTo"))
+  assert.match(handler, /rowsRef\.current/, "the handler must read the current rows")
+  assert.match(handler, /rowIndexRef\.current\.get/, "and the current index map")
+  assert.doesNotMatch(handler, /userAnchorIndex\(rows,/, "a closed-over rows array would go stale")
+  assert.match(handler, /\[nav\],/, "the identity stays stable across streams")
+})
+
+test("an unknown position does not claim to be the oldest", () => {
+  assert.match(source, /const navCurrent = navIndex >= 0 \? navTotal - navIndex : navTotal/)
+  assert.match(source, /const nextDisabled = navIndex === 0/, "only the newest message disables Next")
 })
 
 test("the buttons are wide enough to hit", () => {

@@ -892,6 +892,16 @@ export default function SessionScreen() {
   const rowIndexById = useMemo(() => new Map(rows.map((row, at) => [row.id, at])), [rows])
   nav.sync(navigableIds)
 
+  // FlatList captures onViewableItemsChanged on mount and does not support
+  // swapping it later, so the handler must keep a stable identity and read the
+  // current data through refs. Closing over `rows` with [nav] deps was a stale
+  // closure: the list kept reporting on the first (empty) data, so the position
+  // was always unknown and the counter fell back to its placeholder.
+  const rowsRef = useRef(rows)
+  rowsRef.current = rows
+  const rowIndexRef = useRef(rowIndexById)
+  rowIndexRef.current = rowIndexById
+
   // The list reports visible rows on every layout and scroll settle; the last
   // one is the row at the viewport's top edge (data order is newest first), and
   // that is the "current message" the counter shows.
@@ -902,12 +912,13 @@ export default function SessionScreen() {
       // made a single tap skip several messages (6/12 -> 3/12).
       if (nav.held) return
       const last = viewableItems.filter(Boolean).at(-1)?.item?.id
-      const top = last === undefined ? undefined : rowIndexById.get(last)
+      const top = last === undefined ? undefined : rowIndexRef.current.get(last)
       // Answers follow their question, so the row on screen resolves to the
       // question that owns it — not to whatever assistant row happens to sit
       // at the top edge.
-      const anchor = top === undefined ? undefined : userAnchorIndex(rows, top)
-      nav.setCurrent(anchor === undefined ? undefined : rows[anchor].id)
+      const current = rowsRef.current
+      const anchor = top === undefined ? undefined : userAnchorIndex(current, top)
+      nav.setCurrent(anchor === undefined ? undefined : current[anchor].id)
       setCurrentNavIndex((prev) => {
         const next = nav.current()
         return prev === next ? prev : next
@@ -1097,9 +1108,12 @@ export default function SessionScreen() {
   // N = total - index. A single-message session never shows the strip.
   const navTotal = navigableIds.length
   const navIndex = currentNavIndex >= 0 ? currentNavIndex : nav.current()
-  const navCurrent = navIndex >= 0 ? navTotal - navIndex : 1
-  const prevDisabled = navIndex < 0 || (navIndex >= navTotal - 1 && !hasMore)
-  const nextDisabled = navIndex <= 0
+  // Unknown position means "at the newest message", which is where a session
+  // opens — the old fallback of 1 claimed the oldest and made the up button
+  // look broken.
+  const navCurrent = navIndex >= 0 ? navTotal - navIndex : navTotal
+  const prevDisabled = navIndex >= 0 && navIndex >= navTotal - 1 && !hasMore
+  const nextDisabled = navIndex === 0
   const prevLoading = loadingMore && navIndex >= 0 && navIndex >= navTotal - 1
   const navPanelVisible = !isLoading && showNavStrip && navTotal > 1
   // Full text for the reconnect banner's Copy action: same two lines it shows.
