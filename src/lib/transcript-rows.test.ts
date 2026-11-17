@@ -5,6 +5,8 @@ import {
   rowMessage,
   rowMessages,
   rowParts,
+  userAnchorIndex,
+  userRowIds,
   type TranscriptItem,
 } from "./transcript-rows.ts"
 import type { Part } from "./sdk.ts"
@@ -95,4 +97,60 @@ test("the newest message of a run carries the chrome", () => {
 
 test("an empty transcript has no rows", () => {
   assert.deepEqual(buildTranscriptRows([]), [])
+})
+
+// The navigator walks the user's own messages: a question is a stable anchor,
+// while assistant rows grow, merge and stream. These two helpers are the whole
+// "which question am I reading" rule.
+function userRow(id: string): TranscriptItem {
+  return item(id, "user")
+}
+function assistantRow(id: string): TranscriptItem {
+  return item(id, "assistant", [{ type: "text", text: "answer" }])
+}
+
+test("userRowIds lists only the user's own rows, newest first", () => {
+  const rows = buildTranscriptRows([
+    assistantRow("a3"),
+    assistantRow("a2"),
+    userRow("u2"),
+    assistantRow("a1"),
+    userRow("u1"),
+  ])
+  // A merged assistant run is one row and never a target.
+  assert.deepEqual(userRowIds(rows), ["u2", "u1"])
+})
+
+test("the anchor is the question that owns what is on screen", () => {
+  // Newest first: [run(a2), u2, run(a1), u1]. Reading a2 (index 0) means u2 is
+  // the question being answered: it sits at a larger index, i.e. older content.
+  const rows = buildTranscriptRows([assistantRow("a2"), userRow("u2"), assistantRow("a1"), userRow("u1")])
+  assert.deepEqual(
+    rows.map((row) => row.id),
+    ["a2", "u2", "a1", "u1"],
+  )
+  assert.equal(userAnchorIndex(rows, 0), 1, "the newest answer belongs to the newest question")
+  assert.equal(userAnchorIndex(rows, 1), 1, "standing on the question keeps it current")
+  assert.equal(userAnchorIndex(rows, 2), 3, "an older answer belongs to the older question")
+  assert.equal(userAnchorIndex(rows, 3), 3)
+})
+
+test("reading past the oldest question keeps it as the anchor", () => {
+  const rows = buildTranscriptRows([userRow("u1"), assistantRow("a1")])
+  assert.deepEqual(
+    rows.map((row) => row.id),
+    ["u1", "a1"],
+  )
+  assert.equal(userAnchorIndex(rows, 1), 0, "nothing older to attach to")
+})
+
+test("a transcript with no questions has no anchor", () => {
+  assert.equal(userAnchorIndex(buildTranscriptRows([assistantRow("a1")]), 0), undefined)
+  assert.equal(userAnchorIndex([], 0), undefined)
+})
+
+test("an out-of-range index is clamped instead of throwing", () => {
+  const rows = buildTranscriptRows([userRow("u1")])
+  assert.equal(userAnchorIndex(rows, 99), 0)
+  assert.equal(userAnchorIndex(rows, -5), 0)
 })

@@ -62,3 +62,35 @@ export function rowMessage(row: TranscriptRow): Message {
 export function rowMessages(row: TranscriptRow): Message[] {
   return row.kind === "single" ? [row.item.message] : row.items.map((item) => item.message)
 }
+
+/** True for a row that is one of the user's own messages. */
+function isUserRow(row: TranscriptRow): boolean {
+  return row.kind === "single" && row.item.message.role === "user"
+}
+
+/**
+ * The navigator's targets: the user's own messages, newest first.
+ *
+ * A question is a stable anchor — it never streams, never merges and never
+ * changes height — while assistant rows grow and re-merge, which is what made
+ * the counter and the jumps unreliable.
+ */
+export function userRowIds(rows: TranscriptRow[]): string[] {
+  return rows.filter(isUserRow).map((row) => row.id)
+}
+
+/**
+ * Data index of the user message that owns the content at data index `top`.
+ *
+ * Answers come after their question in time, so in newest-first data the
+ * question sits at a *larger* index; walking forward finds it. Past the oldest
+ * question the walk goes back to the newest one, so the counter never points at
+ * nothing.
+ */
+export function userAnchorIndex(rows: TranscriptRow[], top: number): number | undefined {
+  if (rows.length === 0) return undefined
+  const start = Math.min(Math.max(top, 0), rows.length - 1)
+  for (let i = start; i < rows.length; i++) if (isUserRow(rows[i])) return i
+  for (let i = start - 1; i >= 0; i--) if (isUserRow(rows[i])) return i
+  return undefined
+}

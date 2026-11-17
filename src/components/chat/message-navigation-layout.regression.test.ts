@@ -56,7 +56,7 @@ test("a navigator tap owns the position until the user takes over", () => {
     return source.slice(at, at + length)
   }
   const jump = around("const jumpTo")
-  assert.match(jump, /nav\.jumpTo\(nav\.ids\[index\]\)/, "the jump sets and holds the position in one step")
+  assert.match(jump, /nav\.jumpTo\(id\)/, "the jump sets and holds the position in one step")
   assert.match(around("const moveMessage"), /followBottomRef\.current = false/, "a tap must stop auto-follow")
   assert.match(
     around("const handleViewable"),
@@ -92,6 +92,24 @@ test("one tap jumps by index, not by a frame-derived offset", () => {
   assert.doesNotMatch(source, /nav\.frames/, "and neither is a frame map")
 })
 
+test("the navigator walks the user's own messages", () => {
+  // Assistant rows stream, grow and re-merge, so navigating them was
+  // unreliable; a question is a fixed anchor.
+  assert.match(source, /userRowIds\(rows\)/, "targets come from the user rows")
+  const viewable = source.slice(source.indexOf("const handleViewable"), source.indexOf("// Row frames for navigation."))
+  assert.match(viewable, /userAnchorIndex\(rows, top\)/, "the top visible row resolves to its question")
+  const jump = source.slice(source.indexOf("const jumpTo"), source.indexOf("const moveMessage"))
+  assert.match(jump, /rowIndexById\.get\(id\)/, "the jump maps the question to a list index")
+  assert.match(jump, /animated: false/, "an animated jump over a long transcript reads as a freeze")
+})
+
+test("the buttons are wide enough to hit", () => {
+  const button = style("navBtn")
+  assert.match(button, /width:\s*40/, "buttons are 40pt, not 32")
+  assert.match(button, /height:\s*40/)
+  assert.equal(source.match(/hitSlop=\{6\}/g)?.length, 3, "every navigator button extends its hit area")
+})
+
 test("order is counter, up, down, latest", () => {
   const order = ['testID="nav-counter"', 'testID="nav-up"', 'testID="nav-down"', 'testID="nav-latest"'].map((id) =>
     source.indexOf(id),
@@ -111,9 +129,8 @@ test("Latest carries the double chevron", () => {
 
 test("the panel stays small enough to sit over the text", () => {
   const button = style("navBtn")
-  assert.match(button, /width:\s*32/, "buttons are 32pt, not 44")
-  assert.match(button, /height:\s*32/)
-  assert.match(style("navCounter"), /fontSize:\s*11/, "the counter is a caption, not a header")
+  assert.match(button, /width:\s*40/, "buttons are 40pt, not 44")
+  assert.match(style("navCounter"), /fontSize:\s*12/, "the counter is a caption, not a header")
   // Translucent surface: text underneath must stay readable.
   assert.match(style("navPanel"), /rgba\(255,255,255,0\.9/, "light panel is translucent")
   assert.match(style("navPanelDark"), /rgba\(18,18,18,0\.9/, "dark panel is translucent")

@@ -66,6 +66,8 @@ import {
   rowMessage,
   rowMessages,
   rowParts,
+  userAnchorIndex,
+  userRowIds,
 } from "../../src/lib/transcript-rows"
 import { log } from "../../src/lib/logbuffer"
 
@@ -883,7 +885,11 @@ export default function SessionScreen() {
   // renders a visible bubble. Banners, prompts and status live outside the
   // FlatList, so there are no invisible in-list rows to skip; the filter stays
   // explicit so a future role can't silently join the navigation set.
-  const navigableIds = useMemo(() => rows.map((row) => row.id), [rows])
+  // Targets are the user's own messages: a question never streams or merges,
+  // so it is a stable anchor. Assistant rows grow and re-merge, which is what
+  // made the counter and the jumps unreliable.
+  const navigableIds = useMemo(() => userRowIds(rows), [rows])
+  const rowIndexById = useMemo(() => new Map(rows.map((row, at) => [row.id, at])), [rows])
   nav.sync(navigableIds)
 
   // The list reports visible rows on every layout and scroll settle; the last
@@ -896,7 +902,12 @@ export default function SessionScreen() {
       // made a single tap skip several messages (6/12 -> 3/12).
       if (nav.held) return
       const last = viewableItems.filter(Boolean).at(-1)?.item?.id
-      nav.setCurrent(last)
+      const top = last === undefined ? undefined : rowIndexById.get(last)
+      // Answers follow their question, so the row on screen resolves to the
+      // question that owns it — not to whatever assistant row happens to sit
+      // at the top edge.
+      const anchor = top === undefined ? undefined : userAnchorIndex(rows, top)
+      nav.setCurrent(anchor === undefined ? undefined : rows[anchor].id)
       setCurrentNavIndex((prev) => {
         const next = nav.current()
         return prev === next ? prev : next
@@ -906,21 +917,22 @@ export default function SessionScreen() {
   )
 
   const jumpTo = useCallback(
-    (index: number) => {
-      if (index < 0 || index >= nav.ids.length || !flatListRef.current) return
-      // The list resolves the offset itself. Offsets derived from measured
-      // frames are unreliable outside the render window, and that is exactly
-      // where the target is after a fling.
+    (navIndex: number) => {
+      const id = nav.ids[navIndex]
+      const index = id === undefined ? undefined : rowIndexById.get(id)
+      if (index === undefined || !flatListRef.current) return
       cancelJump()
       navJump.current = { index }
       // jumpTo both sets the position and takes ownership: calling setCurrent
       // after the hold was a no-op, so the counter stayed on the old row while
       // the transcript scrolled (6/12 -> 6/12).
-      nav.jumpTo(nav.ids[index])
-      setCurrentNavIndex(index)
-      flatListRef.current.scrollToIndex({ index, viewPosition: 0.5, animated: true })
+      nav.jumpTo(id)
+      setCurrentNavIndex(navIndex)
+      // Instant, not animated: an animated jump over a long transcript spends
+      // its time measuring rows and feels like a freeze.
+      flatListRef.current.scrollToIndex({ index, viewPosition: 0.5, animated: false })
     },
-    [nav, cancelJump],
+    [nav, cancelJump, rowIndexById],
   )
 
   const moveMessage = useCallback(
@@ -1274,7 +1286,7 @@ export default function SessionScreen() {
                 flatListRef.current?.scrollToOffset({ offset: averageItemLength * index, animated: false })
                 navJump.current.timer = setTimeout(() => {
                   if (navJump.current?.index === index) {
-                    flatListRef.current?.scrollToIndex({ index, viewPosition: 0.5, animated: true })
+                    flatListRef.current?.scrollToIndex({ index, viewPosition: 0.5, animated: false })
                   }
                 }, 120)
               }}
@@ -1370,6 +1382,7 @@ export default function SessionScreen() {
                   accessibilityRole="button"
                   accessibilityLabel={t("session.nav.previousLabel")}
                   accessibilityState={{ disabled: prevDisabled }}
+                  hitSlop={6}
                   testID="nav-up"
                 >
                   {prevLoading ? (
@@ -1385,6 +1398,7 @@ export default function SessionScreen() {
                   accessibilityRole="button"
                   accessibilityLabel={t("session.nav.nextLabel")}
                   accessibilityState={{ disabled: nextDisabled }}
+                  hitSlop={6}
                   testID="nav-down"
                 >
                   <Ionicons name="chevron-down" size={16} color={isDark ? "#ffffff" : "#0a0a0a"} />
@@ -1394,6 +1408,7 @@ export default function SessionScreen() {
                   onPress={() => scrollToBottom(true)}
                   accessibilityRole="button"
                   accessibilityLabel={t("session.nav.latestLabel")}
+                  hitSlop={6}
                   testID="nav-latest"
                 >
                   <View style={s.navDoubleCaret}>
@@ -1656,19 +1671,21 @@ const s = StyleSheet.create({
     shadowRadius: 4,
   },
   navPanelDark: { borderColor: "#2a2a2a", backgroundColor: "rgba(18,18,18,0.94)" },
+  // 40pt is the comfortable thumb target for a row of icon buttons; 32 was
+  // hard to hit while reading.
   navBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
   },
   navBtnDisabled: { opacity: 0.35 },
   navCounter: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "700",
     color: "#666666",
-    minWidth: 40,
+    minWidth: 48,
     textAlign: "center",
   },
   navCounterDark: { color: "#9a9a9a" },
