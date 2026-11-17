@@ -66,6 +66,15 @@ test("a navigator tap owns the position until the user takes over", () => {
   assert.match(around("const scrollToBottom"), /navHoldRef\.current = false/, "Latest hands the position back")
 })
 
+test("the list, not the frame math, says which message is current", () => {
+  // A fling leaves rows outside the render window unmeasured, so the counter
+  // read 12/12 on old messages and a tap seeked from that wrong base.
+  assert.match(source, /onViewableItemsChanged=\{handleViewable\}/, "the list must report visible rows")
+  const handler = source.slice(source.indexOf("const handleViewable"), source.indexOf("// Row frames for navigation."))
+  assert.match(handler, /viewableItems[\s\S]{0,80}at\(-1\)/, "the row at the viewport's top edge is current")
+  assert.match(handler, /nav\.setCurrent\(/, "and it is fed to the navigator")
+})
+
 test("order is counter, up, down, latest", () => {
   const order = ['testID="nav-counter"', 'testID="nav-up"', 'testID="nav-down"', 'testID="nav-latest"'].map((id) =>
     source.indexOf(id),

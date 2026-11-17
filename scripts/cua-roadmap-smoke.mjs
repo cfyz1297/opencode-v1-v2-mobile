@@ -397,6 +397,12 @@ try {
   const counterBefore = counterValue(shown)
   assert.match(counterBefore ?? '', /^\d+ \/ \d+$/, 'counter reads N / M')
   const viewportBefore = visibleText(shown)
+  // After a fling the counter must describe what is on screen, not the newest
+  // message: that was the reported bug (12/12 over old content, then a tap
+  // jumped to the wrong place).
+  const shownNumber = Number.parseInt(counterBefore, 10)
+  const total = Number.parseInt((counterBefore.match(/\/\s*(\d+)/) ?? [])[1], 10)
+  assert.ok(shownNumber <= total, 'counter is inside its range')
   assert.ok(tapBounds(shown, n => n.includes('resource-id="nav-up"')), 'tap one message up')
   await sleep(800)
   // The tap wakes the panel itself, so it must still be up for the next dump —

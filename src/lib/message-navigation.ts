@@ -8,11 +8,17 @@ export class MessageNavigation {
   expected: number | undefined
   target: string | undefined
   anchor: { id: string; offset: number; height: number } | undefined
+  // The row the list says is on screen. Frames are only reported for rows
+  // inside the render window, so after a fling the frame math can point at the
+  // newest message while the viewport shows an old one — the counter then read
+  // "12 / 12" and a tap seeked from the wrong base.
+  visibleId: string | undefined
 
   sync(ids: string[]) {
     this.ids = ids
     if (this.target && !ids.includes(this.target)) this.target = undefined
     if (this.anchor && !ids.includes(this.anchor.id)) this.anchor = undefined
+    if (this.visibleId && !ids.includes(this.visibleId)) this.visibleId = undefined
     for (const id of this.frames.keys()) {
       if (!ids.includes(id)) this.frames.delete(id)
     }
@@ -21,7 +27,15 @@ export class MessageNavigation {
   current() {
     if (this.target) return this.ids.indexOf(this.target)
     if (this.anchor) return this.ids.indexOf(this.anchor.id)
+    if (this.visibleId) return this.ids.indexOf(this.visibleId)
     return this.visible()
+  }
+
+  // Called from the list's viewability callback with the row at the viewport's
+  // top edge — the oldest one on screen, which is what "current message" means
+  // for a transcript read from the bottom up.
+  setCurrent(id: string | undefined) {
+    this.visibleId = id && this.ids.includes(id) ? id : undefined
   }
 
   visible() {
@@ -57,6 +71,7 @@ export class MessageNavigation {
   manual(offset?: number) {
     this.target = undefined
     this.anchor = undefined
+    this.visibleId = undefined
     this.expected = offset
     if (offset !== undefined) this.offset = offset
   }

@@ -60,6 +60,7 @@ import { TabletSessions } from '../../src/components/TabletSessions'
 import { SubagentBar } from "../../src/components/chat/SubagentBar"
 import { isSafeSessionId } from '../../src/lib/session-id'
 import { NAV_PANEL_IDLE_MS } from "../../src/lib/nav-panel"
+import { VIEWABILITY } from "../../src/lib/nav-panel"
 import { MessageNavigation } from "../../src/lib/message-navigation"
 import {
   buildTranscriptRows,
@@ -891,6 +892,21 @@ export default function SessionScreen() {
     }
   }, [nav])
 
+  // The list reports visible rows on every layout and scroll settle; the last
+  // one is the row at the viewport's top edge (data order is newest first), and
+  // that is the "current message" the counter shows.
+  const handleViewable = useCallback(
+    ({ viewableItems }: { viewableItems: Array<{ item?: { id?: string } } | undefined> }) => {
+      const last = viewableItems.filter(Boolean).at(-1)?.item?.id
+      nav.setCurrent(last)
+      setCurrentNavIndex((prev) => {
+        const next = nav.current()
+        return prev === next ? prev : next
+      })
+    },
+    [nav],
+  )
+
   // Row frames for navigation. They arrive via onLayout as rows mount or
   // resize (streaming growth); a pending seek resumes as soon as its target's
   // frame lands. Frames of messages that left the data are dropped by
@@ -1272,6 +1288,11 @@ export default function SessionScreen() {
                 flatListRef.current?.scrollToOffset({ offset: averageItemLength * index, animated: false })
               }}
               keyExtractor={(row) => row.id}
+              // The list is the authority on what is on screen. Frame math can
+              // only see rows inside the render window, which after a fling are
+              // not the ones the user is looking at.
+              viewabilityConfig={VIEWABILITY}
+              onViewableItemsChanged={handleViewable}
               renderItem={({ item: row }) => {
                 const message = rowMessage(row)
                 const isUser = message.role === "user"
