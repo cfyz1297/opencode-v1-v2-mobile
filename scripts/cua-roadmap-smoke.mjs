@@ -397,7 +397,13 @@ try {
   await screenshot('model-and-effort-selected')
   adb('shell', 'wm', 'size', '1920x1200')
   await sleep(2000)
-  // Re-open the session after resize so a stolen back/sheet cannot leave history on top.
+  // A resize recreates the activity and Android restores the *previous* route,
+  // so the deep link could land on the offline-history page instead of the
+  // session. A cold start with the deep link has no stack to restore.
+  adb('shell', 'am', 'force-stop', pkg)
+  await sleep(800)
+  await open('session/roadmap-session')
+  await sleep(2500)
   await ensureSessionOpen()
   await waitFor('OFFLINE_ANSWER_42')
   await waitFor('tablet-session-sidebar')
