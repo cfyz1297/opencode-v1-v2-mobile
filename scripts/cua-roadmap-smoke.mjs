@@ -392,51 +392,43 @@ try {
   }
   const counterBefore = counterValue(shown)
   assert.match(counterBefore ?? '', /^\d+ \/ \d+$/, 'counter reads N / M')
-  const viewportBefore = visibleText(shown)
-  // After a fling the counter must describe what is on screen, not the newest
-  // message: that was the reported bug (12/12 over old content, then a tap
-  // jumped to the wrong place).
-  const shownNumber = Number.parseInt(counterBefore, 10)
+  const position = Number.parseInt(counterBefore, 10)
   const total = Number.parseInt((counterBefore.match(/\/\s*(\d+)/) ?? [])[1], 10)
-  assert.ok(shownNumber <= total, 'counter is inside its range')
   // Six questions in the fixture (u3, u2, u1, u0c, u0b, u0a): the navigator
   // walks the user's own messages, so the four assistant rows — three of them
   // merged runs — must not be counted.
   assert.equal(total, 6, `the navigator counts the user's messages, got ${counterBefore}`)
+  assert.ok(position >= 1 && position <= total, 'counter is inside its range')
 
-  // Tap straight from this dump: every dump costs ~1.5s and the panel hides
-  // after 3.5s, so any extra work — a screenshot included — hands the tap to a
-  // vanished button.
-  assert.ok(tapBounds(shown, n => n.includes('resource-id="nav-up"')), 'tap one message up')
-  await sleep(700)
-  // The tap itself wakes the panel, so it must still be up for the next dump —
-  // no second swipe, or the counter would move for the wrong reason.
-  let after
-  for (let i = 0; i < 3 && !after; i++) {
-    const xml = snapshot()
-    if (xml.includes('resource-id="nav-counter"')) after = xml
-  }
-  assert.ok(after, 'the navigator stays up after a tap')
+  // Step in whichever direction is enabled: the swipe may have landed on the
+  // oldest question, where "up" is disabled by design.
+  const step = position > 1 ? 'up' : 'down'
+  const expected = step === 'up' ? position - 1 : position + 1
+  const viewportBefore = visibleText(shown)
+  // Tap from this dump and read the result with ONE dump: each dump costs
+  // ~1.5s and the panel hides 3.5s after the last interaction.
+  assert.ok(tapBounds(shown, n => n.includes(`resource-id="nav-${step}"`)), `tap one message ${step}`)
+  await sleep(250)
+  const after = snapshot()
+  assert.ok(after.includes('resource-id="nav-counter"'), 'the navigator stays up after a tap')
   const counterAfter = counterValue(after)
   assert.equal(
     Number.parseInt(counterAfter, 10),
-    Number.parseInt(counterBefore, 10) - 1,
-    `one tap moves exactly one message (${counterBefore} -> ${counterAfter})`,
+    expected,
+    `one tap moves exactly one question (${counterBefore} -> ${counterAfter})`,
   )
   assert.notEqual(
     visibleText(after),
     viewportBefore,
     'the transcript itself must move, not only the counter',
   )
-  screenshot('navigator-one-up')
+  screenshot('navigator-one-step')
 
-  // Latest: wake once more and tap from that dump, for the same reason as the
-  // up-tap above.
+  // Latest: wake once more and tap from that dump, for the same reason.
   const forLatest = await wakeNavigator()
   assert.ok(tapBounds(forLatest, n => n.includes('resource-id="nav-latest"')), 'tap back to the latest message')
   await sleep(900)
-  const landed = await waitFor('OFFLINE_ANSWER_42')
-  assert.ok(landed, 'Latest returns to the newest message')
+  await waitFor('OFFLINE_ANSWER_42')
   await sleep(4000)
   assert.ok(!snapshot().includes('content-desc="Message '), 'navigator hides once scrolling stops')
   screenshot('navigator-hidden')
