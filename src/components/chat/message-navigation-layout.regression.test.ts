@@ -75,6 +75,19 @@ test("the list, not the frame math, says which message is current", () => {
   assert.match(handler, /nav\.setCurrent\(/, "and it is fed to the navigator")
 })
 
+test("a queued jump retry never outlives the next command", () => {
+  // The retry timer was not cancelled: tapping Latest and then letting the
+  // 120 ms retry fire scrolled the transcript back to the old message.
+  const handler = source.slice(source.indexOf("onScrollToIndexFailed"), source.indexOf("keyExtractor"))
+  assert.match(handler, /navJump\.current\?\.index !== index/, "a stale retry must be dropped")
+  assert.match(handler, /navJump\.current\.timer = setTimeout/, "and its timer recorded")
+  assert.match(source, /const cancelJump = useCallback/, "there must be a cancel")
+  const bottom = source.slice(source.indexOf("const scrollToBottom"), source.indexOf("const handleScroll"))
+  assert.match(bottom, /cancelJump\(\)/, "Latest cancels a pending jump")
+  const jump = source.slice(source.indexOf("const jumpTo"), source.indexOf("const moveMessage"))
+  assert.match(jump, /cancelJump\(\)/, "and so does a new jump")
+})
+
 test("one tap jumps by index, not by a frame-derived offset", () => {
   // Frames for rows outside the render window are stale or missing, so an
   // offset computed from them landed the jump on the wrong message.

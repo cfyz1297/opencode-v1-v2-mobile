@@ -254,6 +254,14 @@ export default function SessionScreen() {
   // the placement-independent navigation math (src/lib/message-navigation.ts).
   // `navigation` below is expo-router's, hence the short name.
   const nav = useRef(new MessageNavigation()).current
+  // The row a jump is heading to. A jump the list could not measure retries
+  // once, but a retry queued 120 ms ago must not fire after the user has
+  // already asked for another row or for the end of the transcript.
+  const navJump = useRef<{ index: number; timer?: ReturnType<typeof setTimeout> } | null>(null)
+  const cancelJump = useCallback(() => {
+    if (navJump.current?.timer) clearTimeout(navJump.current.timer)
+    navJump.current = null
+  }, [])
   // Index into nav.ids (newest first) of the current navigable message; -1
   // while unknown. Mirrored into state so the counter and the disabled states
   // re-render on scroll and on content change.
@@ -458,9 +466,10 @@ export default function SessionScreen() {
     followBottomRef.current = true
     // Reset the logical viewport before the native callback arrives, so a
     // stale scroll event queued mid-jump can't resurrect the old position.
+    cancelJump()
     nav.manual(0)
     flatListRef.current?.scrollToOffset({ offset: 0, animated })
-  }, [nav])
+  }, [nav, cancelJump])
 
   // Re-select on every focus, not just mount. currentSession/messages/
   // permissions are a single global store, and the native stack keeps screens
@@ -899,11 +908,13 @@ export default function SessionScreen() {
       // The list resolves the offset itself. Offsets derived from measured
       // frames are unreliable outside the render window, and that is exactly
       // where the target is after a fling.
+      cancelJump()
+      navJump.current = { index }
       nav.setCurrent(nav.ids[index])
       setCurrentNavIndex(index)
       flatListRef.current.scrollToIndex({ index, viewPosition: 0.5, animated: true })
     },
-    [nav],
+    [nav, cancelJump],
   )
 
   const moveMessage = useCallback(
@@ -942,8 +953,9 @@ export default function SessionScreen() {
     setCurrentNavIndex(-1)
     return () => {
       if (navIdleTimer.current) clearTimeout(navIdleTimer.current)
+      cancelJump()
     }
-  }, [id, nav])
+  }, [id, nav, cancelJump])
 
   // Reset trigger when loading finishes
   useEffect(() => {
@@ -1251,11 +1263,15 @@ export default function SessionScreen() {
               onScrollEndDrag={wakeNavPanel}
               onMomentumScrollEnd={wakeNavPanel}
               onScrollToIndexFailed={({ index, averageItemLength }) => {
-                // The target was never measured: jump approximately so its
-                // rows mount, then let the list settle on the index.
+                // The target was never measured: jump approximately so its rows
+                // mount, then settle on the index — but only if this jump is
+                // still the one the user asked for.
+                if (navJump.current?.index !== index) return
                 flatListRef.current?.scrollToOffset({ offset: averageItemLength * index, animated: false })
-                setTimeout(() => {
-                  flatListRef.current?.scrollToIndex({ index, viewPosition: 0.5, animated: true })
+                navJump.current.timer = setTimeout(() => {
+                  if (navJump.current?.index === index) {
+                    flatListRef.current?.scrollToIndex({ index, viewPosition: 0.5, animated: true })
+                  }
                 }, 120)
               }}
               keyExtractor={(row) => row.id}
