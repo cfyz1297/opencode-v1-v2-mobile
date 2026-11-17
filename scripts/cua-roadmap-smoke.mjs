@@ -399,9 +399,10 @@ try {
   const shownNumber = Number.parseInt(counterBefore, 10)
   const total = Number.parseInt((counterBefore.match(/\/\s*(\d+)/) ?? [])[1], 10)
   assert.ok(shownNumber <= total, 'counter is inside its range')
-  // Four questions in the fixture: the navigator walks the user's own
-  // messages, so assistant rows (three merged runs) must not appear here.
-  assert.equal(total, 4, `the navigator counts the user's messages, got ${counterBefore}`)
+  // Six questions in the fixture (u3, u2, u1, u0c, u0b, u0a): the navigator
+  // walks the user's own messages, so the four assistant rows — three of them
+  // merged runs — must not be counted.
+  assert.equal(total, 6, `the navigator counts the user's messages, got ${counterBefore}`)
 
   // Tap straight from this dump: every dump costs ~1.5s and the panel hides
   // after 3.5s, so any extra work — a screenshot included — hands the tap to a
