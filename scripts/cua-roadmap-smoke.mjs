@@ -185,6 +185,16 @@ const server = createServer((req, res) => {
     req.on('close', () => clearInterval(timer))
     return
   }
+  // 1x1 PNG: a markdown image that really resolves, which is what sent
+  // react-native-marked's MDImage into an unbounded re-render loop (#262).
+  if (path === '/img.png') {
+    res.writeHead(200, { 'Content-Type': 'image/png' })
+    res.end(Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==',
+      'base64',
+    ))
+    return
+  }
   let data
   if (path === '/api/info') data = { healthy: true, version: 'fixture-v2' }
   // V2 filters children server-side; the app relies on that for subagent rows.
@@ -217,6 +227,8 @@ const server = createServer((req, res) => {
     { id: 'a3', type: 'assistant', time: { created: now + 21, completed: now + 22 }, content: [
       shellPart('p_a3_1', 'pwd'),
       { type: 'text', text: 'OFFLINE_ANSWER_42' },
+      // A markdown image. The part needs an id or the V2 mapper drops it.
+      { id: 'p_a3_img', type: 'text', text: '![pixel](http://127.0.0.1:4096/img.png)' },
       delegationPart('p_sub_new', 'child-new', 'New task'),
     ] },
     { id: 'u3', type: 'user', time: { created: now + 20 }, text: 'OFFLINE_QUESTION_43' },
