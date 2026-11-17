@@ -185,12 +185,14 @@ const server = createServer((req, res) => {
     req.on('close', () => clearInterval(timer))
     return
   }
-  // 1x1 PNG: a markdown image that really resolves, which is what sent
-  // react-native-marked's MDImage into an unbounded re-render loop (#262).
+  // A real 40x2 violet PNG (20:1). It must resolve — that is what sent
+  // react-native-marked's MDImage into an unbounded re-render loop (#262) —
+  // and it must be thin, or its height pushes the answer out of the viewport
+  // that the rest of the smoke asserts on.
   if (path === '/img.png') {
     res.writeHead(200, { 'Content-Type': 'image/png' })
     res.end(Buffer.from(
-      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==',
+      'iVBORw0KGgoAAAANSUhEUgAAACgAAAACCAIAAAClqwlqAAAAEklEQVR42mPojvk2IIhhoCwGAFgslRE5XvLOAAAAAElFTkSuQmCC',
       'base64',
     ))
     return
