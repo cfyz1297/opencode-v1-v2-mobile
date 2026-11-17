@@ -98,9 +98,14 @@ test("the position comes from measured user rows, not from viewability", () => {
   // and the buttons did nothing until a manual swipe.
   assert.doesNotMatch(source, /onViewableItemsChanged/, "no dependency on the viewability callback")
   assert.doesNotMatch(source, /viewabilityConfig/, "and no viewability config")
-  const render = source.slice(source.indexOf("renderItem="), source.indexOf("contentContainerStyle"))
-  assert.match(render, /onLayout=\{\s*isUser/, "only the user's own rows are measured")
-  assert.match(render, /nav\.frames\.set\(row\.id,/, "their frames feed the navigator")
+  // The cell wrapper is the only view positioned inside the content container;
+  // an onLayout on the rendered row reports y = 0 relative to its cell, which
+  // made every frame sit at the top and the counter read "N / N" there.
+  assert.match(source, /CellRendererComponent=\{measureCell\}/, "the cell is the measuring boundary")
+  const cell = source.slice(source.indexOf("const measureCell"), source.indexOf("const jumpTo"))
+  assert.match(cell, /nav\.frames\.set\(row\.id,/, "the cell's layout feeds the navigator")
+  assert.match(cell, /props\.onLayout\?\.\(event\)/, "the list's own layout handler still runs")
+  assert.match(cell, /kind === "single" && row\.item\.message\.role === "user"/, "only user messages are kept")
 })
 
 test("a tap works before anything has been measured", () => {

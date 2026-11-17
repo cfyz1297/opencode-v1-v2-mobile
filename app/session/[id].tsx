@@ -60,12 +60,14 @@ import { SubagentBar } from "../../src/components/chat/SubagentBar"
 import { isSafeSessionId } from '../../src/lib/session-id'
 import { NAV_PANEL_IDLE_MS } from "../../src/lib/nav-panel"
 import { MessageNavigation } from "../../src/lib/message-navigation"
+import type { CellRendererProps } from "@react-native/virtualized-lists"
 import {
   buildTranscriptRows,
   rowMessage,
   rowMessages,
   rowParts,
   userRowIds,
+  type TranscriptRow,
 } from "../../src/lib/transcript-rows"
 import { log } from "../../src/lib/logbuffer"
 
@@ -890,6 +892,36 @@ export default function SessionScreen() {
   const rowIndexById = useMemo(() => new Map(rows.map((row, at) => [row.id, at])), [rows])
   nav.sync(navigableIds)
 
+  // The position needs each user message's Y inside the content container, and
+  // only the cell wrapper is positioned there: an onLayout on the rendered row
+  // reports coordinates relative to its cell, so every row measured as y = 0 —
+  // which is why the counter read "N / N" at the top of a session. The cell also
+  // receives the list's own layout handler, which has to keep running.
+  const measureCell = useCallback(
+    (props: CellRendererProps<TranscriptRow>) => {
+      const row = props.item
+      // Only the user's own messages are targets, so only their cells are kept:
+      // an assistant run grows while it streams and would drag its frame along.
+      const isUser = row.kind === "single" && row.item.message.role === "user"
+      return (
+        <View
+          style={props.style}
+          onLayout={(event) => {
+            if (isUser) nav.frames.set(row.id, event.nativeEvent.layout)
+            props.onLayout?.(event)
+            setCurrentNavIndex((prev) => {
+              const next = nav.current()
+              return prev === next ? prev : next
+            })
+          }}
+        >
+          {props.children}
+        </View>
+      )
+    },
+    [nav],
+  )
+
   const jumpTo = useCallback(
     (navIndex: number) => {
       const id = nav.ids[navIndex]
@@ -943,6 +975,9 @@ export default function SessionScreen() {
   // New session: the position belongs to the previous transcript.
   useEffect(() => {
     nav.manual()
+    // Frames belong to the previous transcript: cell coordinates are only
+    // meaningful for the rows that produced them.
+    nav.frames.clear()
     setCurrentNavIndex(-1)
     return () => {
       if (navIdleTimer.current) clearTimeout(navIdleTimer.current)
@@ -1270,29 +1305,12 @@ export default function SessionScreen() {
                 }, 120)
               }}
               keyExtractor={(row) => row.id}
+              CellRendererComponent={measureCell}
               renderItem={({ item: row }) => {
                 const message = rowMessage(row)
                 const isUser = message.role === "user"
                 return (
-                  // Only the user's own rows are measured: they are few and keep
-                  // their height, so the navigator can place the viewport
-                  // without depending on the list's viewability callback (which
-                  // does not fire on an inverted list until something scrolls —
-                  // that is why the counter read "5 / 5" at the top and the
-                  // buttons did nothing until a manual swipe).
-                  <View
-                    onLayout={
-                      isUser
-                        ? (event) => {
-                            nav.frames.set(row.id, event.nativeEvent.layout)
-                            setCurrentNavIndex((prev) => {
-                              const next = nav.current()
-                              return prev === next ? prev : next
-                            })
-                          }
-                        : undefined
-                    }
-                  >
+                  <View>
                     <MessageBubble
                       message={message}
                       parts={rowParts(row)}
