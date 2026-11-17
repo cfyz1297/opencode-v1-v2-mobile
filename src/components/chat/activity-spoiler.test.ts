@@ -34,7 +34,7 @@ test("the collapsed line names the tools and their total time", () => {
   assert.match(spoiler, /summarizeToolActivity\(tools/, "the header must summarize the tools")
   assert.match(spoiler, /summary\.kinds\.map/, "distinct tool names belong on the line")
   assert.match(spoiler, /chat\.toolKind\./, "names come from the catalog, not the raw tool id")
-  assert.match(spoiler, /formatToolDuration\(0, summary\.totalMs\)/, "the total time comes from the run")
+  assert.match(spoiler, /formatDurationMs\(summary\.totalMs\)/, "the total time comes from the run")
   assert.match(spoiler, /accessibilityLabel=\{speech\}/, "TalkBack gets the spelled-out form")
 })
 

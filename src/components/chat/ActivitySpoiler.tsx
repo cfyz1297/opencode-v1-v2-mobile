@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from "rea
 import { Ionicons } from "@expo/vector-icons"
 import { useTranslation } from "react-i18next"
 import type { Part } from "../../lib/sdk"
-import { formatToolDuration } from "../../lib/tool-duration"
+import { formatDurationMs } from "../../lib/tool-duration"
 import { summarizeToolActivity, toolKind } from "../../lib/tool-summary"
 import { ReasoningBlock } from "./ReasoningBlock"
 import { ToolRun } from "./ToolRun"
@@ -50,7 +50,7 @@ export function ActivitySpoiler({ reasoning, tools, isDark }: Props) {
   const reasonCount = reasoning ? 1 : 0
   const steps = tools.length + reasonCount
   const names = summary.kinds.map((kind) => t(`chat.toolKind.${kind}`)).join(", ")
-  const duration = formatToolDuration(0, summary.totalMs)
+  const duration = formatDurationMs(summary.totalMs)
   const headline = tools.length > 0 ? `${summary.count}` : t("chat.activity.thought", { count: steps })
   const label = [headline, names, duration].filter(Boolean).join(" · ")
   // Spoken form is not the compact line: "5 tools: Shell, Read, 12.3 seconds".
