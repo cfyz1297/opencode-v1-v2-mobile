@@ -469,6 +469,12 @@ try {
   await waitFor('OFFLINE_QUESTION_42')
   assert.ok(!snapshot().includes('chat-send-button'), 'Offline transcript is read only')
   screenshot('offline-after-cold-restart')
+  // The copy was scrolled to see the answer; the clear button is at the top of
+  // the same ScrollView.
+  for (let i = 0; i < 3 && !snapshot().includes('resource-id="history-clear"'); i++) {
+    adb('shell', 'input', 'swipe', '200', '300', '200', '1000', '300')
+    await sleep(600)
+  }
   await tap('history-clear')
   await tap('Delete')
   await waitFor('No saved conversations yet.')
