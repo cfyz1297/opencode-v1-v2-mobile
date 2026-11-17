@@ -444,11 +444,19 @@ try {
   await open('history')
   await tap('history-enable')
   await sleep(1500)
-  // Visit the live session so the capture runs. From history a deep link loses
-  // to the route already on top, so go back to the list and tap the row.
-  adb('shell', 'input', 'keyevent', 'KEYCODE_BACK')
-  await sleep(1200)
+  // Visit the live session so the capture runs. At 800 dp the tab list sits in
+  // the left pane, so history is left by tapping the Sessions tab; on a phone
+  // the same node is the bottom tab. ensureSessionOpen then taps the row.
+  const afterEnable = snapshot()
+  if (!afterEnable.includes('resource-id="session-item-roadmap-session"')) {
+    const leftTheScreen = tapBounds(
+      afterEnable,
+      n => n.includes('clickable="true"') && /text="Sessions"/.test(n),
+    )
+    if (leftTheScreen) await sleep(1500)
+  }
   await ensureSessionOpen()
+  screenshot('after-history-enable')
   await waitFor('OFFLINE_ANSWER_42')
   await sleep(2500)
   server.closeAllConnections()
