@@ -218,9 +218,17 @@ const server = createServer((req, res) => {
       { type: 'text', text: 'DELEGATED_FIRST' },
       delegationPart('p_sub_old', 'child-old', 'Old task'),
     ] },
-    // Long enough that the list really scrolls at 400x800, so the navigator
-    // has something to move through.
-    { id: 'u1', type: 'user', time: { created: now }, text: `OFFLINE_QUESTION_42\n${'FILLER_LINE\n'.repeat(20)}` },
+    { id: 'u1', type: 'user', time: { created: now }, text: 'OFFLINE_QUESTION_42' },
+    // Older short turns, purely so the list really scrolls at 400x800 and the
+    // navigator has something to move through. They stay short on purpose: a
+    // tall block used to push OFFLINE_ANSWER_42 off screen in the offline copy,
+    // where uiautomator cannot see an off-viewport node.
+    { id: 'a0c', type: 'assistant', time: { created: now - 6, completed: now - 6 }, content: [{ type: 'text', text: 'OLDER_ANSWER_38' }] },
+    { id: 'u0c', type: 'user', time: { created: now - 5 }, text: 'OLDER_QUESTION_39' },
+    { id: 'a0b', type: 'assistant', time: { created: now - 4, completed: now - 4 }, content: [{ type: 'text', text: 'OLDER_ANSWER_40' }] },
+    { id: 'u0b', type: 'user', time: { created: now - 3 }, text: 'OLDER_QUESTION_41' },
+    { id: 'a0a', type: 'assistant', time: { created: now - 2, completed: now - 2 }, content: [{ type: 'text', text: 'OLDER_ANSWER_44' }] },
+    { id: 'u0a', type: 'user', time: { created: now - 1 }, text: 'OLDER_QUESTION_45' },
   ] }
   else if (path === '/api/agent') data = { data: [{ id: 'build', name: 'Build', mode: 'primary' }] }
   else if (path === '/api/model/default') data = {}
@@ -452,6 +460,11 @@ try {
   adb('shell', 'am', 'force-stop', pkg)
   await open('history')
   await tap('history-session-roadmap-session')
+  // uiautomator only sees on-screen nodes, and the copy opens at the top.
+  for (let i = 0; i < 3 && !snapshot().includes('OFFLINE_ANSWER_42'); i++) {
+    adb('shell', 'input', 'swipe', String(Math.floor(400 * 0.5)), '1000', String(Math.floor(400 * 0.5)), '400', '300')
+    await sleep(600)
+  }
   await waitFor('OFFLINE_ANSWER_42')
   await waitFor('OFFLINE_QUESTION_42')
   assert.ok(!snapshot().includes('chat-send-button'), 'Offline transcript is read only')
