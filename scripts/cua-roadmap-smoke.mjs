@@ -317,25 +317,35 @@ try {
   const [, width, height] = dimensions.match(/Override size: (\d+)x(\d+)/) ?? dimensions.match(/Physical size: (\d+)x(\d+)/) ?? []
   assert.ok(width && height)
   // Inverted list: dragging the finger DOWN reveals older messages, and that
-  // drag is what has to wake the panel.
-  let shown
-  for (let i = 0; i < 3 && !shown; i++) {
-    adb('shell', 'input', 'swipe', String(Math.floor(+width / 2)), String(Math.floor(+height * 0.35)), String(Math.floor(+width / 2)), String(Math.floor(+height * 0.75)), '300')
-    await sleep(500)
-    const xml = snapshot()
-    if (xml.includes('content-desc="Message ')) shown = xml
+  // drag is what has to wake the panel. uiautomator dumps take ~1s here, so the
+  // tap is taken from the same dump that proved the panel is up.
+  const wakeNavigator = async () => {
+    for (let i = 0; i < 3; i++) {
+      adb('shell', 'input', 'swipe', String(Math.floor(+width / 2)), String(Math.floor(+height * 0.35)), String(Math.floor(+width / 2)), String(Math.floor(+height * 0.75)), '300')
+      await sleep(400)
+      const xml = snapshot()
+      if (xml.includes('resource-id="nav-up"')) return xml
+    }
+    throw new Error('dragging the transcript did not show the navigator')
   }
-  assert.ok(shown, 'dragging the transcript shows the navigator')
+
+  const shown = await wakeNavigator()
   for (const id of ['nav-up', 'nav-down', 'nav-latest']) {
     assert.ok(shown.includes(`resource-id="${id}"`), `navigator exposes ${id}`)
   }
   screenshot('navigator-shown')
   const counterBefore = counterValue(shown)
   assert.match(counterBefore ?? '', /^\d+ \/ \d+$/, 'counter reads N / M')
-  // One tap = exactly one message, and the tap itself keeps the panel up.
-  await tap('nav-up')
+  assert.ok(tapBounds(shown, n => n.includes('resource-id="nav-up"')), 'tap one message up')
   await sleep(800)
-  const after = await waitFor('nav-up')
+  // The tap wakes the panel itself, so it must still be up for the next dump —
+  // no second swipe here, or the counter would move for the wrong reason.
+  let after
+  for (let i = 0; i < 3 && !after; i++) {
+    const xml = snapshot()
+    if (xml.includes('resource-id="nav-counter"')) after = xml
+  }
+  assert.ok(after, 'the navigator stays up after a tap')
   const counterAfter = counterValue(after)
   assert.equal(
     Number.parseInt(counterAfter, 10),
@@ -343,10 +353,10 @@ try {
     `one tap moves exactly one message (${counterBefore} -> ${counterAfter})`,
   )
   screenshot('navigator-one-up')
-  await tap('nav-latest')
+  assert.ok(tapBounds(after, n => n.includes('resource-id="nav-latest"')), 'tap back to the latest message')
   await sleep(900)
   await waitFor('OFFLINE_ANSWER_42')
-  await sleep(3000)
+  await sleep(4000)
   assert.ok(!snapshot().includes('content-desc="Message '), 'navigator hides once scrolling stops')
   screenshot('navigator-hidden')
 
