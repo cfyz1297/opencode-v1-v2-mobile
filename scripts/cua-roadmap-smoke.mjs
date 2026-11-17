@@ -81,13 +81,6 @@ async function open(path) {
   adb('shell', 'am', 'start', '-W', '-a', 'android.intent.action.VIEW', '-d', `opencode://${path}`, pkg)
   await sleep(1000)
 }
-// Same deep link, but with the task cleared: the activity is recreated on the
-// requested route instead of restoring whatever was on top (the offline-history
-// page, after every resize). The process — and its live connection — survives.
-async function openClean(path) {
-  adb('shell', 'am', 'start', '-W', '--activity-clear-task', '-a', 'android.intent.action.VIEW', '-d', `opencode://${path}`, pkg)
-  await sleep(1500)
-}
 async function dismissBlockingSheets() {
   for (let i = 0; i < 3 && (snapshot().includes('Select Model') || snapshot().includes('Search models')); i++) {
     // Tap the upper chat/backdrop area — Back alone can leave the session stack.
@@ -111,8 +104,16 @@ async function dismissBlockingSheets() {
 // with that restore. Walking back is deterministic and keeps the connection;
 // the deep link stays as a last resort.
 async function ensureSessionOpen() {
-  for (let i = 0; i < 3; i++) {
-    if (snapshot().includes('chat-message-input')) return
+  for (let i = 0; i < 5; i++) {
+    const xml = snapshot()
+    if (xml.includes('chat-message-input')) return
+    // The sessions list is one tap away from the transcript and needs no deep
+    // link, which is what keeps losing the race with the restored route.
+    if (xml.includes('resource-id="session-item-roadmap-session"')) {
+      await tap('session-item-roadmap-session')
+      await sleep(1500)
+      continue
+    }
     adb('shell', 'input', 'keyevent', 'KEYCODE_BACK')
     await sleep(900)
   }
@@ -409,10 +410,9 @@ try {
   // The activity recreate finishes well after `wm size` returns, and it
   // restores whatever route was on top (usually offline history) — so wait for
   // the tablet layout to actually appear, repairing the route on each pass.
-  await openClean('session/roadmap-session')
   for (let i = 0; i < 5 && !snapshot().includes('tablet-session-sidebar'); i++) {
     await sleep(1500)
-    if (!snapshot().includes('chat-message-input')) await openClean('session/roadmap-session')
+    await ensureSessionOpen()
   }
   await waitFor('tablet-session-sidebar')
   await waitFor('OFFLINE_ANSWER_42')
