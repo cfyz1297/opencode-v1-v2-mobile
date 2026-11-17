@@ -399,10 +399,10 @@ try {
   const shownNumber = Number.parseInt(counterBefore, 10)
   const total = Number.parseInt((counterBefore.match(/\/\s*(\d+)/) ?? [])[1], 10)
   assert.ok(shownNumber <= total, 'counter is inside its range')
-  screenshot('navigator-shown')
 
   // Tap straight from this dump: every dump costs ~1.5s and the panel hides
-  // after 3.5s, so any extra work here hands the tap to a vanished button.
+  // after 3.5s, so any extra work — a screenshot included — hands the tap to a
+  // vanished button.
   assert.ok(tapBounds(shown, n => n.includes('resource-id="nav-up"')), 'tap one message up')
   await sleep(700)
   // The tap itself wakes the panel, so it must still be up for the next dump —
@@ -424,6 +424,7 @@ try {
     viewportBefore,
     'the transcript itself must move, not only the counter',
   )
+  screenshot('navigator-one-up')
 
   // Latest: wake once more and tap from that dump, for the same reason as the
   // up-tap above.
