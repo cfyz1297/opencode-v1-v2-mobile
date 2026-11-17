@@ -15,7 +15,6 @@ import {
   Platform,
   ToastAndroid,
   useWindowDimensions,
-  type LayoutChangeEvent,
   type NativeSyntheticEvent,
   type NativeScrollEvent,
 } from "react-native"
@@ -255,11 +254,6 @@ export default function SessionScreen() {
   // the placement-independent navigation math (src/lib/message-navigation.ts).
   // `navigation` below is expo-router's, hence the short name.
   const nav = useRef(new MessageNavigation()).current
-  const navRetry = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
-  const navAttempts = useRef(0)
-  // Set by a Previous tap at the oldest loaded message while older pages
-  // exist: the load is in flight, advance into the new batch when it lands.
-  const pendingNavLoad = useRef(false)
   // Index into nav.ids (newest first) of the current navigable message; -1
   // while unknown. Mirrored into state so the counter and the disabled states
   // re-render on scroll and on content change.
@@ -465,7 +459,6 @@ export default function SessionScreen() {
     // Reset the logical viewport before the native callback arrives, so a
     // stale scroll event queued mid-jump can't resurrect the old position.
     nav.manual(0)
-    if (navRetry.current) clearTimeout(navRetry.current)
     flatListRef.current?.scrollToOffset({ offset: 0, animated })
   }, [nav])
 
@@ -885,13 +878,6 @@ export default function SessionScreen() {
   const navigableIds = useMemo(() => rows.map((row) => row.id), [rows])
   nav.sync(navigableIds)
 
-  const seekMessage = useCallback(() => {
-    if (navRetry.current) clearTimeout(navRetry.current)
-    if (flatListRef.current && nav.seek(flatListRef.current, navAttempts.current++)) {
-      navRetry.current = setTimeout(seekMessage, 100)
-    }
-  }, [nav])
-
   // The list reports visible rows on every layout and scroll settle; the last
   // one is the row at the viewport's top edge (data order is newest first), and
   // that is the "current message" the counter shows.
@@ -907,50 +893,39 @@ export default function SessionScreen() {
     [nav],
   )
 
-  // Row frames for navigation. They arrive via onLayout as rows mount or
-  // resize (streaming growth); a pending seek resumes as soon as its target's
-  // frame lands. Frames of messages that left the data are dropped by
-  // nav.sync above.
-  const measureRow = useCallback(
-    (id: string) => (event: LayoutChangeEvent) => {
-      nav.frames.set(id, event.nativeEvent.layout)
-      if (nav.target === id) seekMessage()
+  const jumpTo = useCallback(
+    (index: number) => {
+      if (index < 0 || index >= nav.ids.length || !flatListRef.current) return
+      // The list resolves the offset itself. Offsets derived from measured
+      // frames are unreliable outside the render window, and that is exactly
+      // where the target is after a fling.
+      nav.setCurrent(nav.ids[index])
+      setCurrentNavIndex(index)
+      flatListRef.current.scrollToIndex({ index, viewPosition: 0.5, animated: true })
     },
-    [nav, seekMessage],
+    [nav],
   )
 
-  const moveMessage = useCallback((direction: 1 | -1) => {
-    wakeNavPanel()
-    // Stop auto-follow: the navigator decides where the viewport goes.
-    followBottomRef.current = false
-    navHoldRef.current = true
-    // Previous at the oldest loaded message with older pages still on the
-    // server: load the next batch instead of going nowhere, then advance into
-    // it when it lands (see the effect below). handleLoadMore owns the
-    // loadingTriggered guard, so a tap can't double-load.
-    if (direction === 1 && nav.ids.length > 0 && nav.current() === nav.ids.length - 1 && hasMore) {
-      pendingNavLoad.current = true
-      handleLoadMore()
-      return
-    }
-    if (nav.move(direction) === undefined) return
-    navAttempts.current = 0
-    setCurrentNavIndex(nav.current())
-    seekMessage()
-  }, [nav, hasMore, handleLoadMore, seekMessage])
-
-  // Previous tapped at the oldest loaded message while older pages exist: the
-  // batch has landed — advance into it, unless the user scrolled manually
-  // while it loaded (onScrollBeginDrag clears the flag, so the tap's target is
-  // stale and no jump happens).
-  useEffect(() => {
-    if (!pendingNavLoad.current || loadingMore) return
-    pendingNavLoad.current = false
-    if (nav.move(1) === undefined) return
-    navAttempts.current = 0
-    setCurrentNavIndex(nav.current())
-    seekMessage()
-  }, [rows, loadingMore, nav, seekMessage])
+  const moveMessage = useCallback(
+    (direction: 1 | -1) => {
+      wakeNavPanel()
+      // Stop auto-follow: the navigator decides where the viewport goes.
+      followBottomRef.current = false
+      navHoldRef.current = true
+      const current = nav.current()
+      if (current < 0) return
+      // Previous at the oldest loaded message with older pages still on the
+      // server: load the next batch instead of going nowhere. handleLoadMore
+      // owns the guard, so a tap cannot double-load; the user taps again once
+      // the page lands.
+      if (direction === 1 && current >= nav.ids.length - 1 && hasMore) {
+        handleLoadMore()
+        return
+      }
+      jumpTo(current + direction)
+    },
+    [nav, hasMore, handleLoadMore, jumpTo, wakeNavPanel],
+  )
 
   // Streaming append, batch landed or revert: re-derive the current message
   // from the same id, so the counter stays anchored while the list shifts.
@@ -961,15 +936,11 @@ export default function SessionScreen() {
     })
   }, [rows, nav])
 
-  // New session: drop any in-flight seek, target and anchor — the frames
-  // belong to the previous transcript.
+  // New session: the position belongs to the previous transcript.
   useEffect(() => {
     nav.manual()
-    nav.frames.clear()
-    pendingNavLoad.current = false
     setCurrentNavIndex(-1)
     return () => {
-      if (navRetry.current) clearTimeout(navRetry.current)
       if (navIdleTimer.current) clearTimeout(navIdleTimer.current)
     }
   }, [id, nav])
@@ -1269,23 +1240,23 @@ export default function SessionScreen() {
                 nav.observe(nav.offset, event.nativeEvent.layout.height)
               }}
               onScrollBeginDrag={() => {
-                // The user took over: drop any pending seek/advance and
-                // re-anchor from the viewport from here on. A finger on the
-                // list also ends the navigator's hold, so dragging back to the
-                // bottom resumes auto-follow.
-                pendingNavLoad.current = false
+                // The user took over: re-anchor from the viewport from here on.
+                // A finger on the list also ends the navigator's hold, so
+                // dragging back to the bottom resumes auto-follow.
                 navHoldRef.current = false
                 nav.manual()
-                if (navRetry.current) clearTimeout(navRetry.current)
                 wakeNavPanel()
               }}
               // Keep the panel up until the fling settles, then let it fade.
               onScrollEndDrag={wakeNavPanel}
               onMomentumScrollEnd={wakeNavPanel}
               onScrollToIndexFailed={({ index, averageItemLength }) => {
-                // Estimated jump toward the target so its rows mount; the
-                // seek retry loop settles on the real frame once it renders.
+                // The target was never measured: jump approximately so its
+                // rows mount, then let the list settle on the index.
                 flatListRef.current?.scrollToOffset({ offset: averageItemLength * index, animated: false })
+                setTimeout(() => {
+                  flatListRef.current?.scrollToIndex({ index, viewPosition: 0.5, animated: true })
+                }, 120)
               }}
               keyExtractor={(row) => row.id}
               // The list is the authority on what is on screen. Frame math can
@@ -1297,7 +1268,7 @@ export default function SessionScreen() {
                 const message = rowMessage(row)
                 const isUser = message.role === "user"
                 return (
-                  <View onLayout={measureRow(row.id)}>
+                  <View>
                     <MessageBubble
                       message={message}
                       parts={rowParts(row)}

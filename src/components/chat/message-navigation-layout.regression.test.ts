@@ -75,6 +75,15 @@ test("the list, not the frame math, says which message is current", () => {
   assert.match(handler, /nav\.setCurrent\(/, "and it is fed to the navigator")
 })
 
+test("one tap jumps by index, not by a frame-derived offset", () => {
+  // Frames for rows outside the render window are stale or missing, so an
+  // offset computed from them landed the jump on the wrong message.
+  assert.match(source, /scrollToIndex\(\{\s*index, viewPosition: 0\.5/, "the list resolves the offset itself")
+  assert.doesNotMatch(source, /nav\.seek\(/, "no offset math on the screen")
+  assert.doesNotMatch(source, /measureRow/, "row frames are no longer needed")
+  assert.doesNotMatch(source, /nav\.frames/, "and neither is a frame map")
+})
+
 test("order is counter, up, down, latest", () => {
   const order = ['testID="nav-counter"', 'testID="nav-up"', 'testID="nav-down"', 'testID="nav-latest"'].map((id) =>
     source.indexOf(id),
