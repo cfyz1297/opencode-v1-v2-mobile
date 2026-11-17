@@ -81,6 +81,13 @@ async function open(path) {
   adb('shell', 'am', 'start', '-W', '-a', 'android.intent.action.VIEW', '-d', `opencode://${path}`, pkg)
   await sleep(1000)
 }
+// Same deep link, but with the task cleared: the activity is recreated on the
+// requested route instead of restoring whatever was on top (the offline-history
+// page, after every resize). The process — and its live connection — survives.
+async function openClean(path) {
+  adb('shell', 'am', 'start', '-W', '--activity-clear-task', '-a', 'android.intent.action.VIEW', '-d', `opencode://${path}`, pkg)
+  await sleep(1500)
+}
 async function dismissBlockingSheets() {
   for (let i = 0; i < 3 && (snapshot().includes('Select Model') || snapshot().includes('Search models')); i++) {
     // Tap the upper chat/backdrop area — Back alone can leave the session stack.
@@ -402,9 +409,10 @@ try {
   // The activity recreate finishes well after `wm size` returns, and it
   // restores whatever route was on top (usually offline history) — so wait for
   // the tablet layout to actually appear, repairing the route on each pass.
+  await openClean('session/roadmap-session')
   for (let i = 0; i < 5 && !snapshot().includes('tablet-session-sidebar'); i++) {
     await sleep(1500)
-    await ensureSessionOpen()
+    if (!snapshot().includes('chat-message-input')) await openClean('session/roadmap-session')
   }
   await waitFor('tablet-session-sidebar')
   await waitFor('OFFLINE_ANSWER_42')
