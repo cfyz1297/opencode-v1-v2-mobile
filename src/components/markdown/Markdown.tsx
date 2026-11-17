@@ -1,7 +1,18 @@
 import { useMemo, type ReactNode } from "react"
-import { View, Text, useColorScheme, Platform, type StyleProp, type ViewStyle, type TextStyle } from "react-native"
+import {
+  View,
+  Text,
+  useColorScheme,
+  Platform,
+  type ImageStyle,
+  type StyleProp,
+  type ViewStyle,
+  type TextStyle,
+} from "react-native"
 import { useMarkdown, Renderer } from "react-native-marked"
 import { CodeBlock } from "./CodeBlock"
+import { MarkdownImage } from "./MarkdownImage"
+import { createMarkdownKeys } from "../../lib/markdown-keys"
 
 // react-native-marked's base Renderer hardcodes `selectable` on every plain
 // text node it produces (text/strong/em/del/heading/codespan). That was removed
@@ -19,6 +30,18 @@ export class CustomRenderer extends Renderer {
   // runs are painted into.
   constructor(private readonly base: TextStyle) {
     super()
+  }
+
+  // The base Renderer derives every React key from github-slugger, which stores
+  // a property per call on an instance that outlives re-renders — the Hermes
+  // object limit (196,607 properties) then throws "Property storage exceeds
+  // 196607 properties" and the session screen dies. Keys only have to be
+  // unique within one parse, so a counter does that with no storage at all.
+  // Every base method asks getKey(), so this one override covers them all.
+  private readonly key = createMarkdownKeys()
+
+  getKey(): string {
+    return this.key()
   }
 
   private plainText(children: string | ReactNode[], styles?: StyleProp<TextStyle>): ReactNode {
@@ -59,6 +82,14 @@ export class CustomRenderer extends Renderer {
 
   codespan(text: string, styles?: TextStyle): ReactNode {
     return this.plainText(text, [styles, { fontStyle: "normal", fontWeight: "normal" }])
+  }
+
+  image(uri: string, alt?: string, style?: ImageStyle, title?: string): ReactNode {
+    // .svg keeps the library's component: its fetch effect is already scoped to
+    // the URI. Everything else must not use MDImage, whose effect has no
+    // dependency array and refetches on every render (issue #262).
+    if (uri.endsWith(".svg")) return super.image(uri, alt, style, title)
+    return <MarkdownImage key={this.getKey()} uri={uri} alt={alt || title} style={style} />
   }
 }
 

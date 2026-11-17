@@ -292,7 +292,12 @@ try {
   await sleep(1000)
   await tap('session-item-roadmap-session')
   await waitFor('OFFLINE_ANSWER_42')
+  // The markdown image renders and leaves the screen alive. An unbounded
+  // re-render loop here used to trip React's "Maximum update depth exceeded"
+  // (#262); the session would be gone instead of this node.
+  await waitFor('react-native-marked-md-image')
   await sleep(2500)
+  assert.ok(snapshot().includes('chat-message-input'), 'the session survives a markdown image')
   screenshot('session-phone')
   // The delegation rows are visible without expanding the cards.
   await waitFor('New task')
