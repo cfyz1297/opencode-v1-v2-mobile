@@ -546,10 +546,19 @@
       "now": "Now: {{count}}"
     },
     "activity": {
-      "steps_one": "{{count}} step",
-      "steps_few": "{{count}} steps",
-      "steps_many": "{{count}} steps",
-      "steps_other": "{{count}} steps"
+      "thought_one": "Thought",
+      "thought_other": "Thoughts",
+      "summary": "{{count}} steps: {{kinds}} in {{time}}"
+    },
+    "toolKind": {
+      "shell": "Shell",
+      "read": "Read",
+      "edit": "Edit",
+      "search": "Search",
+      "webfetch": "Webfetch",
+      "websearch": "Web search",
+      "todo": "To-dos",
+      "tool": "Tool"
     }
   },
   "providers": {

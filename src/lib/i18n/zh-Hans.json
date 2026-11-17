@@ -546,10 +546,19 @@
       "now": "当前：{{count}}"
     },
     "activity": {
-      "steps_one": "{{count}} 步",
-      "steps_few": "{{count}} 步",
-      "steps_many": "{{count}} 步",
-      "steps_other": "{{count}} 步"
+      "thought_one": "思考",
+      "thought_other": "思考",
+      "summary": "{{count}} 步：{{kinds}}，用时 {{time}}"
+    },
+    "toolKind": {
+      "shell": "终端",
+      "read": "读取",
+      "edit": "编辑",
+      "search": "搜索",
+      "webfetch": "网页抓取",
+      "websearch": "网页搜索",
+      "todo": "待办",
+      "tool": "工具"
     }
   },
   "providers": {

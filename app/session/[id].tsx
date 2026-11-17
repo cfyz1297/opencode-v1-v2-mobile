@@ -243,6 +243,12 @@ export default function SessionScreen() {
   // Whether new/streaming content should keep the transcript pinned to the
   // newest message. False once the user scrolls up, true again at the bottom.
   const followBottomRef = useRef(true)
+  // Set while the navigator owns the position. Streaming content or a row
+  // finishing its layout changes the content size, and the auto-follow then
+  // scrolled straight back to the newest message — the counter said 3/5 while
+  // the viewport sat at the bottom. The hold is released by a manual drag or by
+  // Latest.
+  const navHoldRef = useRef(false)
 
   // Message navigation (#214) — docked strip, not floating controls. `nav` is
   // the placement-independent navigation math (src/lib/message-navigation.ts).
@@ -452,6 +458,8 @@ export default function SessionScreen() {
 
   const scrollToBottom = useCallback((animated = true) => {
     wakeNavPanel()
+    // Latest hands the position back to auto-follow.
+    navHoldRef.current = false
     followBottomRef.current = true
     // Reset the logical viewport before the native callback arrives, so a
     // stale scroll event queued mid-jump can't resurrect the old position.
@@ -850,7 +858,7 @@ export default function SessionScreen() {
   const handleScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
       const { contentOffset, layoutMeasurement } = event.nativeEvent
-      followBottomRef.current = shouldFollowBottom(contentOffset.y)
+      followBottomRef.current = !navHoldRef.current && shouldFollowBottom(contentOffset.y)
       nav.observe(contentOffset.y, layoutMeasurement.height)
       setCurrentNavIndex((prev) => {
         const next = nav.current()
@@ -897,6 +905,9 @@ export default function SessionScreen() {
 
   const moveMessage = useCallback((direction: 1 | -1) => {
     wakeNavPanel()
+    // Stop auto-follow: the navigator decides where the viewport goes.
+    followBottomRef.current = false
+    navHoldRef.current = true
     // Previous at the oldest loaded message with older pages still on the
     // server: load the next batch instead of going nowhere, then advance into
     // it when it lands (see the effect below). handleLoadMore owns the
@@ -1243,8 +1254,11 @@ export default function SessionScreen() {
               }}
               onScrollBeginDrag={() => {
                 // The user took over: drop any pending seek/advance and
-                // re-anchor from the viewport from here on.
+                // re-anchor from the viewport from here on. A finger on the
+                // list also ends the navigator's hold, so dragging back to the
+                // bottom resumes auto-follow.
                 pendingNavLoad.current = false
+                navHoldRef.current = false
                 nav.manual()
                 if (navRetry.current) clearTimeout(navRetry.current)
                 wakeNavPanel()

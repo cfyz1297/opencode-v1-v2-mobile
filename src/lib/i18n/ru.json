@@ -546,10 +546,19 @@
       "now": "Сейчас: {{count}}"
     },
     "activity": {
-      "steps_one": "{{count}} шаг",
-      "steps_few": "Шаги {{count}}",
-      "steps_many": "Шаги {{count}}",
-      "steps_other": "Шаги {{count}}"
+      "thought_one": "Мысль",
+      "thought_other": "Размышления",
+      "summary": "{{count}} шагов: {{kinds}}, {{time}}"
+    },
+    "toolKind": {
+      "shell": "Оболочка",
+      "read": "Чтение",
+      "edit": "Правка",
+      "search": "Поиск",
+      "webfetch": "Webfetch",
+      "websearch": "Веб-поиск",
+      "todo": "Задачи",
+      "tool": "Инструмент"
     }
   },
   "providers": {

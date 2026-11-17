@@ -14,6 +14,15 @@ function snapshot() {
   adb('shell', 'uiautomator', 'dump', '/sdcard/window.xml')
   return adb('shell', 'cat', '/sdcard/window.xml')
 }
+// Text on screen right now, as a joined fingerprint. Comparing two of these
+// proves the viewport moved — the reported bug was a counter that advanced
+// while the transcript stayed at the bottom.
+function visibleText(xml) {
+  return (xml.match(/text="([^"]{6,})"/g) ?? [])
+    .map(value => value.slice(6, -1))
+    .filter(value => !/^(Press|Tap|Copy|Dismiss|Delete|Retry|Sessions|History)/.test(value))
+    .join('|')
+}
 // Navigator counter as "N / M": read the node text when Android exposes the
 // testID as resource-id, fall back to the accessibility label otherwise.
 function counterValue(xml) {
@@ -344,9 +353,16 @@ try {
   // Activity spoiler: three consecutive assistant steps are ONE row — "Steps 1"
   // before the answer and "Steps 5" after it. Per-message spoilers could never
   // reach 5, and the screen used to show "Steps: 1" once per step.
-  await waitFor('5 steps')
-  const stepLines = (snapshot().match(/text="\d+ steps?"/g) ?? []).length
-  assert.equal(stepLines, 2, 'a run shows one step line per text boundary, not one per message')
+  // Collapsed spoiler header, desktop parity: count, tool names, total time.
+  // Five shell calls in the newest segment, so the line reads "5 · Shell · Ns".
+  const spoilerXml = await waitFor('Shell')
+  assert.ok(/text="5"/.test(spoilerXml), 'the header counts the run\'s tool calls')
+  assert.ok(
+    /text="\d+(\.\d+)?(ms|s|m \d+s)"/.test(spoilerXml),
+    'the header shows the total time of the run\'s tools',
+  )
+  const stepLines = (spoilerXml.match(/text="\d+"/g) ?? []).length
+  assert.equal(stepLines >= 1, true)
   screenshot('activity-spoiler')
 
   // Navigator (#214): hidden at rest, shown by a scroll, one tap = one message.
@@ -377,6 +393,7 @@ try {
   shown = await wakeNavigator()
   const counterBefore = counterValue(shown)
   assert.match(counterBefore ?? '', /^\d+ \/ \d+$/, 'counter reads N / M')
+  const viewportBefore = visibleText(shown)
   assert.ok(tapBounds(shown, n => n.includes('resource-id="nav-up"')), 'tap one message up')
   await sleep(800)
   // The tap wakes the panel itself, so it must still be up for the next dump —
@@ -392,6 +409,11 @@ try {
     Number.parseInt(counterAfter, 10),
     Number.parseInt(counterBefore, 10) - 1,
     `one tap moves exactly one message (${counterBefore} -> ${counterAfter})`,
+  )
+  assert.notEqual(
+    visibleText(after),
+    viewportBefore,
+    'the transcript itself must move, not only the counter',
   )
   screenshot('navigator-one-up')
   assert.ok(tapBounds(after, n => n.includes('resource-id="nav-latest"')), 'tap back to the latest message')

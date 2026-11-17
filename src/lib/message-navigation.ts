@@ -98,7 +98,10 @@ export class MessageNavigation {
       this.manual()
       return false
     }
-    if (attempt === 0) {
+    // Without a viewport height a relative step is zero pixels — the tap then
+    // moved the counter and nothing else. Keep asking the list to jump to the
+    // index; each jump mounts rows that report their real frames.
+    if (attempt === 0 || this.height <= 0) {
       list.scrollToIndex({ index, viewPosition: 1, animated: false })
       return true
     }

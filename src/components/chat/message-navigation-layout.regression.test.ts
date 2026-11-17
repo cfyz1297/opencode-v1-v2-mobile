@@ -45,6 +45,27 @@ test("the panel shows only while the user scrolls, then hides itself", () => {
   assert.match(source, /clearTimeout\(navIdleTimer\.current\)/, "the idle timer must be cancelled and cleaned up")
 })
 
+test("a navigator tap owns the position until the user takes over", () => {
+  // The reported bug: the counter moved to 3/5 while the transcript stayed at
+  // the bottom, because content growth re-ran the auto-follow. A tap must stop
+  // auto-follow, and only a manual drag or Latest may hand it back.
+  const around = (marker: string, length = 600) => {
+    const at = source.indexOf(marker)
+    assert.ok(at >= 0, `${marker} must exist`)
+    return source.slice(at, at + length)
+  }
+  const move = around("const moveMessage")
+  assert.match(move, /followBottomRef\.current = false/, "a tap must stop auto-follow")
+  assert.match(move, /navHoldRef\.current = true/, "and hold the position")
+  assert.match(
+    around("const handleScroll"),
+    /!navHoldRef\.current && shouldFollowBottom/,
+    "content growth must not snap back while held",
+  )
+  assert.match(around("onScrollBeginDrag={() =>"), /navHoldRef\.current = false/, "a finger on the list takes over")
+  assert.match(around("const scrollToBottom"), /navHoldRef\.current = false/, "Latest hands the position back")
+})
+
 test("order is counter, up, down, latest", () => {
   const order = ['testID="nav-counter"', 'testID="nav-up"', 'testID="nav-down"', 'testID="nav-latest"'].map((id) =>
     source.indexOf(id),
