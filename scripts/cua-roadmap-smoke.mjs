@@ -263,8 +263,6 @@ try {
   if (prompt.includes('com.android.permissioncontroller:id/permission_allow_button')) await tap('com.android.permissioncontroller:id/permission_allow_button')
   await open('')
   await waitFor('ROADMAP_SESSION')
-  await open('history')
-  await tap('history-enable')
   await open('session/roadmap-session')
   await waitFor('OFFLINE_ANSWER_42')
   await sleep(2500)
@@ -438,6 +436,15 @@ try {
   await waitFor('OFFLINE_ANSWER_42')
   assert.ok(!snapshot().includes('tablet-session-sidebar'), 'Portrait 800 dp returns to one content pane')
   screenshot('session-tablet-portrait')
+  // Offline capture is enabled last, on purpose: visiting the history screen
+  // puts that route under the session, and every later activity recreate (a
+  // resize) restores it on top — which is what kept stealing the tablet step.
+  await open('history')
+  await tap('history-enable')
+  await sleep(1500)
+  await open('session/roadmap-session')
+  await waitFor('OFFLINE_ANSWER_42')
+  await sleep(2500)
   server.closeAllConnections()
   await new Promise(resolve => server.close(resolve))
   adb('shell', 'am', 'force-stop', pkg)
