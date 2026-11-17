@@ -46,10 +46,8 @@ test("the panel shows only while the user scrolls, then hides itself", () => {
 })
 
 test("a navigator tap owns the position until the user takes over", () => {
-  // Two reported bugs. Streaming content re-ran the auto-follow and scrolled
-  // back to the bottom (counter 3/5 over the newest message); and letting the
-  // list's viewability decide re-based the position on the row just above the
-  // jump target, so one tap skipped several messages (6/12 -> 3/12).
+  // Streaming content re-ran the auto-follow and scrolled back to the bottom,
+  // so the counter said 3/5 over the newest message.
   const around = (marker: string, length = 700) => {
     const at = source.indexOf(marker)
     assert.ok(at >= 0, `${marker} must exist`)
@@ -58,11 +56,6 @@ test("a navigator tap owns the position until the user takes over", () => {
   const jump = around("const jumpTo")
   assert.match(jump, /nav\.jumpTo\(id\)/, "the jump sets and holds the position in one step")
   assert.match(around("const moveMessage"), /followBottomRef\.current = false/, "a tap must stop auto-follow")
-  assert.match(
-    around("const handleViewable"),
-    /if \(nav\.held\) return/,
-    "a held position ignores the list's report",
-  )
   const scroll = around("const handleScroll")
   assert.match(scroll, /!nav\.held && atBottom/, "content growth must not snap back while held")
   assert.match(scroll, /if \(atBottom && !nav\.held\) nav\.setCurrent\(nav\.ids\[0\]\)/, "at the bottom the newest message is current")
@@ -88,30 +81,35 @@ test("one tap jumps by index, not by a frame-derived offset", () => {
   // offset computed from them landed the jump on the wrong message.
   assert.match(source, /scrollToIndex\(\{\s*index, viewPosition: 0\.5/, "the list resolves the offset itself")
   assert.doesNotMatch(source, /nav\.seek\(/, "no offset math on the screen")
-  assert.doesNotMatch(source, /measureRow/, "row frames are no longer needed")
-  assert.doesNotMatch(source, /nav\.frames/, "and neither is a frame map")
 })
 
 test("the navigator walks the user's own messages", () => {
   // Assistant rows stream, grow and re-merge, so navigating them was
   // unreliable; a question is a fixed anchor.
   assert.match(source, /userRowIds\(rows\)/, "targets come from the user rows")
-  const viewable = source.slice(source.indexOf("const handleViewable"), source.indexOf("// Row frames for navigation."))
-  assert.match(viewable, /userAnchorIndex\(current, top\)/, "the top visible row resolves to its question")
   const jump = source.slice(source.indexOf("const jumpTo"), source.indexOf("const moveMessage"))
   assert.match(jump, /rowIndexById\.get\(id\)/, "the jump maps the question to a list index")
   assert.match(jump, /animated: false/, "an animated jump over a long transcript reads as a freeze")
 })
 
-test("the viewability handler cannot go stale", () => {
-  // FlatList captures the callback on mount, so closing over `rows` with a
-  // stable identity was a stale closure: the position never updated and the
-  // counter showed its placeholder (1 / 6) for every message.
-  const handler = source.slice(source.indexOf("const handleViewable"), source.indexOf("const jumpTo"))
-  assert.match(handler, /rowsRef\.current/, "the handler must read the current rows")
-  assert.match(handler, /rowIndexRef\.current\.get/, "and the current index map")
-  assert.doesNotMatch(handler, /userAnchorIndex\(rows,/, "a closed-over rows array would go stale")
-  assert.match(handler, /\[nav\],/, "the identity stays stable across streams")
+test("the position comes from measured user rows, not from viewability", () => {
+  // Viewability does not fire on an inverted list until something scrolls, so a
+  // freshly opened session had no position: the counter read "5 / 5" at the top
+  // and the buttons did nothing until a manual swipe.
+  assert.doesNotMatch(source, /onViewableItemsChanged/, "no dependency on the viewability callback")
+  assert.doesNotMatch(source, /viewabilityConfig/, "and no viewability config")
+  const render = source.slice(source.indexOf("renderItem="), source.indexOf("contentContainerStyle"))
+  assert.match(render, /onLayout=\{\s*isUser/, "only the user's own rows are measured")
+  assert.match(render, /nav\.frames\.set\(row\.id,/, "their frames feed the navigator")
+})
+
+test("a tap works before anything has been measured", () => {
+  // Opening a session starts at the newest message, so index 0 is the honest
+  // base — not -1, which made every button a no-op.
+  const at = source.indexOf("const moveMessage")
+  assert.ok(at >= 0, "moveMessage must exist")
+  const move = source.slice(at, at + 900)
+  assert.match(move, /Math\.max\(0, nav\.current\(\)\)/, "an unknown position starts from the newest question")
 })
 
 test("an unknown position does not claim to be the oldest", () => {

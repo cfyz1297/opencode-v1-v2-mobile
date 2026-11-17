@@ -443,6 +443,34 @@ try {
   )
   screenshot('navigator-one-step')
 
+  // Reported bug 1: at the very top of the session the counter must read 1/N.
+  // It read N/N because the position was never measured there.
+  for (let i = 0; i < 6; i++) {
+    adb('shell', 'input', 'swipe', String(Math.floor(+width / 2)), String(Math.floor(+height * 0.3)), String(Math.floor(+width / 2)), String(Math.floor(+height * 0.9)), '200')
+    await sleep(200)
+  }
+  const atTop = await wakeNavigator()
+  assert.match(
+    counterValue(atTop) ?? '',
+    /^1 \//,
+    `the oldest question reads as 1 / N at the top, got ${counterValue(atTop)}`,
+  )
+  screenshot('navigator-at-top')
+
+  // Reported bug 2: the buttons must work right after a session opens, without
+  // a long manual scroll first. One small swipe shows the panel, and one tap on
+  // it has to move the counter.
+  const firstTouch = await wakeNavigator()
+  const beforeFirstTap = counterValue(firstTouch)
+  assert.ok(tapBounds(firstTouch, n => n.includes('resource-id="nav-up"')), 'tap up right after opening')
+  await sleep(300)
+  const afterFirstTap = counterValue(snapshot())
+  assert.notEqual(
+    afterFirstTap,
+    beforeFirstTap,
+    `the first tap works without a long scroll first (${beforeFirstTap} -> ${afterFirstTap})`,
+  )
+
   // Latest: wake once more and tap from that dump, for the same reason.
   const forLatest = await wakeNavigator()
   assert.ok(tapBounds(forLatest, n => n.includes('resource-id="nav-latest"')), 'tap back to the latest message')

@@ -2,107 +2,83 @@ import { test } from "node:test"
 import assert from "node:assert/strict"
 import { MessageNavigation } from "./message-navigation.ts"
 
-const ids = (n: number) => Array.from({ length: n }, (_, i) => `m${i}`)
+const ids = (n: number) => Array.from({ length: n }, (_, i) => `u${i}`)
 
-// The list reports which rows are actually on screen. Deriving the position
-// from measured frames alone was wrong after a fling: rows outside the render
-// window have no fresh frame, so the counter said "12 / 12" (newest) while the
-// viewport sat on old messages, and a tap then seeked from the wrong base.
-test("a reported visible row is the position, not the frame math", () => {
+// The navigator positions itself from the rows it measured. Only user messages
+// are measured (few, stable height), so these frames describe a transcript of
+// questions with answers in between.
+function withFrames(nav: MessageNavigation, ys: number[], height = 100) {
+  nav.sync(ids(ys.length))
+  ys.forEach((y, index) => nav.frames.set(`u${index}`, { y, height }))
+}
+
+// Reported bug: the counter read "5 / 5" while the viewport sat at the top of
+// the session, and the buttons did nothing until the transcript was scrolled by
+// hand. Both came from the position being unknown: it was only ever set by the
+// list's viewability callback, which does not fire on an inverted list until
+// something scrolls.
+test("the position comes from the measured rows, not from a scroll callback", () => {
   const nav = new MessageNavigation()
-  nav.sync(ids(12))
-  nav.observe(2000, 400)
-  nav.setCurrent("m8")
-  assert.equal(nav.current(), 8)
-  assert.equal(nav.move(1), 9, "one tap moves one message from what is on screen")
+  withFrames(nav, [0, 600, 1200, 1800, 2400])
+  // Viewport at the visual bottom: inverted offset 0 shows the newest content.
+  nav.observe(0, 500)
+  assert.equal(nav.current(), 0, "opening a session reads as the newest question")
+
+  // Scrolled to the top: offset grows toward older content.
+  nav.observe(2500, 500)
+  assert.equal(nav.current(), 4, "the oldest question is where the viewport ends up")
+
+  nav.observe(1300, 500)
+  assert.equal(nav.current(), 2, "and every position in between resolves to its question")
 })
 
-test("the reported row survives a streaming append", () => {
+test("the question that owns the visible answer stays current", () => {
   const nav = new MessageNavigation()
-  nav.sync(ids(12))
-  nav.setCurrent("m8")
-  // A new message arrives at the newest end, so every index shifts by one.
-  nav.sync(["mNew", ...ids(12)])
-  assert.equal(nav.current(), 9, "the same message keeps the position")
+  // u0 newest at the bottom of the content; a long answer sits above it.
+  withFrames(nav, [0, 2000])
+  // Viewport top edge at 1500: over the answer that follows u0.
+  nav.observe(1000, 500)
+  assert.equal(nav.current(), 0, "reading an answer means reading its question")
+  // Past the older question.
+  nav.observe(2100, 500)
+  assert.equal(nav.current(), 1)
 })
 
-test("a manual scroll can take the position back", () => {
+test("a drag keeps a usable position instead of emptying it", () => {
   const nav = new MessageNavigation()
-  nav.sync(ids(12))
-  nav.setCurrent("m8")
-  // The screen calls manual() on drag begin, then reports what is visible.
+  withFrames(nav, [0, 600, 1200])
+  nav.observe(600, 500)
+  assert.equal(nav.current(), 1)
+  // onScrollBeginDrag calls manual(): it drops the jump target and the anchor,
+  // but the position must remain readable or every button tap in that window
+  // does nothing.
   nav.manual()
-  nav.observe(2400, 400)
-  nav.setCurrent("m10")
-  assert.equal(nav.current(), 10)
+  assert.equal(nav.current(), 1, "the position survives the start of a drag")
 })
 
-test("a completed seek reports the target", () => {
+test("an unmeasured transcript has no position at all", () => {
   const nav = new MessageNavigation()
-  nav.sync(ids(6))
-  nav.setCurrent("m1")
-  const list = { scrollToOffset() {}, scrollToIndex() {} }
-  nav.move(1)
-  nav.complete(1200)
-  assert.equal(nav.current(), 2, "the target becomes the position after the seek")
+  nav.sync(ids(3))
+  nav.observe(0, 500)
+  assert.equal(nav.current(), -1, "no frames means unknown, not a guess")
 })
 
-test("a row the list no longer knows is ignored", () => {
+test("a jump owns the position until the next report", () => {
+  const nav = new MessageNavigation()
+  withFrames(nav, [0, 600, 1200])
+  nav.jumpTo("u2")
+  assert.equal(nav.current(), 2, "the jumped-to question is current")
+  nav.observe(600, 500)
+  nav.manual()
+  assert.equal(nav.current(), 1, "after the drag the viewport decides again")
+})
+
+test("only the rows that are measured participate", () => {
   const nav = new MessageNavigation()
   nav.sync(ids(4))
-  nav.setCurrent("gone")
-  assert.notEqual(nav.current(), -2, "an unknown id must not poison the navigation")
-})
-
-// A navigator jump lands the target in the middle of the viewport, so the
-// topmost visible row is one or two rows *above* it. Letting viewability win
-// made one tap skip several messages: the counter went 6/12 → 3/12.
-test("a held position is not overridden by what the list reports", () => {
-  const nav = new MessageNavigation()
-  nav.sync(ids(12))
-  nav.setCurrent("m8")
-  nav.hold()
-  nav.setCurrent("m5")
-  assert.equal(nav.current(), 8, "the jumped-to message stays current")
-})
-
-test("a manual scroll takes the position back after a jump", () => {
-  const nav = new MessageNavigation()
-  nav.sync(ids(12))
-  nav.setCurrent("m8")
-  nav.hold()
-  nav.release()
-  nav.setCurrent("m5")
-  assert.equal(nav.current(), 5)
-})
-
-test("holding does not affect the jump target itself", () => {
-  const nav = new MessageNavigation()
-  nav.sync(ids(12))
-  nav.setCurrent("m8")
-  nav.hold()
-  assert.equal(nav.move(1), 9, "taps keep working while the position is held")
-})
-
-test("a jump sets the position it is holding", () => {
-  const nav = new MessageNavigation()
-  nav.sync(ids(12))
-  nav.setCurrent("m6")
-  nav.jumpTo("m5")
-  assert.equal(nav.current(), 5, "the jumped-to message is current, not the one before the hold")
-  assert.equal(nav.held, true)
-})
-
-test("two taps in a row step twice", () => {
-  const nav = new MessageNavigation()
-  nav.sync(ids(12))
-  nav.jumpTo("m6")
-  // Data is newest-first, so "up" is the next index; the counter counts from
-  // the oldest message, which is why it decreases as the index grows.
-  const counter = () => 12 - nav.current()
-  assert.equal(counter(), 6)
-  nav.jumpTo(nav.ids[nav.move(1)!])
-  assert.equal(counter(), 5, "one tap moves exactly one message")
-  nav.jumpTo(nav.ids[nav.move(1)!])
-  assert.equal(counter(), 4, "and so does the next one")
+  // Only the two oldest questions have been laid out.
+  nav.frames.set("u2", { y: 1200, height: 100 })
+  nav.frames.set("u3", { y: 1800, height: 100 })
+  nav.observe(0, 500)
+  assert.equal(nav.current(), 2, "the nearest measured question is used, not a made-up index")
 })

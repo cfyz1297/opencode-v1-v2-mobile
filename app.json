@@ -2,7 +2,7 @@
   "expo": {
     "name": "OpenCode",
     "slug": "opencode-mobile",
-    "version": "0.3.30",
+    "version": "0.3.31",
     "orientation": "default",
     "scheme": "opencode",
     "userInterfaceStyle": "automatic",
@@ -30,7 +30,7 @@
     },
     "android": {
       "package": "cc.agentlabs.opencode",
-      "versionCode": 95,
+      "versionCode": 96,
       "blockedPermissions": [
         "android.permission.SYSTEM_ALERT_WINDOW"
       ],

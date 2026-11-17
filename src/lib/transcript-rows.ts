@@ -78,19 +78,3 @@ function isUserRow(row: TranscriptRow): boolean {
 export function userRowIds(rows: TranscriptRow[]): string[] {
   return rows.filter(isUserRow).map((row) => row.id)
 }
-
-/**
- * Data index of the user message that owns the content at data index `top`.
- *
- * Answers come after their question in time, so in newest-first data the
- * question sits at a *larger* index; walking forward finds it. Past the oldest
- * question the walk goes back to the newest one, so the counter never points at
- * nothing.
- */
-export function userAnchorIndex(rows: TranscriptRow[], top: number): number | undefined {
-  if (rows.length === 0) return undefined
-  const start = Math.min(Math.max(top, 0), rows.length - 1)
-  for (let i = start; i < rows.length; i++) if (isUserRow(rows[i])) return i
-  for (let i = start - 1; i >= 0; i--) if (isUserRow(rows[i])) return i
-  return undefined
-}

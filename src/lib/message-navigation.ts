@@ -71,9 +71,16 @@ export class MessageNavigation {
       return frame && frame.height > 0 && frame.y < top && frame.y + frame.height >= top - 1
     })
     if (visible >= 0) return visible
-    const nearest = this.ids.map((id, index) => ({ index, frame: this.frames.get(id) }))
-      .filter((item) => item.frame && item.frame.height > 0 && item.frame.y < top)
-      .sort((a, b) => b.frame!.y - a.frame!.y)[0]
+    const measured = this.ids.map((id, index) => ({ index, frame: this.frames.get(id) }))
+      .filter((item) => item.frame && item.frame.height > 0)
+    // The newest measured row that starts above the edge: for an answer it is
+    // the question it belongs to.
+    const above = measured.filter((item) => item.frame!.y < top).sort((a, b) => b.frame!.y - a.frame!.y)[0]
+    if (above) return above.index
+    // Nothing measured above the edge (the reader is past every laid-out row,
+    // e.g. only older rows and a long answer are on screen). The nearest row is
+    // still a better answer than "unknown", which would freeze the buttons.
+    const nearest = measured.sort((a, b) => Math.abs(a.frame!.y - top) - Math.abs(b.frame!.y - top))[0]
     return nearest?.index ?? -1
   }
 

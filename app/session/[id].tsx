@@ -59,14 +59,12 @@ import { TabletSessions } from '../../src/components/TabletSessions'
 import { SubagentBar } from "../../src/components/chat/SubagentBar"
 import { isSafeSessionId } from '../../src/lib/session-id'
 import { NAV_PANEL_IDLE_MS } from "../../src/lib/nav-panel"
-import { VIEWABILITY } from "../../src/lib/nav-panel"
 import { MessageNavigation } from "../../src/lib/message-navigation"
 import {
   buildTranscriptRows,
   rowMessage,
   rowMessages,
   rowParts,
-  userAnchorIndex,
   userRowIds,
 } from "../../src/lib/transcript-rows"
 import { log } from "../../src/lib/logbuffer"
@@ -892,41 +890,6 @@ export default function SessionScreen() {
   const rowIndexById = useMemo(() => new Map(rows.map((row, at) => [row.id, at])), [rows])
   nav.sync(navigableIds)
 
-  // FlatList captures onViewableItemsChanged on mount and does not support
-  // swapping it later, so the handler must keep a stable identity and read the
-  // current data through refs. Closing over `rows` with [nav] deps was a stale
-  // closure: the list kept reporting on the first (empty) data, so the position
-  // was always unknown and the counter fell back to its placeholder.
-  const rowsRef = useRef(rows)
-  rowsRef.current = rows
-  const rowIndexRef = useRef(rowIndexById)
-  rowIndexRef.current = rowIndexById
-
-  // The list reports visible rows on every layout and scroll settle; the last
-  // one is the row at the viewport's top edge (data order is newest first), and
-  // that is the "current message" the counter shows.
-  const handleViewable = useCallback(
-    ({ viewableItems }: { viewableItems: Array<{ item?: { id?: string } } | undefined> }) => {
-      // While the navigator holds the position, the list's report describes the
-      // rows around the jump target, not the target — adopting the topmost one
-      // made a single tap skip several messages (6/12 -> 3/12).
-      if (nav.held) return
-      const last = viewableItems.filter(Boolean).at(-1)?.item?.id
-      const top = last === undefined ? undefined : rowIndexRef.current.get(last)
-      // Answers follow their question, so the row on screen resolves to the
-      // question that owns it — not to whatever assistant row happens to sit
-      // at the top edge.
-      const current = rowsRef.current
-      const anchor = top === undefined ? undefined : userAnchorIndex(current, top)
-      nav.setCurrent(anchor === undefined ? undefined : current[anchor].id)
-      setCurrentNavIndex((prev) => {
-        const next = nav.current()
-        return prev === next ? prev : next
-      })
-    },
-    [nav],
-  )
-
   const jumpTo = useCallback(
     (navIndex: number) => {
       const id = nav.ids[navIndex]
@@ -951,8 +914,10 @@ export default function SessionScreen() {
       wakeNavPanel()
       // The navigator owns the position: no auto-follow until a drag or Latest.
       followBottomRef.current = false
-      const current = nav.current()
-      if (current < 0) return
+      // A session opens at the newest message, so an unmeasured transcript
+      // still starts from index 0: the first tap pages up instead of doing
+      // nothing (which is what "the buttons do not work until I scroll" was).
+      const current = Math.max(0, nav.current())
       // Previous at the oldest loaded message with older pages still on the
       // server: load the next batch instead of going nowhere. handleLoadMore
       // owns the guard, so a tap cannot double-load; the user taps again once
@@ -1305,16 +1270,29 @@ export default function SessionScreen() {
                 }, 120)
               }}
               keyExtractor={(row) => row.id}
-              // The list is the authority on what is on screen. Frame math can
-              // only see rows inside the render window, which after a fling are
-              // not the ones the user is looking at.
-              viewabilityConfig={VIEWABILITY}
-              onViewableItemsChanged={handleViewable}
               renderItem={({ item: row }) => {
                 const message = rowMessage(row)
                 const isUser = message.role === "user"
                 return (
-                  <View>
+                  // Only the user's own rows are measured: they are few and keep
+                  // their height, so the navigator can place the viewport
+                  // without depending on the list's viewability callback (which
+                  // does not fire on an inverted list until something scrolls —
+                  // that is why the counter read "5 / 5" at the top and the
+                  // buttons did nothing until a manual swipe).
+                  <View
+                    onLayout={
+                      isUser
+                        ? (event) => {
+                            nav.frames.set(row.id, event.nativeEvent.layout)
+                            setCurrentNavIndex((prev) => {
+                              const next = nav.current()
+                              return prev === next ? prev : next
+                            })
+                          }
+                        : undefined
+                    }
+                  >
                     <MessageBubble
                       message={message}
                       parts={rowParts(row)}
