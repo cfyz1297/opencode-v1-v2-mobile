@@ -390,10 +390,6 @@ try {
   for (const id of ['nav-up', 'nav-down', 'nav-latest']) {
     assert.ok(shown.includes(`resource-id="${id}"`), `navigator exposes ${id}`)
   }
-  // Evidence shot first, then wake it again: a screencap plus dump takes longer
-  // than the panel's grace period, so the tap has to come from a fresh dump.
-  screenshot('navigator-shown')
-  shown = await wakeNavigator()
   const counterBefore = counterValue(shown)
   assert.match(counterBefore ?? '', /^\d+ \/ \d+$/, 'counter reads N / M')
   const viewportBefore = visibleText(shown)
@@ -403,10 +399,14 @@ try {
   const shownNumber = Number.parseInt(counterBefore, 10)
   const total = Number.parseInt((counterBefore.match(/\/\s*(\d+)/) ?? [])[1], 10)
   assert.ok(shownNumber <= total, 'counter is inside its range')
+  screenshot('navigator-shown')
+
+  // Tap straight from this dump: every dump costs ~1.5s and the panel hides
+  // after 3.5s, so any extra work here hands the tap to a vanished button.
   assert.ok(tapBounds(shown, n => n.includes('resource-id="nav-up"')), 'tap one message up')
-  await sleep(800)
-  // The tap wakes the panel itself, so it must still be up for the next dump —
-  // no second swipe here, or the counter would move for the wrong reason.
+  await sleep(700)
+  // The tap itself wakes the panel, so it must still be up for the next dump —
+  // no second swipe, or the counter would move for the wrong reason.
   let after
   for (let i = 0; i < 3 && !after; i++) {
     const xml = snapshot()
@@ -424,10 +424,14 @@ try {
     viewportBefore,
     'the transcript itself must move, not only the counter',
   )
-  screenshot('navigator-one-up')
-  assert.ok(tapBounds(after, n => n.includes('resource-id="nav-latest"')), 'tap back to the latest message')
+
+  // Latest: wake once more and tap from that dump, for the same reason as the
+  // up-tap above.
+  const forLatest = await wakeNavigator()
+  assert.ok(tapBounds(forLatest, n => n.includes('resource-id="nav-latest"')), 'tap back to the latest message')
   await sleep(900)
-  await waitFor('OFFLINE_ANSWER_42')
+  const landed = await waitFor('OFFLINE_ANSWER_42')
+  assert.ok(landed, 'Latest returns to the newest message')
   await sleep(4000)
   assert.ok(!snapshot().includes('content-desc="Message '), 'navigator hides once scrolling stops')
   screenshot('navigator-hidden')
