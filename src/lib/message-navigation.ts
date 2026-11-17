@@ -8,6 +8,12 @@ export class MessageNavigation {
   expected: number | undefined
   target: string | undefined
   anchor: { id: string; offset: number; height: number } | undefined
+  // While held, the navigator owns the position and the list's viewability
+  // reports are ignored. A jump centres its target, so the topmost visible row
+  // is one or two rows above it — adopting that made one tap skip several
+  // messages (6/12 → 3/12) because each tap re-based on the row above.
+  held = false
+
   // The row the list says is on screen. Frames are only reported for rows
   // inside the render window, so after a fling the frame math can point at the
   // newest message while the viewport shows an old one — the counter then read
@@ -35,7 +41,17 @@ export class MessageNavigation {
   // top edge — the oldest one on screen, which is what "current message" means
   // for a transcript read from the bottom up.
   setCurrent(id: string | undefined) {
+    if (this.held) return
     this.visibleId = id && this.ids.includes(id) ? id : undefined
+  }
+
+  // A jump takes the position; a finger on the list or Latest gives it back.
+  hold() {
+    this.held = true
+  }
+
+  release() {
+    this.held = false
   }
 
   visible() {
@@ -72,6 +88,7 @@ export class MessageNavigation {
     this.target = undefined
     this.anchor = undefined
     this.visibleId = undefined
+    this.held = false
     this.expected = offset
     if (offset !== undefined) this.offset = offset
   }

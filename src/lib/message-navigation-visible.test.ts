@@ -53,3 +53,33 @@ test("a row the list no longer knows is ignored", () => {
   nav.setCurrent("gone")
   assert.notEqual(nav.current(), -2, "an unknown id must not poison the navigation")
 })
+
+// A navigator jump lands the target in the middle of the viewport, so the
+// topmost visible row is one or two rows *above* it. Letting viewability win
+// made one tap skip several messages: the counter went 6/12 → 3/12.
+test("a held position is not overridden by what the list reports", () => {
+  const nav = new MessageNavigation()
+  nav.sync(ids(12))
+  nav.setCurrent("m8")
+  nav.hold()
+  nav.setCurrent("m5")
+  assert.equal(nav.current(), 8, "the jumped-to message stays current")
+})
+
+test("a manual scroll takes the position back after a jump", () => {
+  const nav = new MessageNavigation()
+  nav.sync(ids(12))
+  nav.setCurrent("m8")
+  nav.hold()
+  nav.release()
+  nav.setCurrent("m5")
+  assert.equal(nav.current(), 5)
+})
+
+test("holding does not affect the jump target itself", () => {
+  const nav = new MessageNavigation()
+  nav.sync(ids(12))
+  nav.setCurrent("m8")
+  nav.hold()
+  assert.equal(nav.move(1), 9, "taps keep working while the position is held")
+})

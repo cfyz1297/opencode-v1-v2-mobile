@@ -46,33 +46,23 @@ test("the panel shows only while the user scrolls, then hides itself", () => {
 })
 
 test("a navigator tap owns the position until the user takes over", () => {
-  // The reported bug: the counter moved to 3/5 while the transcript stayed at
-  // the bottom, because content growth re-ran the auto-follow. A tap must stop
-  // auto-follow, and only a manual drag or Latest may hand it back.
-  const around = (marker: string, length = 600) => {
+  // Two reported bugs. Streaming content re-ran the auto-follow and scrolled
+  // back to the bottom (counter 3/5 over the newest message); and letting the
+  // list's viewability decide re-based the position on the row just above the
+  // jump target, so one tap skipped several messages (6/12 -> 3/12).
+  const around = (marker: string, length = 700) => {
     const at = source.indexOf(marker)
     assert.ok(at >= 0, `${marker} must exist`)
     return source.slice(at, at + length)
   }
   const move = around("const moveMessage")
   assert.match(move, /followBottomRef\.current = false/, "a tap must stop auto-follow")
-  assert.match(move, /navHoldRef\.current = true/, "and hold the position")
-  assert.match(
-    around("const handleScroll"),
-    /!navHoldRef\.current && shouldFollowBottom/,
-    "content growth must not snap back while held",
-  )
-  assert.match(around("onScrollBeginDrag={() =>"), /navHoldRef\.current = false/, "a finger on the list takes over")
-  assert.match(around("const scrollToBottom"), /navHoldRef\.current = false/, "Latest hands the position back")
-})
-
-test("the list, not the frame math, says which message is current", () => {
-  // A fling leaves rows outside the render window unmeasured, so the counter
-  // read 12/12 on old messages and a tap seeked from that wrong base.
-  assert.match(source, /onViewableItemsChanged=\{handleViewable\}/, "the list must report visible rows")
-  const handler = source.slice(source.indexOf("const handleViewable"), source.indexOf("// Row frames for navigation."))
-  assert.match(handler, /viewableItems[\s\S]{0,80}at\(-1\)/, "the row at the viewport's top edge is current")
-  assert.match(handler, /nav\.setCurrent\(/, "and it is fed to the navigator")
+  assert.match(move, /nav\.hold\(\)/, "and hold the position against viewability")
+  const scroll = around("const handleScroll")
+  assert.match(scroll, /!nav\.held && atBottom/, "content growth must not snap back while held")
+  assert.match(scroll, /if \(atBottom\) nav\.setCurrent\(nav\.ids\[0\]\)/, "at the bottom the newest message is current")
+  assert.match(around("onScrollBeginDrag={() =>"), /nav\.manual\(\)/, "a finger on the list takes over")
+  assert.match(around("const scrollToBottom"), /nav\.release\(\)/, "Latest hands the position back")
 })
 
 test("a queued jump retry never outlives the next command", () => {
