@@ -99,19 +99,21 @@ async function dismissBlockingSheets() {
     await waitFor('OFFLINE_ANSWER_42')
   }
 }
-// After a configuration change the activity can be recreated on top of the
-// previous route (offline history, model sheet) and the deep link loses the
-// race, so the session is never shown. Back out and reopen until the composer
-// is really there.
+// After a configuration change the activity is recreated on whatever route was
+// on top (usually the offline-history page), and a deep link can lose the race
+// with that restore. Walking back is deterministic and keeps the connection;
+// the deep link stays as a last resort.
 async function ensureSessionOpen() {
   for (let i = 0; i < 3; i++) {
     if (snapshot().includes('chat-message-input')) return
     adb('shell', 'input', 'keyevent', 'KEYCODE_BACK')
-    await sleep(600)
-    await open('session/roadmap-session')
-    await sleep(1200)
+    await sleep(900)
   }
-  if (!snapshot().includes('chat-message-input')) throw new Error('could not open roadmap-session')
+  if (!snapshot().includes('chat-message-input')) {
+    await open('session/roadmap-session')
+    await sleep(1500)
+  }
+  await waitFor('chat-message-input')
 }
 function screenshot(name) {
   writeFileSync(`${out}/${name}.png`, execFileSync('adb', ['exec-out', 'screencap', '-p']))
@@ -397,13 +399,8 @@ try {
   await screenshot('model-and-effort-selected')
   adb('shell', 'wm', 'size', '1920x1200')
   await sleep(2000)
-  // A resize recreates the activity and Android restores the *previous* route,
-  // so the deep link could land on the offline-history page instead of the
-  // session. A cold start with the deep link has no stack to restore.
-  adb('shell', 'am', 'force-stop', pkg)
-  await sleep(800)
-  await open('session/roadmap-session')
-  await sleep(2500)
+  // A resize recreates the activity on the restored route, so back out to the
+  // session instead of racing it with a deep link.
   await ensureSessionOpen()
   await waitFor('OFFLINE_ANSWER_42')
   await waitFor('tablet-session-sidebar')
