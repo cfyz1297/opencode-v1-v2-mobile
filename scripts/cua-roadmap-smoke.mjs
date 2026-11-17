@@ -123,24 +123,6 @@ async function ensureSessionOpen() {
   }
   await waitFor('chat-message-input')
 }
-// Reach the offline-history screen through the list button. A deep link would
-// work too, but an opencode:// intent survives activity recreations and reopens
-// its screen on top later — which is exactly what kept stealing the layout
-// steps.
-async function openHistoryFromUi() {
-  for (let i = 0; i < 3; i++) {
-    const xml = snapshot()
-    if (xml.includes('resource-id="history-enable"')) return
-    if (xml.includes('resource-id="open-offline-history"')) {
-      await tap('open-offline-history')
-      await sleep(1200)
-      continue
-    }
-    adb('shell', 'input', 'keyevent', 'KEYCODE_BACK')
-    await sleep(1000)
-  }
-  if (!snapshot().includes('resource-id="history-enable"')) throw new Error('could not open offline history')
-}
 function screenshot(name) {
   writeFileSync(`${out}/${name}.png`, execFileSync('adb', ['exec-out', 'screencap', '-p']))
   writeFileSync(`${out}/${name}.xml`, snapshot())
@@ -457,11 +439,15 @@ try {
   // Offline capture is enabled last, on purpose: visiting the history screen
   // puts that route under the session, and every later activity recreate (a
   // resize) restores it on top — which is what kept stealing the tablet step.
-  await openHistoryFromUi()
+  // Deep link is safe here: no resize follows, and a force-stop clears the
+  // pending intent. tap() waits for the node, so the async navigation settles.
+  await open('history')
   await tap('history-enable')
   await sleep(1500)
-  // Visit the live session so the capture runs: a deep link from here loses to
-  // the route already on top, so walk back to the list and tap the row.
+  // Visit the live session so the capture runs. From history a deep link loses
+  // to the route already on top, so go back to the list and tap the row.
+  adb('shell', 'input', 'keyevent', 'KEYCODE_BACK')
+  await sleep(1200)
   await ensureSessionOpen()
   await waitFor('OFFLINE_ANSWER_42')
   await sleep(2500)
