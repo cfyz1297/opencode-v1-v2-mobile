@@ -45,7 +45,16 @@ export class MessageNavigation {
     this.visibleId = id && this.ids.includes(id) ? id : undefined
   }
 
-  // A jump takes the position; a finger on the list or Latest gives it back.
+  // A navigator jump: the target becomes the position AND the navigator takes
+  // ownership. It has to bypass setCurrent's gate — holding before setting the
+  // position left the old row current, so the counter never moved at all
+  // (6/12 -> 6/12) while the transcript scrolled.
+  jumpTo(id: string) {
+    this.held = true
+    if (this.ids.includes(id)) this.visibleId = id
+  }
+
+  // A finger on the list or Latest gives the position back to the viewport.
   hold() {
     this.held = true
   }

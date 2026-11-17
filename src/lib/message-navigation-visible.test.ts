@@ -83,3 +83,26 @@ test("holding does not affect the jump target itself", () => {
   nav.hold()
   assert.equal(nav.move(1), 9, "taps keep working while the position is held")
 })
+
+test("a jump sets the position it is holding", () => {
+  const nav = new MessageNavigation()
+  nav.sync(ids(12))
+  nav.setCurrent("m6")
+  nav.jumpTo("m5")
+  assert.equal(nav.current(), 5, "the jumped-to message is current, not the one before the hold")
+  assert.equal(nav.held, true)
+})
+
+test("two taps in a row step twice", () => {
+  const nav = new MessageNavigation()
+  nav.sync(ids(12))
+  nav.jumpTo("m6")
+  // Data is newest-first, so "up" is the next index; the counter counts from
+  // the oldest message, which is why it decreases as the index grows.
+  const counter = () => 12 - nav.current()
+  assert.equal(counter(), 6)
+  nav.jumpTo(nav.ids[nav.move(1)!])
+  assert.equal(counter(), 5, "one tap moves exactly one message")
+  nav.jumpTo(nav.ids[nav.move(1)!])
+  assert.equal(counter(), 4, "and so does the next one")
+})

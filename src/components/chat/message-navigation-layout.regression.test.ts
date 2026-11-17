@@ -55,12 +55,17 @@ test("a navigator tap owns the position until the user takes over", () => {
     assert.ok(at >= 0, `${marker} must exist`)
     return source.slice(at, at + length)
   }
-  const move = around("const moveMessage")
-  assert.match(move, /followBottomRef\.current = false/, "a tap must stop auto-follow")
-  assert.match(move, /nav\.hold\(\)/, "and hold the position against viewability")
+  const jump = around("const jumpTo")
+  assert.match(jump, /nav\.jumpTo\(nav\.ids\[index\]\)/, "the jump sets and holds the position in one step")
+  assert.match(around("const moveMessage"), /followBottomRef\.current = false/, "a tap must stop auto-follow")
+  assert.match(
+    around("const handleViewable"),
+    /if \(nav\.held\) return/,
+    "a held position ignores the list's report",
+  )
   const scroll = around("const handleScroll")
   assert.match(scroll, /!nav\.held && atBottom/, "content growth must not snap back while held")
-  assert.match(scroll, /if \(atBottom\) nav\.setCurrent\(nav\.ids\[0\]\)/, "at the bottom the newest message is current")
+  assert.match(scroll, /if \(atBottom && !nav\.held\) nav\.setCurrent\(nav\.ids\[0\]\)/, "at the bottom the newest message is current")
   assert.match(around("onScrollBeginDrag={() =>"), /nav\.manual\(\)/, "a finger on the list takes over")
   assert.match(around("const scrollToBottom"), /nav\.release\(\)/, "Latest hands the position back")
 })

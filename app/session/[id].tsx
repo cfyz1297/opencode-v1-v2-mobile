@@ -861,7 +861,7 @@ export default function SessionScreen() {
       // At the bottom the current message is the newest one: the topmost visible
       // row can be several above it, which read as "3 / 12" at the end of the
       // transcript. Ignored while the navigator holds the position.
-      if (atBottom) nav.setCurrent(nav.ids[0])
+      if (atBottom && !nav.held) nav.setCurrent(nav.ids[0])
       setCurrentNavIndex((prev) => {
         const next = nav.current()
         return prev === next ? prev : next
@@ -891,6 +891,10 @@ export default function SessionScreen() {
   // that is the "current message" the counter shows.
   const handleViewable = useCallback(
     ({ viewableItems }: { viewableItems: Array<{ item?: { id?: string } } | undefined> }) => {
+      // While the navigator holds the position, the list's report describes the
+      // rows around the jump target, not the target — adopting the topmost one
+      // made a single tap skip several messages (6/12 -> 3/12).
+      if (nav.held) return
       const last = viewableItems.filter(Boolean).at(-1)?.item?.id
       nav.setCurrent(last)
       setCurrentNavIndex((prev) => {
@@ -909,7 +913,10 @@ export default function SessionScreen() {
       // where the target is after a fling.
       cancelJump()
       navJump.current = { index }
-      nav.setCurrent(nav.ids[index])
+      // jumpTo both sets the position and takes ownership: calling setCurrent
+      // after the hold was a no-op, so the counter stayed on the old row while
+      // the transcript scrolled (6/12 -> 6/12).
+      nav.jumpTo(nav.ids[index])
       setCurrentNavIndex(index)
       flatListRef.current.scrollToIndex({ index, viewPosition: 0.5, animated: true })
     },
@@ -919,11 +926,8 @@ export default function SessionScreen() {
   const moveMessage = useCallback(
     (direction: 1 | -1) => {
       wakeNavPanel()
-      // The navigator owns the position: no auto-follow, and the list's
-      // viewability reports must not re-base it (a jump centres its target, so
-      // the topmost visible row sits above it and one tap would skip several).
+      // The navigator owns the position: no auto-follow until a drag or Latest.
       followBottomRef.current = false
-      nav.hold()
       const current = nav.current()
       if (current < 0) return
       // Previous at the oldest loaded message with older pages still on the
