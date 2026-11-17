@@ -263,7 +263,15 @@ try {
   if (prompt.includes('com.android.permissioncontroller:id/permission_allow_button')) await tap('com.android.permissioncontroller:id/permission_allow_button')
   await open('')
   await waitFor('ROADMAP_SESSION')
-  await open('session/roadmap-session')
+  // Offline capture is enabled first, but history is left by backing out to the
+  // list: the session is then opened by tapping its row, so history is not the
+  // route sitting under it — a later activity recreate would restore it on top.
+  await open('history')
+  await tap('history-enable')
+  await sleep(800)
+  adb('shell', 'input', 'keyevent', 'KEYCODE_BACK')
+  await sleep(1000)
+  await tap('session-item-roadmap-session')
   await waitFor('OFFLINE_ANSWER_42')
   await sleep(2500)
   screenshot('session-phone')
@@ -439,26 +447,6 @@ try {
   // Offline capture is enabled last, on purpose: visiting the history screen
   // puts that route under the session, and every later activity recreate (a
   // resize) restores it on top — which is what kept stealing the tablet step.
-  // Deep link is safe here: no resize follows, and a force-stop clears the
-  // pending intent. tap() waits for the node, so the async navigation settles.
-  await open('history')
-  await tap('history-enable')
-  await sleep(1500)
-  // Visit the live session so the capture runs. At 800 dp the tab list sits in
-  // the left pane, so history is left by tapping the Sessions tab; on a phone
-  // the same node is the bottom tab. ensureSessionOpen then taps the row.
-  const afterEnable = snapshot()
-  if (!afterEnable.includes('resource-id="session-item-roadmap-session"')) {
-    const leftTheScreen = tapBounds(
-      afterEnable,
-      n => n.includes('clickable="true"') && /text="Sessions"/.test(n),
-    )
-    if (leftTheScreen) await sleep(1500)
-  }
-  await ensureSessionOpen()
-  screenshot('after-history-enable')
-  await waitFor('OFFLINE_ANSWER_42')
-  await sleep(2500)
   server.closeAllConnections()
   await new Promise(resolve => server.close(resolve))
   adb('shell', 'am', 'force-stop', pkg)
