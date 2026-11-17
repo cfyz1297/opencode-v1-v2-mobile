@@ -399,11 +399,15 @@ try {
   await screenshot('model-and-effort-selected')
   adb('shell', 'wm', 'size', '1920x1200')
   await sleep(2000)
-  // A resize recreates the activity on the restored route, so back out to the
-  // session instead of racing it with a deep link.
-  await ensureSessionOpen()
-  await waitFor('OFFLINE_ANSWER_42')
+  // The activity recreate finishes well after `wm size` returns, and it
+  // restores whatever route was on top (usually offline history) — so wait for
+  // the tablet layout to actually appear, repairing the route on each pass.
+  for (let i = 0; i < 5 && !snapshot().includes('tablet-session-sidebar'); i++) {
+    await sleep(1500)
+    await ensureSessionOpen()
+  }
   await waitFor('tablet-session-sidebar')
+  await waitFor('OFFLINE_ANSWER_42')
   await dismissBlockingSheets()
   await waitFor('tablet-session-sidebar')
   await waitFor('tablet-session-tablet-session-two')
@@ -422,6 +426,7 @@ try {
   assert.ok(bounds && +bounds[3] - +bounds[1] === 280, 'Sidebar is 280 dp at mdpi')
   adb('shell', 'wm', 'size', '800x1280')
   await sleep(1500)
+  await ensureSessionOpen()
   await waitFor('OFFLINE_ANSWER_42')
   assert.ok(!snapshot().includes('tablet-session-sidebar'), 'Portrait 800 dp returns to one content pane')
   screenshot('session-tablet-portrait')
