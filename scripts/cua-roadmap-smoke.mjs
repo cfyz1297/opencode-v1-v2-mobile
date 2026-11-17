@@ -99,6 +99,20 @@ async function dismissBlockingSheets() {
     await waitFor('OFFLINE_ANSWER_42')
   }
 }
+// After a configuration change the activity can be recreated on top of the
+// previous route (offline history, model sheet) and the deep link loses the
+// race, so the session is never shown. Back out and reopen until the composer
+// is really there.
+async function ensureSessionOpen() {
+  for (let i = 0; i < 3; i++) {
+    if (snapshot().includes('chat-message-input')) return
+    adb('shell', 'input', 'keyevent', 'KEYCODE_BACK')
+    await sleep(600)
+    await open('session/roadmap-session')
+    await sleep(1200)
+  }
+  if (!snapshot().includes('chat-message-input')) throw new Error('could not open roadmap-session')
+}
 function screenshot(name) {
   writeFileSync(`${out}/${name}.png`, execFileSync('adb', ['exec-out', 'screencap', '-p']))
   writeFileSync(`${out}/${name}.xml`, snapshot())
@@ -384,7 +398,7 @@ try {
   adb('shell', 'wm', 'size', '1920x1200')
   await sleep(2000)
   // Re-open the session after resize so a stolen back/sheet cannot leave history on top.
-  await open('session/roadmap-session')
+  await ensureSessionOpen()
   await waitFor('OFFLINE_ANSWER_42')
   await waitFor('tablet-session-sidebar')
   await dismissBlockingSheets()
