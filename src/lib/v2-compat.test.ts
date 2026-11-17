@@ -152,6 +152,43 @@ describe("mapMessages", () => {
     assert.equal(tool.state?.output, "file.txt")
   })
 
+  it("keeps a tool's own timing from history", () => {
+    // The server sends {created, ran, completed} on the part itself (checked
+    // against a live 2.x server); dropping it left every reopened session
+    // without tool durations, so the run total could not be shown.
+    const [one] = mapMessages(
+      [
+        {
+          id: "msg_t",
+          type: "assistant",
+          time: { created: 1 },
+          content: [
+            { type: "tool", id: "t3", name: "shell", time: { created: 1000, ran: 1200, completed: 3000 }, state: { status: "completed" } },
+          ],
+        },
+      ],
+      "ses",
+    )
+    assert.deepEqual(one.parts[0].state?.time, { start: 1200, end: 3000 })
+  })
+
+  it("a tool that never finished keeps only its start", () => {
+    const [one] = mapMessages(
+      [
+        {
+          id: "msg_t2",
+          type: "assistant",
+          time: { created: 1 },
+          content: [
+            { type: "tool", id: "t4", name: "shell", time: { created: 1000, ran: 1200 }, state: { status: "running" } },
+          ],
+        },
+      ],
+      "ses",
+    )
+    assert.deepEqual(one.parts[0].state?.time, { start: 1200 })
+  })
+
   it("maps streaming tool state to v1 pending", () => {
     const one = mapMessages(
       [{ id: "msg_d", type: "assistant", time: { created: 1 }, content: [{ type: "tool", id: "t2", name: "read", state: { status: "streaming", input: "" } }] }],

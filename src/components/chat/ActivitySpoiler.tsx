@@ -50,7 +50,9 @@ export function ActivitySpoiler({ reasoning, tools, isDark }: Props) {
   const reasonCount = reasoning ? 1 : 0
   const steps = tools.length + reasonCount
   const names = summary.kinds.map((kind) => t(`chat.toolKind.${kind}`)).join(", ")
-  const duration = formatDurationMs(summary.totalMs)
+  // No timing data (older history, a tool the server never measured) must not
+  // print a confident "0ms" for five real commands.
+  const duration = summary.totalMs > 0 ? formatDurationMs(summary.totalMs) : null
   const headline = tools.length > 0 ? `${summary.count}` : t("chat.activity.thought", { count: steps })
   const label = [headline, names, duration].filter(Boolean).join(" · ")
   // Spoken form is not the compact line: "5 tools: Shell, Read, 12.3 seconds".

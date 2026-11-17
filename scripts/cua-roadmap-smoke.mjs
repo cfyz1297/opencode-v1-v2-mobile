@@ -162,13 +162,15 @@ const delegationPart = (id, childID, description) => ({
 })
 // A tool step as the V2 server reports it — five of these across two messages
 // are what the merged activity spoiler has to count as one line.
+// One second per call, on the part's own clock the server uses, so the run
+// total is a real 1s per tool rather than an unmeasurable zero.
 const shellPart = (id, command) => ({
   id, type: 'tool', name: 'shell',
+  time: { created: now - 60_000, ran: now - 60_000, completed: now - 59_000 },
   state: {
     status: 'completed',
     input: { command },
     content: [{ type: 'text', text: 'ok' }],
-    time: { start: now + 1, end: now + 2 },
   },
 })
 const other = { ...session, id: 'tablet-session-two', title: 'TABLET_SESSION_TWO', location: { directory: '/other' } }
@@ -357,9 +359,10 @@ try {
   // Five shell calls in the newest segment, so the line reads "5 · Shell · Ns".
   const spoilerXml = await waitFor('Shell')
   assert.ok(/text="5"/.test(spoilerXml), 'the header counts the run\'s tool calls')
+  // Five one-second calls sum to 5.0s — the total is a sum, not one card's time.
   assert.ok(
-    /text="\d+(\.\d+)?(ms|s|m \d+s)"/.test(spoilerXml),
-    'the header shows the total time of the run\'s tools',
+    /text="5\.0s"/.test(spoilerXml),
+    'the header shows the summed time of the run\'s tools',
   )
   const stepLines = (spoilerXml.match(/text="\d+"/g) ?? []).length
   assert.equal(stepLines >= 1, true)

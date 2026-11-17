@@ -280,6 +280,10 @@ function assistantParts(m: V2MessageBody, sid: string): Part[] {
           input: state.input,
           output,
           title: state.metadata?.title,
+          // History carries the call's own clock on the part — created, ran,
+          // completed. Dropping it left every reopened session with no tool
+          // durations, so the collapsed run could not show its total time.
+          time: toolTime((item as { time?: { created?: number; ran?: number; completed?: number } }).time),
           // The `subagent` tool reports its child session in metadata; without
           // it the transcript cannot link to the session that is doing the work.
           metadata: state.metadata,
@@ -291,6 +295,16 @@ function assistantParts(m: V2MessageBody, sid: string): Part[] {
     }
   }
   return parts
+}
+
+// Duration source for a tool part from history: the run window, not the
+// message window — `created` opens when the call was queued, `ran` when it
+// actually started.
+function toolTime(time?: { created?: number; ran?: number; completed?: number }): { start: number; end?: number } | undefined {
+  const start = time?.ran ?? time?.created
+  if (typeof start !== "number") return undefined
+  const end = time?.completed
+  return typeof end === "number" && end >= start ? { start, end } : { start }
 }
 
 // V2 tool state adds "streaming" (input still arriving); V1's enum is
