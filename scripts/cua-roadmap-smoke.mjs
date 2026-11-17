@@ -442,7 +442,9 @@ try {
   await open('history')
   await tap('history-enable')
   await sleep(1500)
-  await open('session/roadmap-session')
+  // Visit the live session so the capture runs: a deep link from here loses to
+  // the route already on top, so walk back to the list and tap the row.
+  await ensureSessionOpen()
   await waitFor('OFFLINE_ANSWER_42')
   await sleep(2500)
   server.closeAllConnections()
