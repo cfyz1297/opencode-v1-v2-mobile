@@ -1279,6 +1279,9 @@ export default function SessionScreen() {
               ref={flatListRef}
               data={rows}
               inverted
+              // Android scrolls a focused child into view; a selectable <Text>
+              // takes focus on long-press and used to yank the transcript.
+              scrollsChildToFocus={false}
               onLayout={(event) => {
                 nav.observe(nav.offset, event.nativeEvent.layout.height)
               }}
