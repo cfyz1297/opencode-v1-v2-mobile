@@ -1,6 +1,6 @@
 # Внешние интеграции
 
-Актуально на 2026-11-15, коммит `1fdfabc` (0.3.20). Сервер может быть **двух поколений** (V1 / V2), и версия определяется при подключении. С 0.3.17 к сети добавился нативный слой устройства: foreground-сервис удержания и мост уведомлений.
+Актуально на 2026-11-18, версия 0.3.21 / 86. Изменения в сетевом слое: рукопожатие SSE стало общим для обоих транспортов (`dialStream`), а tool-часть из истории теперь несёт собственные часы сервера. Сервер может быть **двух поколений** (V1 / V2), и версия определяется при подключении. С 0.3.17 к сети добавился нативный слой устройства: foreground-сервис удержания и мост уведомлений.
 
 ## Обязательные разделы
 
@@ -42,7 +42,7 @@
 | Метод и путь | Назначение |
 |--------------|-----------|
 | `GET /api/info` | health/version (`healthy ?? true`) |
-| `GET /api/event` | SSE-поток (`Accept-Encoding: identity`), рукопожатие ≤ 15 с |
+| `GET /api/event` | SSE-поток (`Accept-Encoding: identity`), рукопожатие ≤ 15 с через `dialStream()` (`src/lib/sse.ts`, `CONNECT_TIMEOUT_MS`) |
 | `GET /api/project`, `GET /api/location` | Проекты и текущая локация |
 | `GET /api/fs/list?path=` | Листинг файлов |
 | `GET /file/roots` | Корни ФС; 404 → `null` |
@@ -68,14 +68,14 @@
 | Метод и путь | Отличие от V2 |
 |--------------|---------------|
 | `GET /global/health` | health/version |
-| `GET /global/event` | SSE; события нормализуются (`session.idle` → `session.status`, `permission.updated`/`permission.v2.*` → `permission.asked`) |
+| `GET /global/event` | SSE; события нормализуются (`session.idle` → `session.status`, `permission.updated`/`permission.v2.*` → `permission.asked`). С 0.3.21 использует то же ограниченное рукопожатие `dialStream()`, что и V2: раньше диал не имел срока |
 | `GET /project`, `GET /project/current` | без `/api` |
 | `GET /file?path=`, `GET /file/roots` | 404 → `null` |
 | `GET /path` | home/state/config/worktree/directory |
 | `GET /experimental/session?limit=&cursor=` | глобальный список; **листается по заголовку `x-next-cursor`** (до 10 страниц), дедуп по id, повторный/битый курсор завершает обход |
 | `GET /session` | fallback, если `/experimental/session` → 404 (постранично не листается) |
 | `GET/POST/PATCH/DELETE /session/{id}` | CRUD |
-| `GET /session/{id}/message?limit=` | переписка целиком, без курсора |
+| `GET /session/{id}/message?limit=` | переписка целиком, без курсора. По умолчанию сервер отдаёт 50 сообщений, поэтому обновление экрана всегда передаёт `limit` из `pageSize` |
 | `GET /session/{id}/message` (limit 200) | `allMessages()` — весь транскрипт |
 | `POST /session/{id}/prompt_async` | модель/агент **в теле**, отдельных `/model` и `/agent` нет |
 | `POST /session/{id}/command`, `/abort`, `/summarize` | команды, прерывание, компакция |
@@ -123,7 +123,8 @@
 
 ### 8) Надёжность и поведение при сбоях
 
-- Таймауты: общий запрос 30 с (`REQUEST_TIMEOUT_MS`, `src/lib/http.ts:7`); тест соединения 12 с; health-probe 5 с; диагностические пробы 8 с; **проба определения API 8 с** (`PROBE_TIMEOUT_MS`); **рукопожатие SSE 15 с** (`CONNECT_TIMEOUT_MS`); `prompt`/`command`/`prompt_async` — без клиентского таймаута.
+- Таймауты: общий запрос 30 с (`REQUEST_TIMEOUT_MS`, `src/lib/http.ts:7`); тест соединения 12 с; health-probe 5 с; диагностические пробы 8 с; **проба определения API 8 с** (`PROBE_TIMEOUT_MS`); **рукопожатие SSE 15 с** (`CONNECT_TIMEOUT_MS` в `src/lib/sse.ts`, общее для V1 и V2 через `dialStream()`); `prompt`/`command`/`prompt_async` — без клиентского таймаута.
+- **Часы инструмента в истории.** Сервер отправляет на tool-части `time: {created, ran, completed}`; `toolTime()` (`src/lib/v2-compat.ts`) переносит их в `state.time` как `{start: ran ?? created, end: completed}`. Без этого переоткрытая сессия не знала длительностей инструментов.
 - Повторы: SSE-реконнект с backoff `[1,2,4,8,15]` ±25 % и стабилизацией 10 с; при 401/403 цикл останавливается и выставляется `authError`. Повторов HTTP-запросов, кроме цепочки provider connect, нет.
 - Восстановление: watchdog сокета 30 с, watchdog прогона 12 с с одной дозагрузкой на «тихое окно», сверка с `/api/session/active` после реконнекта и в фоне (только V2/V1-эвристика соответственно).
 - Fallback'и: `/file/roots` 404 → `null`; `/api/model/default` ошибка → `null`; провал обновления каталога не стирает уже показанный каталог (`src/stores/catalog.ts`); отсутствующий `healthy` → `true` на уровне SDK, но `probeConnection` требует строго `true`; провал пробы API → прежнее поведение (V2), чтобы сохранённое подключение не переставало открываться.

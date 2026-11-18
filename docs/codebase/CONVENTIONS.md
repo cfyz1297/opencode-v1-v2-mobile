@@ -2,7 +2,7 @@
 
 Правила ниже выведены из фактического кода; инструментов принуждения (линтер/форматтер) в репозитории нет, поэтому единственные автоматические гейты — `tsc --noEmit` и `npm test`.
 
-Актуально на 2026-11-15, коммит `1fdfabc` (0.3.20).
+Актуально на 2026-11-18, версия 0.3.21 / 86.
 
 ## Обязательные разделы
 
@@ -31,7 +31,7 @@
 - `any` формально не запрещён механически, но встречается точечно: 16 вхождений `as any`/`: any` в `src`+`app` без тестов, почти всё — иконки `@expo/vector-icons` и границы событий: `name={icon as any}` (`src/components/chat/ToolCallCard.tsx:358`), `(event as any).payload` (`src/stores/events.ts:642`). `AGENTS.md` требует «без `any`» — фактически это правило нарушается.
 - TypeScript: `strict: true`, наследование `expo/tsconfig.base`, `allowImportingTsExtensions: true`, `types: ["node"]` (`tsconfig.json`). `include` — `**/*.ts` и `**/*.tsx`, поэтому `npm run typecheck` проверяет и тесты.
 - Запуск: `npm run typecheck`, `npm test`, `npm run test:coverage`, `npm run check:versions`.
-- Числа на 2026-11-15: **746 тестов**, покрытие **98.23 % строк / 86.16 % ветвей / 96.43 % функций**; `typecheck` — чисто.
+- Числа на 2026-11-18: **833 теста**, покрытие **98.23 % строк / 86.97 % ветвей / 96.51 % функций**; `typecheck` — чисто.
 
 ### 3) Импорты и модули
 
@@ -58,13 +58,16 @@
 - Каталог: тест лежит рядом с модулем (`src/lib/*.test.ts`), один тест — один файл модуля.
 - Раннер: встроенный `node:test`, ассерты `node:assert/strict`; `describe/it` редки — почти всё плоские `test(...)`.
 - Моки: внедрение зависимостей (фейковое хранилище, фейковый `fetch`), подмена `expo/fetch` через `registerHooks` (`src/lib/sdk.integration.test.ts`), HTTP-заглушка для интеграционных (`tests/fixtures/mock-opencode-server.ts`), «экранный» харнесс на `vm` + `typescript` (`src/lib/connections-screen.test.ts`), статические проверки исходников регулярками для того, что нельзя отрендерить (`src/lib/text-metrics.test.ts`, `src/components/wide-content-scroll.regression.test.ts`, `src/lib/keep-alive-config.test.ts`).
-- Покрытие: гейт 80 % по строкам/ветвям/функциям (`package.json`); фактически 98.23 / 86.16 / 96.43 (прогон 2026-11-15).
+- Покрытие: гейт 80 % по строкам/ветвям/функциям (`package.json`); фактически 98.23 / 86.97 / 96.51 (прогон 2026-11-18).
 - Чистые модули для Android-поведения: когда исправление целиком в нативном атрибуте (`lineHeight`, `nestedScrollEnabled`, `foregroundServiceType`), тест фиксирует инвариант по исходнику, а комментарий в тесте объясняет физику бага — см. `src/lib/text-metrics.test.ts`, `src/lib/scroll-config.test.ts`, `src/lib/keep-alive-config.test.ts`.
 - Подробности — `docs/codebase/TESTING.md`.
 
 ### 6) Прочие наблюдаемые конвенции
 
 - **Не задавать `lineHeight` тексту сообщений.** RN реализует его через `CustomLineHeightSpan`, который на последней строке приравнивает `fm.bottom` к `fm.descent`; у шрифта с глифами ниже descent срезается низ последней строки. В `src/components/markdown/Markdown.tsx` и `src/components/chat/MessageBubble.tsx` (стиль `messageText`) `lineHeight` намеренно отсутствует и закреплён тестом `src/lib/text-metrics.test.ts`.
+- **Позиция в ленте считается по раскладке, а не по событию.** `onViewableItemsChanged` на инвертированном `FlatList` не вызывается до первого скролла, а `onLayout` на самом `renderItem` даёт `y = 0` относительно ячейки. Измерять нужно `CellRendererComponent` — единственный `View`, который `VirtualizedList` позиционирует в контейнере контента (`app/session/[id].tsx`, `measureCell`); цель навигатора — сообщения пользователя (`userRowIds`).
+- **Не переопределять `MDImage` обратно на библиотечный.** `react-native-marked@8.0.0` запрашивает размер картинки в `useEffect` без массива зависимостей — бесконечный ре-рендер; свой `MarkdownImage` ограничивает эффект `[uri]`. Ключи React — `createMarkdownKeys()`, не `github-slugger` (свойство на вызов, лимит Hermes). Оба инварианта — `src/components/markdown/markdown-render.guards.test.ts`.
+- **Сообщения ассистента склеиваются в одну строку ленты** (`buildTranscriptRows`), а работа между двумя ответами — в один спойлер (`groupParts`). Делегирование сабагента (`isDelegation`) намеренно не сворачивается: это единственный вход в дочернюю сессию.
 - **Горизонтальный скролл широкого контента** (диффы, блоки кода) — только через `WIDE_CONTENT_SCROLL_CONFIG` (`src/lib/scroll-config.ts`), где `nestedScrollEnabled: true`; иначе вертикальный `FlatList` забирает жест. Тап по карточке инструмента сворачивает её только по заголовку — обёртка всей карточки в `TouchableOpacity` уже съедала жест (`src/components/chat/ToolCallCard.tsx`, `src/components/wide-content-scroll.regression.test.ts`).
 - Комментарии объясняют «почему», часто со ссылкой на issue/BUG-номер (`BUG-029`, `issue #76`): `src/lib/notifications.ts` (BUG-029), `src/stores/events.ts` (issue #76), `src/lib/text-metrics.test.ts` (описание бага).
 - Коммиты — Conventional Commits по факту истории: `feat(subagents): …`, `fix(chat): …`, `chore(release): 0.3.20`, `docs: …` (`git log`). Ветка — `main`.
@@ -92,6 +95,7 @@
 - `src/lib/i18n/catalog-parity.test.ts`
 - `src/lib/connections-screen.test.ts`
 - `src/lib/text-metrics.test.ts`, `src/lib/scroll-config.test.ts`, `src/lib/keep-alive-config.test.ts`
+- `src/lib/transcript-rows.ts`, `src/lib/part-runs.ts`, `src/lib/message-navigation.ts`, `src/components/markdown/markdown-render.guards.test.ts`
 - `src/components/wide-content-scroll.regression.test.ts`
 - `src/lib/notify-format.ts`, `src/lib/notifications.ts`
 - `plugins/with-native-customizations.js`

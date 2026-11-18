@@ -1,6 +1,6 @@
 # Структура кодовой базы
 
-Актуально на 2026-11-15, коммит `1fdfabc` (0.3.20 / 85).
+Актуально на 2026-11-18, версия 0.3.21 / 86 (релизный коммит `6e5a88f`).
 
 ## Обязательные разделы
 
@@ -9,9 +9,9 @@
 | Путь | Назначение | Evidence |
 |------|------------|----------|
 | `app/` | Маршруты Expo Router (файл = экран, 15 файлов): `(tabs)/` — sessions/connections/settings, `session/[id]`, `connection/*` (add, edit, tunnel), `providers/*` (index, connect, custom), `models`, `history`, `demo` | `app/_layout.tsx`, `find app -name '*.tsx'` |
-| `src/lib/` | Чистая логика + два транспорта + адаптер V2→V1 + фоновое удержание и статусы сабагентов; рядом с каждым модулем `*.test.ts` (99 тестовых файлов в `src/`) | `src/lib/sdk.ts`, `src/lib/sdk-v1.ts`, `src/lib/v2-compat.ts` |
+| `src/lib/` | Чистая логика + два транспорта + адаптер V2→V1 + фоновое удержание, статусы сабагентов, склейка ленты и навигатор; рядом с каждым модулем `*.test.ts` (113 тестовых файлов в `src/`, 77 модулей верхнего уровня) | `src/lib/sdk.ts`, `src/lib/sdk-v1.ts`, `src/lib/v2-compat.ts` |
 | `src/stores/` | Zustand-сторы: `sessions`, `connections`, `events` (SSE + фоновый опрос), `catalog`, `settings`, `auth`, `model-visibility`, `model-favorites` | `src/stores/*.ts` |
-| `src/components/` | UI: `chat/` (пузыри, инструменты, промпты, `SubagentBar`, `SubagentRow`, `ContextRing`, `SessionInfo`), `markdown/`, `AuthGate`, `ErrorBoundary`, `TabletSessions`, `UpdateBanner` | `src/components/` |
+| `src/components/` | UI: `chat/` (пузыри, инструменты, `ActivitySpoiler`, промпты, `SubagentBar`, `SubagentRow`, `ContextRing`, `SessionInfo`), `markdown/` (`Markdown`, `MarkdownImage`, `CodeBlock`), `AuthGate`, `ErrorBoundary`, `TabletSessions`, `UpdateBanner` | `src/components/` |
 | `src/types/` | Локальные `.d.ts` для неполных типов сторонних пакетов | `src/types/` |
 | `src/lib/i18n/` | Каталоги `en.json`, `ru.json`, `zh-Hans.json` + конфиг i18next + тесты паритета и локали | `src/lib/i18n/config.ts`, `src/lib/i18n/catalog-parity.test.ts` |
 | `tests/fixtures/` | `mock-opencode-server.ts` — HTTP-заглушка **V1**-протокола (живой путь: V1-транспорт использует тот же `loadSessionList`) | `tests/fixtures/mock-opencode-server.ts` |
@@ -49,20 +49,20 @@
 
 ### 4) Правила именования и организации
 
-- `src/lib`: **kebab-case** + домен (`api-detect.ts`, `session-stats.ts`, `tool-duration.ts`, `subagent-status.ts`), тест рядом: `<name>.test.ts`; регрессии — `<name>.regression.test.ts` (9 файлов: `composer-taps`, `session-info`, `variant-picker-keyboard`, `dialog-back-gesture`, `tool-call-card`, `session-header`, `update-banner`, `markdown-inline-code`, `wide-content-scroll`).
+- `src/lib`: **kebab-case** + домен (`api-detect.ts`, `session-stats.ts`, `tool-duration.ts`, `subagent-status.ts`, `transcript-rows.ts`, `message-navigation.ts`), тест рядом: `<name>.test.ts`; регрессии — `<name>.regression.test.ts` (11 файлов: `composer-taps`, `session-info`, `variant-picker-keyboard`, `dialog-back-gesture`, `tool-call-card`, `session-header`, `update-banner`, `markdown-inline-code`, `wide-content-scroll`, `message-navigation-layout`, `subagent-resume`).
 - Компоненты: **PascalCase** `.tsx`; маршруты — по сегментам URL.
 - Сторы: `src/stores/<домен>.ts`, экспорт `useXxx` (`useSessions`, `useConnections`, `useEvents`, `useCatalog`, `useSettings`, `useAuth`, `useModelVisibility`, `useModelFavorites`).
 - Баррели: `src/components/chat/index.ts` (20 реэкспортов) и `src/components/markdown/index.tsx`; остальное — прямыми путями.
 - Алиас `@/*` объявлен в `tsconfig.json`, но импортов через него нет — фактическая конвенция: относительные пути.
 - Тестовые файлы импортируют модули с явным `.ts` (Node исполняет их type-stripping'ом; в `tsconfig.json` для этого `allowImportingTsExtensions`).
-- Карта `src/lib` по назначению (71 модуль верхнего уровня):
+- Карта `src/lib` по назначению (77 модулей верхнего уровня):
   - транспорт/протокол: `sdk.ts`, `sdk-v1.ts`, `api-detect.ts`, `sse.ts`, `v2-compat.ts`, `headers.ts`, `auth.ts`, `api-error.ts`, `directory-client.ts`, `provider-auth.ts`;
-  - сессии и сообщения: `session-list.ts`, `session-grouping.ts`, `session-selection.ts`, `session-load-reconcile.ts`, `session-status-reconcile.ts`, `session-id.ts` (валидация id из deep link), `message-merge.ts`, `message-run.ts`, `message-page.ts`, `part-batch.ts`, `part-order.ts`, `part-runs.ts`, `prompt-from-parts.ts`, `revert-filter.ts`, `pending-questions.ts`, `question-answers.ts`, `answered-questions.ts`;
+  - сессии и сообщения: `session-list.ts`, `session-grouping.ts`, `session-selection.ts`, `session-load-reconcile.ts`, `session-status-reconcile.ts`, `session-id.ts` (валидация id из deep link), `message-merge.ts`, `message-run.ts`, `message-page.ts`, `transcript-rows.ts` (склейка подряд идущих сообщений ассистента в одну строку ленты, цели навигатора — сообщения пользователя), `part-batch.ts`, `part-order.ts`, `part-runs.ts` (отрезок между ответами → спойлер, делегирование остаётся снаружи), `prompt-from-parts.ts`, `revert-filter.ts`, `pending-questions.ts`, `question-answers.ts`, `answered-questions.ts`;
   - сабагенты: `subagent-status.ts` (статус ребёнка, волны, порядок, счётчики);
   - живучесть: `run-watchdog.ts`, `stream-watchdog.ts`, `connection-health.ts`, `keep-alive.ts` (мост к foreground-сервису + headless-задаче);
-  - UI-логика: `adaptive-layout.ts`, `keyboard-inset.ts`, `use-keyboard-height.ts`, `scroll-config.ts`, `scroll-follow.ts`, `model-selection.ts`, `model-picker-filter.ts`, `model-visibility.ts`, `session-stats.ts`, `tool-view.ts`, `tool-duration.ts`, `providers-ui.ts`, `status-labels.ts`, `tablet-session-nav.ts`, `notify-format.ts`, `notifications.ts`;
+  - UI-логика: `adaptive-layout.ts`, `keyboard-inset.ts`, `use-keyboard-height.ts`, `scroll-config.ts`, `scroll-follow.ts`, `message-navigation.ts` (позиция и шаг по разложенным ячейкам), `nav-panel.ts` (`NAV_PANEL_IDLE_MS`), `model-selection.ts`, `model-picker-filter.ts`, `model-visibility.ts`, `session-stats.ts`, `tool-view.ts`, `tool-duration.ts` (`formatDurationMs`), `tool-summary.ts` (имена инструментов + сумма времени), `providers-ui.ts`, `status-labels.ts`, `tablet-session-nav.ts`, `notify-format.ts`, `notifications.ts`;
   - хранилище/безопасность: `offline-history.ts`, `history-storage.ts`, `connection-security.ts`, `scrub.ts`, `logbuffer.ts`, `stored-json.ts`, `settings-merge.ts` (прямая совместимость настроек уведомлений);
-  - внешнее/утилиты: `update-check.ts`, `update-check-policy.ts`, `diagnostics.ts`, `diagnostics-classify.ts`, `custom-provider.ts`, `tunnel.ts`, `speech.ts`, `speech-errors.ts`, `speech-locale.ts`, `links.ts`, `file-roots.ts`, `path-utils.ts`, `quick-connect-url.ts`, `http.ts`, `demo-script.ts`, `types.ts`.
+  - внешнее/утилиты: `update-check.ts`, `update-check-policy.ts`, `diagnostics.ts`, `diagnostics-classify.ts`, `custom-provider.ts`, `tunnel.ts`, `speech.ts`, `speech-errors.ts`, `speech-locale.ts`, `links.ts`, `file-roots.ts`, `path-utils.ts`, `quick-connect-url.ts`, `http.ts`, `demo-script.ts`, `markdown-keys.ts` (ключи React без слага), `disconnect-reason.ts`, `types.ts`.
 
 ### 5) Evidence
 

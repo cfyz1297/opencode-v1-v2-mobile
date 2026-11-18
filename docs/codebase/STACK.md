@@ -2,7 +2,7 @@
 
 Проект: форк `cfyz1297/opencode-v1-v2-mobile` (до 0.3.0 назывался `opencode-mobile`) — Expo/React Native клиент к self-hosted `opencode serve`, работающий с **обоими** поколениями API: V1 (opencode 1.18.x) и V2 (opencode 2.x). Публикуется только как APK через GitHub Releases (`README.md`, `HANDOFF.md`).
 
-Актуально на 2026-11-15, коммит `1fdfabc` (версия 0.3.20, versionCode 85; текущий `main`).
+Актуально на 2026-11-18, версия **0.3.21**, versionCode **86** (релизный коммит `6e5a88f`).
 
 ## Обязательные разделы
 
@@ -10,13 +10,13 @@
 
 | Область | Значение | Evidence |
 |---------|----------|----------|
-| Основной язык | TypeScript / TSX: 185 `.ts` (включая 99 тестовых) + 44 `.tsx` по скану; Kotlin — 7 файлов нативного слоя в `android/` (копии тех же 5 в `plugins/native/keepalive/`) | `docs/codebase/.codebase-scan.txt` (CODE METRICS), `android/app/src/main/java/cc/agentlabs/opencode/` |
+| Основной язык | TypeScript / TSX: 199 `.ts` (включая 113 тестовых) + 46 `.tsx` по скану; Kotlin — 7 файлов нативного слоя в `android/` (копии тех же 5 в `plugins/native/keepalive/`) | `docs/codebase/.codebase-scan.txt` (CODE METRICS), `android/app/src/main/java/cc/agentlabs/opencode/` |
 | Runtime приложения | React Native **0.88.1** на Hermes, новая архитектура (`newArchEnabled=true`, `hermesEnabled=true`), **Expo SDK 58**, React 19.3.0, React Compiler включён (`experiments.reactCompiler`) | `package.json`, `android/gradle.properties`, `app.json` |
 | Runtime тестов / CI | Node.js 24+ (нативное type-stripping для `.test.ts`); job `test` в CI на Node 24, job `build` — Node 20 | `.github/workflows/build.yml`, `scripts/run-tests.mjs` |
 | Пакетный менеджер | npm; lockfile v3; `legacy-peer-deps=true` | `package-lock.json`, `.npmrc`, `.github/workflows/build.yml` |
 | Модульная система / сборка | Metro + `expo-router/entry` (JS), затем `expo prebuild` → Gradle `assembleRelease` (Android) | `package.json` (`main`), `metro.config.js`, `.github/workflows/build.yml` |
-| Версия приложения | **0.3.20, versionCode 85** | `package.json`, `app.json`, `android/app/build.gradle` |
-| Тесты | **746 тестов, 0 падений**; покрытие **98.23 % строк / 86.16 % ветвей / 96.43 % функций**; `npm run typecheck` — чисто | локальный прогон 2026-11-15 |
+| Версия приложения | **0.3.21, versionCode 86** | `package.json`, `app.json`, `android/app/build.gradle` |
+| Тесты | **833 теста, 0 падений**; покрытие **98.23 % строк / 86.97 % ветвей / 96.51 % функций**; `npm run typecheck` — чисто | локальный прогон 2026-11-18 |
 
 ### 2) Продакшн-фреймворки и зависимости
 
@@ -36,7 +36,7 @@
 | `expo-local-authentication` | `~58.0.3` | Биометрический AppGate | `src/stores/auth.ts` |
 | `expo-image-picker`, `expo-image-manipulator` | `~58.0.10`, `~58.0.16` | Вложения-изображения (JPEG + base64) | `app/session/[id].tsx` (`pickFromLibrary`) |
 | `expo-speech-recognition` | `~58.0.1` | Голосовой ввод | `src/lib/speech.ts`, `app.json` |
-| `react-native-marked` | `8.0.0` | Рендер Markdown ответов модели | `src/components/markdown/Markdown.tsx` |
+| `react-native-marked` | `8.0.0` | Рендер Markdown ответов модели. Картинки рисует свой `MarkdownImage` (у библиотечного `MDImage` эффект без зависимостей — бесконечный ре-рендер), ключи React — счётчик, а не `github-slugger` | `src/components/markdown/Markdown.tsx`, `src/components/markdown/MarkdownImage.tsx` |
 | `@gorhom/bottom-sheet` | `^5.2.14` | Шиты: модель, каталог, уровень рассуждений, действия | `app/_layout.tsx`, `src/components/chat/VariantPicker.tsx` |
 | `react-native-svg` | `15.16.0` | Кольцо контекста в заголовке сессии | `src/components/chat/ContextRing.tsx` |
 | `react-native-reanimated` / `worklets`, `gesture-handler`, `screens`, `safe-area-context` | `4.7.1` / `0.13.0`, `~3.3.0`, `~4.30.1`, `~5.11.1` | Анимации, жесты, навигация, инсеты | `package.json` |
@@ -69,7 +69,7 @@ npm start                           # Expo dev server
 npm run android                     # dev-сборка (expo run:android)
 npx expo prebuild --platform android --no-install
 cd android && ./gradlew assembleRelease   # релизный APK
-npm test                            # 746 тестов через scripts/run-tests.mjs
+npm test                            # 833 теста через scripts/run-tests.mjs
 npm run test:coverage               # те же тесты + пороги 80 %
 npm run typecheck                   # tsc --noEmit
 npm run check:versions              # паритет версий в трёх файлах

@@ -95,6 +95,8 @@ docs/security-review-0.3.8.md
 docs/security-review-0.3.9.md
 docs/security-review-server-api.md
 docs/upstream-review-2026-11-04.md
+docs/upstream-review-2026-11-16.md
+docs/upstream-review-2026-11-18.md
 llms.txt
 metro.config.js
 package-lock.json
@@ -123,6 +125,7 @@ src/components/ErrorBoundary.tsx
 src/components/TabletSessions.tsx
 src/components/UpdateBanner.tsx
 src/components/chat
+src/components/chat/ActivitySpoiler.tsx
 src/components/chat/AnsweredQuestion.tsx
 src/components/chat/CompactionCard.tsx
 src/components/chat/ContextRing.tsx
@@ -144,15 +147,20 @@ src/components/chat/SubagentRow.tsx
 src/components/chat/ToolCallCard.tsx
 src/components/chat/ToolRun.tsx
 src/components/chat/VariantPicker.tsx
+src/components/chat/activity-spoiler.test.ts
 src/components/chat/diff-compute.test.ts
 src/components/chat/diff-compute.ts
 src/components/chat/index.ts
 src/components/chat/message-bubble-error.test.ts
+src/components/chat/message-navigation-layout.regression.test.ts
 src/components/chat/model-picker-shared.tsx
+src/components/chat/session-banners-theme.test.ts
 src/components/markdown
 src/components/markdown/CodeBlock.tsx
 src/components/markdown/Markdown.tsx
+src/components/markdown/MarkdownImage.tsx
 src/components/markdown/index.tsx
+src/components/markdown/markdown-render.guards.test.ts
 src/components/markdown-inline-code.regression.test.ts
 src/components/subagent-bar-theme.test.ts
 src/components/wide-content-scroll.regression.test.ts
@@ -185,34 +193,26 @@ src/lib/diagnostics.ts
 src/lib/dialog-back-gesture.regression.test.ts
 src/lib/directory-client.test.ts
 src/lib/directory-client.ts
+src/lib/disconnect-reason.test.ts
+src/lib/disconnect-reason.ts
 src/lib/file-roots.test.ts
 src/lib/file-roots.ts
 src/lib/headers.test.ts
 src/lib/headers.ts
 src/lib/history-storage.ts
-src/lib/http.ts
-src/lib/i18n
-src/lib/i18n/catalog-parity.test.ts
-src/lib/i18n/config.ts
-src/lib/i18n/en.json
-src/lib/i18n/locale-resolve.test.ts
-src/lib/i18n/locale-resolve.ts
-src/lib/i18n/ru.json
-src/lib/i18n/zh-Hans.json
-src/lib/keep-alive-config.test.ts
 
 === STACK DETECTION (manifest files) ===
 
 --- package-lock.json ---
 {
   "name": "@opencode-ai/mobile",
-  "version": "0.3.7",
+  "version": "0.3.32",
   "lockfileVersion": 3,
   "requires": true,
   "packages": {
     "": {
       "name": "@opencode-ai/mobile",
-      "version": "0.3.7",
+      "version": "0.3.32",
       "dependencies": {
         "@expo/vector-icons": "^15.0.3",
         "@gorhom/bottom-sheet": "^5.2.14",
@@ -289,7 +289,7 @@ src/lib/keep-alive-config.test.ts
 --- package.json ---
 {
   "name": "@opencode-ai/mobile",
-  "version": "0.3.20",
+  "version": "0.3.32",
   "private": true,
   "main": "expo-router/entry",
   "scripts": {
@@ -369,74 +369,74 @@ No .env.example or .env.template found. Identify required environment variables 
 src/components/chat/MessageBubble.tsx:42: // TODO: Replace with streamdown-rn once React 19 types PR lands - it has
 
 === GIT RECENT COMMITS (last 20) ===
-1fdfabc docs: rewrite the upstream comparison from verified facts, update README
-6312a2c style(subagents): right-aligned, larger counters with a real dark theme
-e0013ae feat(subagents): the left counter is the current batch, not the running count
-adc4637 chore(release): 0.3.20
-a8dd955 feat(subagents): counter bar under the header with the running subagents
-651929e fix(subagents): keep idle/busy stamps and tap the row, not the card header
-fe0a01f feat(chat): show delegated subagents in the transcript and link to them
-862cfc1 chore(release): 0.3.18
-a03d2ec fix(chat): let the diff scroll — the card was eating the gesture
-84d08e0 fix(chat): stop clipping the last line by not overriding line spacing
-fa53b31 fix(chat): draw a question card under the message that asked it
-c1b4d8f fix(keepalive): survive long background runs and process death
-d960b24 fix(chat): stop clipping the last text line on Android 15+
-32c152f Merge pull request #8 from cfyz1297/fix/answered-questions-and-notifications
-4a563a5 fix(keepalive): revert 0.3.16, hide the card by cancelling the notification
-5ca8568 fix(keepalive): remove the foreground-service card for real
-26be99c ci: keep the release APK artifact for three days
-df61066 chore(settings): remove the test notification and the notification log block
-c6d1af6 feat(notifications): per-category monochrome icons, hide the keep-alive card
-6b1594e fix(background): run a headless JS task, React Native stops timers when paused
+78f6f9b fix(session): measure the cell, whose layout is the content position
+b48a0e7 fix(session): measure the position instead of waiting for viewability
+6be6a5d test(smoke): use a thin PNG so the image does not push the answer off screen
+008394c test(smoke): serve a real PNG and put it in the fixture transcript
+c758ff1 fix(markdown): bound image size fetch and stop using the slugger for keys
+2999c90 fix(session): the viewability handler was a stale closure
+eea06a8 test(smoke): step in whichever direction is enabled, read with one dump
+d9418cd test(smoke): six questions in the fixture, not four
+316acee feat(session): navigate the user's own messages, with wider buttons
+aaaa191 fix(session): a jump sets the position it holds
+86caea1 fix(session): hold the jumped-to message as current
+418bcde test(smoke): screenshot after the tap, not before it
+dfc286a test(smoke): tap Latest from a dump taken right before the touch
+d8871f3 fix(session): cancel a queued jump retry when the user navigates again
+66d816d fix(session): jump by index so one tap lands on the neighbouring message
+7f24daf fix(session): the list reports the current message to the navigator
+213d690 fix(v2): keep the tool's own clock from history
+72670c4 fix(chat): the run total was hidden by a falsy zero start
+6e1333d fix(session): make the navigator scroll, and summarize the tools it hides
+2b94c6b test(smoke): scroll the history list back to the clear button
 
 === HIGH-CHURN FILES (last 90 days, top 20) ===
-  51 package.json
-  50 app.json
-  49 android/app/build.gradle
+  63 package.json
+  62 app.json
+  61 android/app/build.gradle
+  50 scripts/cua-roadmap-smoke.mjs
+  47 app/session/[id].tsx
   46 HANDOFF.md
   38 README.md
-  34 app/session/[id].tsx
+  28 src/lib/i18n/en.json
+  28 src/lib/i18n/ru.json
+  28 src/lib/i18n/zh-Hans.json
   28 .github/workflows/build.yml
-  24 src/lib/i18n/en.json
-  24 src/lib/i18n/ru.json
-  24 src/lib/i18n/zh-Hans.json
+  27 package-lock.json
+  20 src/lib/sdk.ts
+  20 src/stores/events.ts
   20 README.ru.md
-  19 scripts/cua-roadmap-smoke.mjs
-  19 src/lib/sdk.ts
-  19 src/stores/events.ts
-  16 src/stores/sessions.ts
-  16 package-lock.json
-  13 src/lib/v2-compat.ts
-  13 app/_layout.tsx
-  13 distribution/whatsnew/whatsnew-en-US
-  12 src/lib/v2-compat.test.ts
+  17 src/stores/sessions.ts
+  14 src/lib/v2-compat.ts
+  13 src/lib/v2-compat.test.ts
+  13 src/components/chat/MessageBubble.tsx
+  13 src/lib/session-run-resync.test.ts
 
 === MONOREPO SIGNALS ===
 No monorepo signals detected.
 
 === CODE METRICS ===
-Total files scanned: 375
-Total lines of code: 43644
+Total files scanned: 399
+Total lines of code: 46187
 
 Files by language:
-  TypeScript: 185
-  Other: 131
-  TypeScript/React: 44
+  TypeScript: 205
+  Other: 133
+  TypeScript/React: 46
   Kotlin: 12
   JavaScript: 3
 
 Top 10 largest files:
 package-lock.json: 299.2KB
+app/session/[id].tsx: 77.3KB
 README.ru.md: 71.2KB
 HANDOFF.md: 64.6KB
-app/session/[id].tsx: 60.1KB
 app/(tabs)/index.tsx: 52.1KB
 assets/icon-appstore.png: 51.1KB
 android/gradle/wrapper/gradle-wrapper.jar: 45.1KB
 README.md: 43.9KB
-src/stores/events.ts: 39.2KB
-src/lib/i18n/ru.json: 38.8KB
+src/lib/i18n/ru.json: 39.8KB
+src/stores/events.ts: 39.6KB
 
 === CI/CD PIPELINES ===
 CI/CD: GitHub Actions
