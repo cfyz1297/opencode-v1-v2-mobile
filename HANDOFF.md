@@ -13,8 +13,9 @@
 |---|---|
 | Версия | **0.3.21**, versionCode **86** (`app.json`, `package.json`, `android/app/build.gradle`, проверка в CI) |
 | Ветки | `main` = `master` |
-| Тег | `v0.3.21` (CI на теге: `test`, `build`, `roadmap-smoke`) |
-| Release | готовится из тега `v0.3.21`: `opencode-mobile-v2.apk` + `SHA256SUMS.txt` |
+| Тег | `v0.3.21` на `6e5a88f` (CI на теге зелёный: `test`, `build`, `roadmap-smoke`, run 44206749856) |
+| Release | https://github.com/cfyz1297/opencode-v1-v2-mobile/releases/tag/v0.3.21 — `opencode-mobile-v2.apk` + `SHA256SUMS.txt` |
+| APK | 102 698 377 байт, SHA256 `de16c23b9f01ea851c26b18ea14e95418ccc76ae31061d243e00697770a0b99f` (артефакт CI `app-release`) |
 | Подпись | production keystore, сертификат SHA-256 `0b409f5f6c2ce47a84b7f4ded0403a82a99470f668d6a924d0a09c4ab7821686`; CI сверяет его без скачивания предыдущего APK |
 | Каналы | только `Build Android APK` и `Security scan`. Play / F-Droid / App Store не используются |
 | Тесты | `npm test` — **833 passed, 0 failed**; `npm run typecheck` — чисто; покрытие — 98.23 % строк / 86.97 % ветвей / 96.51 % функций |
