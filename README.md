@@ -8,9 +8,9 @@ A fork of [dzianisv/opencode-mobile](https://github.com/dzianisv/opencode-mobile
 
 The repository used to be called `opencode-mobile`; it was renamed to `opencode-v1-v2-mobile` in 0.3.0. Old links redirect, and the APK file name (`opencode-mobile-v2.apk`) is kept unchanged so the built-in update check and the release signature chain keep working.
 
-Version **0.3.20 (85)**. Installs over 0.3.17 — no uninstall needed.
+Version **0.3.21 (86)**. Installs over 0.3.20 — no uninstall needed.
 
-> **Status:** every build runs 746 automated tests plus an Android CUA smoke on an emulator. Not yet exercised against a real opencode 1.18.x server, and the tablet layout, tunnel wizard and offline history have been checked in code and on the emulator only.
+> **Status:** every build runs 833 automated tests plus an Android CUA smoke on an emulator. Not yet exercised against a real opencode 1.18.x server, and the tablet layout, tunnel wizard and offline history have been checked in code and on the emulator only.
 
 ## Is this the app you are looking for?
 
@@ -77,7 +77,10 @@ V2 specifics (verified on 2.0.27): Basic authentication only as `opencode:<passw
 - **Subagents are visible while they work.** A delegated agent runs in its own child session; the tool card that launched it shows a row with the task, the agent, a live status pill and a tap that opens the child transcript — in the same workspace as the parent. Two counters under the header show what the current batch is doing and how many subagents the session has delegated in total; the list puts running ones first. Child sessions never appear in the Recent list.
 - Text is laid out at the font's own metrics, so a paragraph's last line is not clipped on phones with a themed system font.
 - A failed run shows the server's reason in place of the answer instead of an empty bubble.
-- Message page size is counted in prompts (5 / 10 / 25 / 50 / **All**). "All" loads the whole transcript.
+- **Activity is folded into one line per answer.** Everything the model did between two answers — its reasoning and every tool call — collapses into a single row that names what ran and how long it took (`5 · Shell, Read · 12.3s`), with a spinner while it works and an error mark when it fails. Opening the row shows the same reasoning blocks and tool cards as before. A subagent delegation is never folded: it is the only way into the child session.
+- **A navigator for long transcripts.** A small pill row above the composer counts your own messages (`3 / 12`), steps one message up or down and jumps to the end with a double chevron. It shows up while you scroll and hides a moment later, so it never sits on the text; a tap moves exactly one message and lands instantly.
+- A failed load, send or abort now says so: the error banner carries the server's text, what to do next, Copy and Dismiss. The reconnect banner adds the last disconnect reason.
+- Message page size is counted in prompts (5 / 10 / 25 / 50 / **All**). "All" loads the whole transcript. A foreground refresh keeps the history already on screen instead of replacing it with the server's newest page.
 
 **Session info**
 - The header button is a ring filled by context usage (blue, amber past 50 %, red past 80 %).
@@ -106,11 +109,11 @@ V2 specifics (verified on 2.0.27): Basic authentication only as `opencode:<passw
 
 ## How the fork differs from upstream
 
-The base is [dzianisv/opencode-mobile](https://github.com/dzianisv/opencode-mobile) at tag `v0.4.15` (2026-08-14). The 1.x transport from `v0.4.16` and the header fix from `v0.4.17` were ported by hand. Upstream has since shipped `v0.4.16` … `v0.4.19`; those releases were read commit by commit and only what fits one user with one server was taken. From `v0.4.15` the fork runs its own version line, currently **0.3.20**.
+The base is [dzianisv/opencode-mobile](https://github.com/dzianisv/opencode-mobile) at tag `v0.4.15` (2026-08-14). The 1.x transport from `v0.4.16` and the header fix from `v0.4.17` were ported by hand. Upstream has since shipped `v0.4.16` … `v0.4.23`; those releases were read commit by commit and only what fits one user with one server was taken. From `v0.4.15` the fork runs its own version line, currently **0.3.21**.
 
 The intended setup is opencode `serve` running **in Termux on the same phone**, reached over `127.0.0.1` — that is why the app allows cleartext to the loopback address and keeps a foreground service alive for notifications. A remote server on the LAN, a Cloudflare tunnel or Tailscale works too; nothing in the app assumes a backend of its own.
 
-| What | Upstream (`v0.4.19`) | This fork (0.3.20) |
+| What | Upstream (`v0.4.23`) | This fork (0.3.21) |
 |---|---|---|
 | Server API | 1.x only (`/session`, `/global/*`) | **both** 1.x and 2.x (`/api/*`), auto-detected, forceable in Settings |
 | Target | many users, app-store delivery | one user, one server, one channel: an APK |
@@ -128,6 +131,9 @@ The intended setup is opencode `serve` running **in Termux on the same phone**, 
 | Session list | newest page | walks the server cursor, up to 800 root sessions |
 | Tool rows | name + raw payload | command for `shell`, live progress title, input fallback, no empty expand |
 | Subagents | a "Subagents" section above the transcript: counts and rows, read-only | a row inside the card that launched it, always visible, tap opens the child session in the parent's workspace; two counters under the header (current batch / session total); children kept out of the Recent list |
+| Activity rows | every step's reasoning and tool calls as they arrive | one spoiler per answer with the tool names and total time; a delegation stays outside it |
+| Long transcripts | floating controls that cover text | a pill navigator over the composer, shown on scroll and hidden at rest, walking your own messages |
+| Session errors | the store's error is written but never rendered | a banner with the text, the next step, Copy and Dismiss |
 | Body text | explicit `lineHeight` | no `lineHeight`, so Android derives the line box from the font's own metrics — an explicit one clipped the last line (see 0.3.20) |
 | Keyboard | JS-computed inset | native IME inset reported from `MainActivity` |
 | New session folder | default | the selected project (`location.directory` in the request body) |
@@ -159,7 +165,7 @@ Demo mode without a server, multiple connections (LAN, tunnel, Tailscale), biome
 - Server passwords and offline history live in the Android Keystore / iOS Keychain with the `WHEN_UNLOCKED_THIS_DEVICE_ONLY` policy: they do not end up in OS backups and are not restored on another device.
 - Plain `http://` encrypts neither the password nor the transcript. The connection forms warn about it; use https, a tunnel or Tailscale on untrusted networks. Loopback (Termux on the same phone) shows no warning — traffic never leaves the device.
 - The app does not request `SYSTEM_ALERT_WINDOW` (drawing over other apps).
-- Build dependencies: `npm audit` reports 34 entries (7 high) in the Metro/PostCSS/Expo CLI chain. `npm audit fix --force` downgrades Expo to 51 and breaks the project. None of that code ships in the APK — it only runs during the CI build.
+- Build dependencies: `npm audit --omit=dev` reports 27 entries (2 moderate, 25 high) in the Metro/Babel/Expo CLI chain. `npm audit fix --force` downgrades Expo to 51 and breaks the project. None of that code ships in the APK — it only runs during the CI build.
 
 ## Cloudflare / ngrok wizard
 
@@ -187,7 +193,16 @@ A separate pure-Java client without Gradle (`aapt → ecj → d8 → apksigner`)
 ## Updates
 
 <details>
-<summary>Changelog by version (0.2.11 - 0.3.20)</summary>
+<summary>Changelog by version (0.2.11 - 0.3.21)</summary>
+
+### 0.3.21
+
+- **The transcript no longer loses history when the app comes back.** A foreground refresh and the reconnect resync asked the server for its default page — 50 messages — and replaced everything on screen with it. Older exchanges, and the subagent cards derived from them, vanished until the session was reopened; a long transcript also looked cut in half. The refresh now asks for the configured page (or the whole session), keeps the history already loaded, and a late answer can no longer land in a session you just switched to. Child sessions are re-read on resume, so a subagent that finished while the app was backgrounded stops reading "Idle".
+- **Activity is one line per answer.** Every reasoning block and every tool card was printed in sequence, so a long run pushed the answer off the screen. Everything between two answers now folds into one spoiler row — `5 · Shell, Read · 12.3s` — that counts the whole segment instead of repeating "1 step" per message, names the tools from the catalog, sums their time (counting up while one runs) and turns into an error mark on failure. Opening it shows the previous design unchanged. Consecutive assistant steps are a single transcript row, so headers, copy buttons and token totals appear once. A subagent delegation is deliberately left outside: folding it would hide the only way into the child session.
+- **A navigator for long transcripts.** The floating "latest" button could cover a line of text. It is now a compact pill row above the composer — counter, one message up, one down, double-chevron to the end — that appears while you scroll and fades 3.5 s after the motion stops. It walks **your own messages**, because a question never streams, merges or changes height while an answer does; the position comes from the laid-out rows, so it is correct the moment a session opens and the first tap works without a preliminary swipe. Jumps are instant rather than animated, which read as a freeze on a long transcript.
+- **Errors are visible.** `useSessions.error` was written in fifteen places and rendered nowhere: a failed load or send looked like an empty, frozen session. A banner now shows the server's text, what to do next, and Copy / Dismiss. The reconnect banner adds the last disconnect reason, also copyable.
+- **Markdown images no longer crash the screen.** `react-native-marked` 8.0.0 fetches an image's size in an effect with no dependency array, and its callbacks set fresh state, so any `![](url)` re-rendered until React's update-depth guard killed the session. The app now renders images through its own component with the fetch scoped to the URI (SVG keeps the library's, whose effect is scoped). React keys also no longer come from `github-slugger`, which stored a property per call on a long-lived renderer and could hit Hermes' 196,607-property limit inside one huge message.
+- **Tool durations survive a reopen.** The server sends a tool part's own clock (`created`, `ran`, `completed`); the history mapper dropped it, so a reopened session had no durations and the folded run could not show its total. Both transports share one bounded SSE handshake too — the V1 stream used to dial without a deadline and could hang forever after reporting "connected".
 
 ### 0.3.20
 

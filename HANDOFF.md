@@ -1,27 +1,38 @@
 # OpenCode Mobile — мастер-документ (форк cfyz1297)
 
-Актуально на **2026-11-07**.
+Актуально на **2026-11-18**.
 
 - App: **`cc.agentlabs.opencode`** — Expo/React Native Android-клиент к собственному серверу `opencode serve`. Работает с **обоими поколениями API**: V2 (`/api/*`, opencode 2.x) и V1 (`/session`, `/global/event`, opencode 1.18.x); версия определяется автоматически, в настройках можно включить принудительно.
 - Репозиторий форка: **`cfyz1297/opencode-v1-v2-mobile`**. Апстрим для справки: `dzianisv/opencode-mobile`.
 - Пользователь запускает сервер в Termux на телефоне; приложение — клиент к нему.
 - **Текст релиза пишется на двух языках: сначала английский, потом русский.** Правило действует с 0.2.30, распространяется на описание GitHub Release, `README.md`/`README.ru.md` и этот файл.
 
-## Состояние на 2026-11-12
+## Состояние на 2026-11-18
 
 | Что | Значение |
 |---|---|
-| Версия | **0.3.7**, versionCode **72** (`app.json`, `package.json`, `android/app/build.gradle`, проверка в CI) |
-| Ветки | `main` = `master` (релизный коммит — см. `git log -1`) |
-| Тег | `v0.3.7` на `9151d96` (CI на теге зелёный: `test`, `build`, `roadmap-smoke`) |
-| Release | https://github.com/cfyz1297/opencode-v1-v2-mobile/releases/tag/v0.3.7 — `opencode-mobile-v2.apk` + `SHA256SUMS.txt` |
-| APK | 102 642 216 байт, SHA256 `dddffedb9203cfbdce9c45f350edba580a3d81aab7bb9e49d02e684918ed1c6f` (артефакт CI `app-release`, run 43171989931) |
+| Версия | **0.3.21**, versionCode **86** (`app.json`, `package.json`, `android/app/build.gradle`, проверка в CI) |
+| Ветки | `main` = `master` |
+| Тег | `v0.3.21` (CI на теге: `test`, `build`, `roadmap-smoke`) |
+| Release | готовится из тега `v0.3.21`: `opencode-mobile-v2.apk` + `SHA256SUMS.txt` |
 | Подпись | production keystore, сертификат SHA-256 `0b409f5f6c2ce47a84b7f4ded0403a82a99470f668d6a924d0a09c4ab7821686`; CI сверяет его без скачивания предыдущего APK |
-| Каналы | только `Build Android APK` и `Security scan`. Play / F-Droid / App Store не используются, на тег `v*` не запускаются |
-| Тесты | `npm test` — **667 passed, 0 failed**; `npm run typecheck` — чисто; покрытие — 98.31 % строк / 86.31 % ветвей / 97.25 % функций (`npm run test:coverage`) |
-| Документация | `README.md` — английский (основной), `README.ru.md` — русский, оба ссылаются друг на друга |
+| Каналы | только `Build Android APK` и `Security scan`. Play / F-Droid / App Store не используются |
+| Тесты | `npm test` — **833 passed, 0 failed**; `npm run typecheck` — чисто; покрытие — 98.23 % строк / 86.97 % ветвей / 96.51 % функций |
+| Документация | `README.md` — английский (основной), `README.ru.md` — русский, `docs/codebase/` — карта проекта |
 
-## В работе: 0.3.20 (тестовый билд, релиз не опубликован)
+## Что вошло в 0.3.21
+
+- **Возврат в приложение больше не теряет историю.** `refreshMessages()` при `AppState → active` и пересинхронизация после реконнекта запрашивали `session.messages(id)` без `limit` (V2 и V1 отдают по умолчанию 50) и заменяли всю загруженную ленту этой страницей. Пропадали старые обмены и tool-карточки, из которых строится панель сабагентов; переоткрытие сессии лечило, потому что `selectSession` грузит страницу по настройке (до 200). Теперь refresh просит страницу по `pageSize` (или `allMessages`), `keepLoadedHistory` сохраняет уже показанное, поздний ответ не пишется в другую сессию, а возврат из фона дополнительно зовёт `loadChildren(sessionID)` — сабагент, завершившийся в фоне, перестаёт читаться «Idle». Инварианты: `src/lib/session-refresh-page.test.ts`, `src/lib/subagent-resume.regression.test.ts`.
+- **Работа модели — один спойлер на ответ.** `groupParts()` (`src/lib/part-runs.ts`) собирает отрезок между двумя текстами в один `activity`-блок: рассуждения склеиваются, tool-вызовы идут в порядке модели. Свёрнутая строка `ActivitySpoiler` показывает `N · Оболочка, Чтение · 12.3s` — количество, имена из каталога (`chat.toolKind.*`) и сумму времени вызовов (`summarizeToolActivity`, `formatDurationMs`), тикающую через `useTickingNow`, пока что-то выполняется; при ошибке — крестик. Делегирование (`subagent`/`task`) намеренно не сворачивается: `isDelegation()` закрывает отрезок, и карточка с тапом в дочернюю сессию остаётся снаружи.
+- **Одна строка ленты на ответ.** `buildTranscriptRows()` (`src/lib/transcript-rows.ts`) склеивает подряд идущие сообщения ассистента в одну запись списка: части читаются по порядку, `id` строки — самое старое сообщение (переживает новые шаги), `index` — самое новое (для `runTotals`). Шапка, «Скопировать» и токены рисуются один раз.
+- **Навигатор по сообщениям.** Компактная панель над композером: счётчик, вверх, вниз, двойная стрелка в конец; появляется при прокрутке, скрывается через 3.5 с (`NAV_PANEL_IDLE_MS`). Листает **сообщения пользователя** (`userRowIds`): вопрос не стримится и не меняет высоту. Позиция считается по разложенным ячейкам (`CellRendererComponent` — единственный View, который `VirtualizedList` позиционирует в контейнере контента), а не по `onViewableItemsChanged`, который на инвертированном списке не вызывается до первого скролла. Переходы мгновенные (`scrollToIndex`, `animated: false`); поздний ретрай отменяется (`cancelJump`).
+- **Ошибки сессии видны.** `useSessions.error` писался в пятнадцати местах стора и не рендерился нигде; теперь баннер с текстом, следующим шагом, «Копировать» и «Скрыть». Баннер переподключения показывает причину последнего обрыва (`disconnectReasonText`, `lastDisconnectReason`), её тоже можно скопировать.
+- **Markdown-картинки больше не роняют экран.** `react-native-marked@8.0.0` (`MDImage`) запрашивает размер в `useEffect` без массива зависимостей и ставит свежий стейт — любой `![](url)` перерисовывался до `Maximum update depth exceeded`. Свой `MarkdownImage` ограничивает эффект `[uri]`, `.svg` остаётся у библиотеки. Ключи React больше не берутся из `github-slugger` (свойство на вызов, лимит Hermes 196 607): `getKey()` переопределён на `createMarkdownKeys()`.
+- **Длительность инструментов в переоткрытой сессии.** Сервер присылает часы tool-части (`time: {created, ran, completed}`) — маппер истории их выбрасывал. `toolTime()` в `v2-compat.ts` берёт `start = ran ?? created`, `end = completed`.
+- **SSE-рукопожатие с лимитом у обоих транспортов.** `dialStream()` в `src/lib/sse.ts` с `CONNECT_TIMEOUT_MS` (15 с) используется и V1: раньше V1 подключался без срока и мог висеть вечно, уже отчитавшись «подключено».
+
+## Что вошло в 0.3.20
+
 
 - **Обрезка последней строки: причина — `lineHeight`.** RN реализует `lineHeight` спанами, и `CustomLineHeightSpan.chooseHeight` для последней строки блока делает `fm.bottom = fm.descent` — низ строки приравнивается к заявленному descent шрифта. У шрифта, чьи глифы выходят ниже (любой шрифт, кроме Roboto эмулятора, — например тема устройства), низ последней строки срезается; внутренние строки только перекрываются. Поэтому резалась всегда последняя строка абзаца и никогда не воспроизводилось на эмуляторе при любой плотности. Лечение — не задавать `lineHeight`: спан не ставится, Android считает коробку по реальным метрикам шрифта. Убран из темы markdown (`Markdown.tsx`) и из `messageText` (`MessageBubble.tsx`); инвариант — `src/lib/text-metrics.test.ts`. Откачены как неверные: тема-фикс `useBoundsForWidth` (0.3.17), `removeClippedSubviews` (0.3.18), `paddingBottom` коробки абзаца.
 - **Скролл кода в раскрытой карточке.** Вся `ToolCallCard` была `TouchableOpacity`, поэтому тап/свайп по диффу всплывал в неё и сворачивал карточку — код исчезал под пальцем. Теперь нажимается только заголовок. Плюс `WIDE_CONTENT_SCROLL_CONFIG.nestedScrollEnabled: true`: вложенный горизонтальный `ScrollView` терял жест на первых пикселях вертикального сноса пальца. Правка — `src/components/chat/ToolCallCard.tsx`, `src/lib/scroll-config.ts`; инварианты — `src/components/wide-content-scroll.regression.test.ts`, `src/lib/scroll-config.test.ts`.
