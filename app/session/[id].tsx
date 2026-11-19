@@ -253,6 +253,9 @@ export default function SessionScreen() {
   const settleTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const settledRef = useRef(false)
   const viewportHeightRef = useRef(0)
+  // Last measured content height, the same number onContentSizeChange receives.
+  // scrollToEnd would aim at a row frame that lags the streaming chunk.
+  const contentHeightRef = useRef(0)
   // One automatic history fetch per session while the transcript is shorter than
   // the viewport; the user can keep paging with the navigator after that.
   const autoLoadedOlderRef = useRef(false)
@@ -261,6 +264,20 @@ export default function SessionScreen() {
     settleTimerRef.current = undefined
     settledRef.current = true
     setSettled(true)
+  }, [])
+
+  // The real end of the content. scrollToEnd picks the last row's measured
+  // frame, and a streaming chunk grows that row before it is re-measured, so
+  // the list would stop a line short of the newest text.
+  const scrollToMeasuredEnd = useCallback((animated: boolean) => {
+    const height = contentHeightRef.current
+    const viewport = viewportHeightRef.current
+    if (height <= 0 || viewport <= 0) {
+      // Never measured yet: the list's own end beats offset 0.
+      flatListRef.current?.scrollToEnd({ animated })
+      return
+    }
+    flatListRef.current?.scrollToOffset({ offset: endScrollOffset(height, viewport), animated })
   }, [])
 
   // Message navigation (#214) — docked strip, not floating controls. `nav` is
@@ -487,8 +504,8 @@ export default function SessionScreen() {
     // stale scroll event queued mid-jump can't resurrect the old position.
     cancelJump()
     nav.manual()
-    flatListRef.current?.scrollToEnd({ animated })
-  }, [nav, cancelJump])
+    scrollToMeasuredEnd(animated)
+  }, [nav, cancelJump, scrollToMeasuredEnd])
 
   // Re-select on every focus, not just mount. currentSession/messages/
   // permissions are a single global store, and the native stack keeps screens
@@ -562,8 +579,8 @@ export default function SessionScreen() {
     if (pendingCount === 0) return
     followBottomRef.current = true
     // The card sits under the message that asked it, at the newest end.
-    flatListRef.current?.scrollToEnd({ animated: true })
-  }, [pendingCount])
+    scrollToMeasuredEnd(true)
+  }, [pendingCount, scrollToMeasuredEnd])
 
   // Sync model chip from latest assistant message
   useEffect(() => {
@@ -1384,7 +1401,12 @@ export default function SessionScreen() {
               // scroll stream can drop its last sample, and the follow decision
               // belongs to the user's movement, not to every sample.
               onScrollEndDrag={(event) => {
-                settleFollow(event)
+                // A finger lift is not the end of the gesture: with velocity the
+                // fling keeps running, and re-enabling follow here lets the next
+                // streaming chunk yank the text from under it. RN itself treats
+                // non-zero velocity as "momentum follows"; momentum end settles.
+                const velocity = event.nativeEvent.velocity
+                if (!velocity || (velocity.x === 0 && velocity.y === 0)) settleFollow(event)
                 wakeNavPanel()
               }}
               onMomentumScrollEnd={(event) => {
@@ -1458,6 +1480,7 @@ export default function SessionScreen() {
               // Follow streaming output and new messages while the user is at
               // the bottom.
               onContentSizeChange={(_width, height) => {
+                contentHeightRef.current = height
                 // The shortest transcript that still has history behind it would
                 // otherwise be stuck: onStartReached fires once at offset 0 and
                 // never again while the content fits the viewport. One-shot, or
@@ -1470,10 +1493,7 @@ export default function SessionScreen() {
                 // Exactly the end of the content that just arrived: scrollToEnd
                 // would aim at the last row's stale measured frame and stop a
                 // line short of the streaming text.
-                flatListRef.current?.scrollToOffset({
-                  offset: endScrollOffset(height, viewportHeightRef.current),
-                  animated: false,
-                })
+                scrollToMeasuredEnd(false)
                 // Reveal after the jump has been applied, not on a second equal
                 // height — an idle list never produces one.
                 if (!settledRef.current) requestAnimationFrame(revealList)

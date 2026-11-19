@@ -39,7 +39,7 @@ test("nothing is docked between the list and the status bar any more", () => {
 test("the panel shows only while the user scrolls, then hides itself", () => {
   assert.match(source, /navPanelVisible = [^\n]*showNavStrip/, "visibility must be scroll-activity driven")
   assert.match(source, /onScrollBeginDrag=\{/, "a drag must wake the panel")
-  assert.match(source, /onScrollEndDrag=\{[\s\S]{0,200}wakeNavPanel\(\)/, "the fling must keep it up")
+  assert.match(source, /onScrollEndDrag=\{[\s\S]{0,700}wakeNavPanel\(\)/, "the fling must keep it up")
   assert.match(source, /onMomentumScrollEnd=\{[\s\S]{0,200}wakeNavPanel\(\)/, "and so must the momentum end")
   assert.match(source, /setTimeout\(\(\) => setShowNavStrip\(false\)/, "it must hide on idle")
   assert.match(source, /clearTimeout\(navIdleTimer\.current\)/, "the idle timer must be cancelled and cleaned up")

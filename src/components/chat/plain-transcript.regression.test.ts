@@ -29,10 +29,10 @@ test("the transcript is not inverted", () => {
 test("growing content is followed only from the bottom", () => {
   const block = listBlock()
   // scrollToEnd stops at the last row's measured frame, which lags the chunk
-  // that just arrived; the content size in the event is the real end.
+  // that just arrived; the measured content height is the real end.
   assert.match(
     block,
-    /if \(!followBottomRef\.current\) return[\s\S]{0,400}scrollToOffset\(\s*\{\s*offset: endScrollOffset\(height, viewportHeightRef\.current\)/,
+    /if \(!followBottomRef\.current\) return[\s\S]{0,400}scrollToMeasuredEnd\(false\)/,
     "the newest text is kept in view",
   )
   assert.doesNotMatch(block, /\.scrollToEnd\(/, "a row frame must not decide where the end is")
@@ -82,10 +82,24 @@ test("following is decided by the gesture, never by a scroll sample", () => {
   assert.doesNotMatch(scroll, /followBottomRef\.current =/, "a stale sample must not switch following off")
   const block = listBlock()
   assert.match(block, /onScrollBeginDrag=\{[\s\S]{0,600}followBottomRef\.current = false/, "a drag takes the position")
-  assert.match(block, /onScrollEndDrag=\{[\s\S]{0,200}settleFollow\(event\)/, "landing at the bottom gives it back")
-  assert.match(block, /onMomentumScrollEnd=\{[\s\S]{0,200}settleFollow\(event\)/, "so does a fling that ends there")
+  assert.match(block, /onScrollEndDrag=\{[\s\S]{0,300}velocity[\s\S]{0,300}settleFollow\(event\)/, "a lift only settles when no fling follows")
+  assert.match(block, /onMomentumScrollEnd=\{[\s\S]{0,200}settleFollow\(event\)/, "the fling that ends there gives it back")
   const settle = sessionSource.slice(sessionSource.indexOf("const settleFollow"), sessionSource.indexOf("const measureCell"))
   assert.match(settle, /followBottomRef\.current = isNearBottom\(/, "one decision point for both gestures")
+})
+
+// The same stale-frame trap sits behind "Latest" and the pending-question jump:
+// both used scrollToEnd, so both could stop a line short of the newest text.
+test("jumps to the newest end use the measured content height", () => {
+  const helper = sessionSource.slice(
+    sessionSource.indexOf("const scrollToMeasuredEnd"),
+    sessionSource.indexOf("const nav ="),
+  )
+  assert.match(helper, /endScrollOffset\(height, viewport\)/, "the jump targets the measured end")
+  assert.match(sessionSource, /contentHeightRef\.current = height/, "the height comes from the content-size event")
+  const jump = sessionSource.slice(sessionSource.indexOf("const scrollToBottom"), sessionSource.indexOf("// Re-select on every focus"))
+  assert.match(jump, /scrollToMeasuredEnd\(animated\)/, "Latest goes through it")
+  assert.match(sessionSource, /followBottomRef\.current = true\n\s*\/\/ The card sits[^\n]*\n\s*scrollToMeasuredEnd\(true\)/, "so does the pending-question jump")
 })
 
 // A short transcript never re-fires onStartReached, so it needs one automatic
