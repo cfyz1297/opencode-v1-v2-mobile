@@ -54,6 +54,15 @@ test("the list stays hidden until it has settled at the newest message", () => {
   assert.match(drag, /revealList\(\)/, "touching the list reveals it too")
 })
 
+// Coming back from a subagent session shows the spinner and unmounts the list;
+// it then mounts again at the oldest row. The "already settled" state from
+// before made that first frame visible, dropping the reader at the top of a
+// long history — caught by the emulator smoke run on the first attempt.
+test("a cold reload opens at the newest message again", () => {
+  assert.match(sessionSource, /if \(!isLoading\) return[\s\S]{0,200}settledRef\.current = false/, "a reload must hide the list again")
+  assert.match(sessionSource, /if \(settledRef\.current\) followBottomRef\.current = !nav\.held && atBottom/, "the mounting offset must not stop the jump to the end")
+})
+
 // A short transcript never re-fires onStartReached, so it needs one automatic
 // fetch — but exactly one: without the ref, every streaming delta would fetch
 // the whole transcript again.

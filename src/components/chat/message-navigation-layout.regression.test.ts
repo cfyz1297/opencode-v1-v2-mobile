@@ -56,7 +56,7 @@ test("a navigator tap owns the position until the user takes over", () => {
   const jump = around("const jumpTo")
   assert.match(jump, /nav\.jumpTo\(id\)/, "the jump sets and holds the position in one step")
   assert.match(around("const moveMessage"), /followBottomRef\.current = false/, "a tap must stop auto-follow")
-  const scroll = around("const handleScroll")
+  const scroll = around("const handleScroll", 1200)
   assert.match(scroll, /!nav\.held && atBottom/, "content growth must not snap back while held")
   assert.match(scroll, /if \(atBottom && !nav\.held\) nav\.setCurrent\(nav\.ids\[nav\.ids\.length - 1\]\)/, "at the bottom the newest message is current")
   assert.match(around("onScrollBeginDrag={() =>"), /nav\.manual\(\)/, "a finger on the list takes over")

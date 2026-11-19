@@ -883,7 +883,10 @@ export default function SessionScreen() {
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
       const { contentOffset, layoutMeasurement, contentSize } = event.nativeEvent
       const atBottom = isNearBottom(contentOffset.y, layoutMeasurement.height, contentSize.height)
-      followBottomRef.current = !nav.held && atBottom
+      // Until the list has reached the newest message the offset is still near
+      // the top, where it mounted; that must not read as "the reader scrolled
+      // away" and stop the jump to the end.
+      if (settledRef.current) followBottomRef.current = !nav.held && atBottom
       nav.observe(contentOffset.y, layoutMeasurement.height)
       // At the bottom the current message is the newest one: the topmost visible
       // row can be several above it, which read as "3 / 12" at the end of the
@@ -1028,6 +1031,17 @@ export default function SessionScreen() {
   useEffect(() => {
     if (!loadingMore) loadingTriggered.current = false
   }, [loadingMore])
+
+  // Coming back from a subagent session (or any cold reload) unmounts the list
+  // while the spinner shows, and it mounts again at the oldest row. Without this
+  // the previous "already settled" state made that first frame visible, so the
+  // reader was dropped at the top of a long history.
+  useEffect(() => {
+    if (!isLoading) return
+    settledRef.current = false
+    setSettled(false)
+    followBottomRef.current = true
+  }, [isLoading])
 
   // Detect reconnecting → stable transition for the "Connected ✓" flash.
   // reconnectAttempts and lastDisconnectAt reset in the same set() call, so we
