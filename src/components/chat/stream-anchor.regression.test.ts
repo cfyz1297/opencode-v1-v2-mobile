@@ -25,7 +25,8 @@ test("the transcript hands scroll maintenance to the native helper", () => {
 // the newest end.
 test("content growth never recomputes a reading shift", () => {
   assert.doesNotMatch(sessionSource, /contentGrowthAction|pendingShiftRef|cellYRef|frameShift|measuredShift/, "no leftover correction machinery")
-  assert.match(listBlock(), /onContentSizeChange=\{[\s\S]{0,200}atBottomRef\.current[\s\S]{0,120}scrollToOffset\(\{ offset: 0, animated: false \}\)/, "the pin must be instant and conditional")
+  assert.match(listBlock(), /onContentSizeChange=\{[\s\S]{0,260}atBottomRef\.current[\s\S]{0,160}scrollToOffset\(\{ offset: 0, animated: false \}\)/, "the pin must be instant and conditional")
+  assert.match(listBlock(), /onContentSizeChange=\{[\s\S]{0,260}\|\| nav\.held/, "a navigator tap must not be pinned back by a streaming growth")
 })
 
 // Android scrolls a focused child into view; a selectable <Text> takes focus on

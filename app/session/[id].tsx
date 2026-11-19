@@ -1376,7 +1376,9 @@ export default function SessionScreen() {
               // scroll-follow.ts for the config.
               maintainVisibleContentPosition={MAINTAIN_VISIBLE_CONTENT_POSITION}
               onContentSizeChange={() => {
-                if (!atBottomRef.current) return
+                // A navigator tap owns the next position: a streaming growth
+                // arriving before the jump's first onScroll would pin it back.
+                if (!atBottomRef.current || nav.held) return
                 flatListRef.current?.scrollToOffset({ offset: 0, animated: false })
               }}
               onEndReached={handleLoadMore}
