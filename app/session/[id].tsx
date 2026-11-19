@@ -25,7 +25,7 @@ import { useKeyboardHeight } from "../../src/lib/use-keyboard-height"
 import { buildMessageData, type MessageDataItem } from "../../src/lib/revert-filter"
 import { splitAnswered, splitByMessage } from "../../src/lib/answered-questions"
 import { runTotals } from "../../src/lib/message-run"
-import { shouldFollowBottom } from "../../src/lib/scroll-follow"
+import { shouldFollowBottom, anchorShift } from "../../src/lib/scroll-follow"
 import { collectSubagents } from "../../src/lib/subagent-status"
 import { useTranslation } from "react-i18next"
 import * as ImagePicker from "expo-image-picker"
@@ -245,6 +245,16 @@ export default function SessionScreen() {
   // Whether new/streaming content should keep the transcript pinned to the
   // newest message. False once the user scrolls up, true again at the bottom.
   const followBottomRef = useRef(true)
+  // The list's own offset: onContentSizeChange arrives without an event.
+  const listOffsetRef = useRef(0)
+  // A finger or a fling owns the position — an anchor correction would fight
+  // the drag and cancel the fling.
+  const scrollActiveRef = useRef(false)
+  // Height of the newest row, and its value at the previous content-size
+  // event. Streaming grows exactly this cell; the difference is how far every
+  // older row was pushed, so the offset has to grow by it to stay in place.
+  const newestCellRef = useRef<{ id: string; height: number } | undefined>(undefined)
+  const anchoredNewestRef = useRef<{ id: string; height: number } | undefined>(undefined)
 
   // Message navigation (#214) — docked strip, not floating controls. `nav` is
   // the placement-independent navigation math (src/lib/message-navigation.ts).
@@ -857,8 +867,11 @@ export default function SessionScreen() {
   const handleScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
       const { contentOffset, layoutMeasurement } = event.nativeEvent
+      listOffsetRef.current = contentOffset.y
       const atBottom = shouldFollowBottom(contentOffset.y)
-      followBottomRef.current = !nav.held && atBottom
+      // Not while a finger or a fling is on the list: the drag decides, and a
+      // correction mid-gesture would yank the transcript under the finger.
+      followBottomRef.current = !nav.held && !scrollActiveRef.current && atBottom
       nav.observe(contentOffset.y, layoutMeasurement.height)
       // At the bottom the current message is the newest one: the topmost visible
       // row can be several above it, which read as "3 / 12" at the end of the
@@ -891,6 +904,8 @@ export default function SessionScreen() {
   const navigableIds = useMemo(() => userRowIds(rows), [rows])
   const rowIndexById = useMemo(() => new Map(rows.map((row, at) => [row.id, at])), [rows])
   nav.sync(navigableIds)
+  // rows[0] is the newest row — the assistant answer that streams.
+  const newestRowId = rows[0]?.id
 
   // The position needs each user message's Y inside the content container, and
   // only the cell wrapper is positioned there: an onLayout on the rendered row
@@ -908,6 +923,11 @@ export default function SessionScreen() {
           style={props.style}
           onLayout={(event) => {
             if (isUser) nav.frames.set(row.id, event.nativeEvent.layout)
+            // The newest row is the one that grows while an answer streams;
+            // its height is the anchor correction for everything above it.
+            if (row.id === newestRowId) {
+              newestCellRef.current = { id: row.id, height: event.nativeEvent.layout.height }
+            }
             props.onLayout?.(event)
             setCurrentNavIndex((prev) => {
               const next = nav.current()
@@ -919,7 +939,7 @@ export default function SessionScreen() {
         </View>
       )
     },
-    [nav],
+    [nav, newestRowId],
   )
 
   const jumpTo = useCallback(
@@ -1289,12 +1309,27 @@ export default function SessionScreen() {
                 // The user took over: re-anchor from the viewport from here on,
                 // so dragging back to the bottom resumes auto-follow. manual()
                 // also releases the navigator's hold.
+                scrollActiveRef.current = true
+                followBottomRef.current = false
                 nav.manual()
                 wakeNavPanel()
               }}
               // Keep the panel up until the fling settles, then let it fade.
-              onScrollEndDrag={wakeNavPanel}
-              onMomentumScrollEnd={wakeNavPanel}
+              onScrollEndDrag={(event) => {
+                scrollActiveRef.current = false
+                listOffsetRef.current = event.nativeEvent.contentOffset.y
+                followBottomRef.current = shouldFollowBottom(event.nativeEvent.contentOffset.y)
+                wakeNavPanel()
+              }}
+              onMomentumScrollBegin={() => {
+                scrollActiveRef.current = true
+              }}
+              onMomentumScrollEnd={(event) => {
+                scrollActiveRef.current = false
+                listOffsetRef.current = event.nativeEvent.contentOffset.y
+                followBottomRef.current = shouldFollowBottom(event.nativeEvent.contentOffset.y)
+                wakeNavPanel()
+              }}
               onScrollToIndexFailed={({ index, averageItemLength }) => {
                 // The target was never measured: jump approximately so its rows
                 // mount, then settle on the index — but only if this jump is
@@ -1360,7 +1395,21 @@ export default function SessionScreen() {
               // set: on an inverted list it pins the previously visible row, so
               // each new assistant message would push itself out of view.
               onContentSizeChange={() => {
-                if (followBottomRef.current) flatListRef.current?.scrollToOffset({ offset: 0, animated: false })
+                if (followBottomRef.current) {
+                  anchoredNewestRef.current = newestCellRef.current
+                  flatListRef.current?.scrollToOffset({ offset: 0, animated: false })
+                  return
+                }
+                // Reading somewhere up the transcript: a growing answer moves
+                // every other row, which looked like the app scrolling under
+                // the finger. Move the offset by the same amount so the text
+                // stays exactly where it was left.
+                const grown = anchorShift(anchoredNewestRef.current, newestCellRef.current)
+                anchoredNewestRef.current = newestCellRef.current
+                if (grown <= 0 || scrollActiveRef.current) return
+                const next = listOffsetRef.current + grown
+                listOffsetRef.current = next
+                flatListRef.current?.scrollToOffset({ offset: next, animated: false })
               }}
               onEndReached={handleLoadMore}
               onEndReachedThreshold={0.5}
