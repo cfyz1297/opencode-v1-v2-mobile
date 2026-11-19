@@ -242,10 +242,9 @@ export default function SessionScreen() {
     if (navIdleTimer.current) clearTimeout(navIdleTimer.current)
     navIdleTimer.current = setTimeout(() => setShowNavStrip(false), NAV_PANEL_IDLE_MS)
   }, [])
-  // Whether new/streaming content should keep the transcript pinned to the
-  // newest message. False once the user scrolls up, true again at the bottom.
-  const followBottomRef = useRef(true)
-  // The list's own offset: onContentSizeChange arrives without an event.
+  // The list's own offset: onContentSizeChange arrives without an event, and
+  // every follow decision is derived from this — a latched "reading above" flag
+  // once stayed false and pushed the streaming answer out of view.
   const listOffsetRef = useRef(0)
   // A finger or a fling owns the position — an anchor correction would fight
   // the drag and cancel the fling.
@@ -472,7 +471,6 @@ export default function SessionScreen() {
     wakeNavPanel()
     // Latest hands the position back to auto-follow.
     nav.release()
-    followBottomRef.current = true
     // Reset the logical viewport before the native callback arrives, so a
     // stale scroll event queued mid-jump can't resurrect the old position.
     cancelJump()
@@ -550,7 +548,6 @@ export default function SessionScreen() {
   const pendingCount = questions.length
   useEffect(() => {
     if (pendingCount === 0) return
-    followBottomRef.current = true
     flatListRef.current?.scrollToOffset({ offset: 0, animated: true })
   }, [pendingCount])
 
@@ -873,11 +870,6 @@ export default function SessionScreen() {
       listOffsetRef.current = contentOffset.y
       nav.observe(contentOffset.y, layoutMeasurement.height)
       const atBottom = shouldFollowBottom(contentOffset.y)
-      // Derived from the position on every event, never latched: a missed
-      // gesture-end event used to leave auto-follow off for good, and the
-      // stream then grew off-screen while the list held a stale position.
-      // A jump in flight keeps the navigator in charge instead.
-      followBottomRef.current = atBottom && !nav.held && nav.expected === undefined
       // Nothing to protect at the newest end; a fling that ends here must not
       // leave the "gesture owns the position" flag stuck on.
       if (atBottom) {
@@ -974,8 +966,6 @@ export default function SessionScreen() {
   const moveMessage = useCallback(
     (direction: 1 | -1) => {
       wakeNavPanel()
-      // The navigator owns the position: no auto-follow until a drag or Latest.
-      followBottomRef.current = false
       // A session opens at the newest message, so an unmeasured transcript
       // still starts from index 0: the first tap pages up instead of doing
       // nothing (which is what "the buttons do not work until I scroll" was).
@@ -1320,7 +1310,6 @@ export default function SessionScreen() {
                 // so dragging back to the bottom resumes auto-follow. manual()
                 // also releases the navigator's hold.
                 scrollActiveRef.current = true
-                followBottomRef.current = false
                 nav.manual()
                 wakeNavPanel()
               }}
@@ -1406,7 +1395,11 @@ export default function SessionScreen() {
               // set: on an inverted list it pins the previously visible row, so
               // each new assistant message would push itself out of view.
               onContentSizeChange={() => {
-                if (followBottomRef.current) {
+                // The decision comes from the live offset, never from a stored
+                // flag: a flag stuck on "reading above" pushed the streaming
+                // answer below the viewport and it looked like nothing arrived.
+                // A drag in progress is the one thing the list must not fight.
+                if (shouldFollowBottom(listOffsetRef.current) && !scrollActiveRef.current) {
                   anchoredNewestRef.current = newestCellRef.current
                   flatListRef.current?.scrollToOffset({ offset: 0, animated: false })
                   return
@@ -1414,14 +1407,11 @@ export default function SessionScreen() {
                 // Reading somewhere up the transcript: a growing answer moves
                 // every other row, which looked like the app scrolling under
                 // the finger. Move the offset by the same amount so the text
-                // stays exactly where it was left. A drag, a fling or a jump in
-                // flight owns the position; correcting then would fight it. At
-                // the newest end there is nothing to hold, and a wrong guess
-                // there would hide the answer that is streaming in.
+                // stays exactly where it was left. A jump in flight owns the
+                // position; correcting then would fight it.
                 const grown = anchorShift(anchoredNewestRef.current, newestCellRef.current)
                 anchoredNewestRef.current = newestCellRef.current
                 if (grown <= 0 || scrollActiveRef.current || nav.expected !== undefined) return
-                if (shouldFollowBottom(listOffsetRef.current)) return
                 const next = listOffsetRef.current + grown
                 listOffsetRef.current = next
                 flatListRef.current?.scrollToOffset({ offset: next, animated: false })
