@@ -10,8 +10,8 @@ import { test } from "node:test"
 import assert from "node:assert/strict"
 import { MessageNavigation } from "./message-navigation.ts"
 
-// Inverted list: content coordinate 0 is the newest message (the visual
-// bottom); a larger offset is further back in history. The viewport shows
+// Plain list: content coordinate 0 is the oldest message (the visual top); a
+// larger offset is further toward the newest. The viewport shows
 // [offset, offset + height].
 class FakeList {
   offset = 0
@@ -60,7 +60,7 @@ test("one tap scrolls the transcript, not just the counter", () => {
   nav.move(1)
   nav.seek(list, 0)
   assert.ok(list.offset > 0, `the list must actually move, got offset ${list.offset}`)
-  assert.equal(nav.current(), 3, "the position follows the target that was scrolled to")
+  assert.equal(nav.current(), 1, "the position follows the target that was scrolled to")
 })
 
 test("a collapsed viewport does not turn the retry into a 0 px scroll", () => {
@@ -113,5 +113,5 @@ test("manual scrolling re-anchors from the real viewport", () => {
 
   nav.manual()
   nav.observe(200, 300)
-  assert.equal(nav.current(), 4, "after a manual scroll the position is what is on screen")
+  assert.equal(nav.current(), 2, "after a manual scroll the position is what is on screen")
 })

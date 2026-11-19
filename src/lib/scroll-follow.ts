@@ -1,9 +1,24 @@
-// The chat transcript is an inverted FlatList: offset 0 is the newest message
-// (visual bottom) and larger offsets mean the user scrolled up. New content is
-// followed only while the user is at the bottom; otherwise their reading
-// position would be yanked away by every streaming delta.
+// The chat transcript is a plain FlatList: the oldest message is at the top and
+// the newest at the bottom, so content growth pushes the newest text downward
+// and can never move text a reader is holding further up.
+//
+// An inverted list was tried first and cost four failed fixes: its growth runs
+// upward in content coordinates, so every existing row shifts whenever an answer
+// streams, and the correction had to guess the amount after the layout settled.
+// Per-cell deltas were summed once, a baseline was read after being overwritten
+// once, and the native maintainVisibleContentPosition did nothing at all here.
+// With no inversion there is nothing to compensate.
 export const FOLLOW_BOTTOM_MAX_OFFSET = 24
 
-export function shouldFollowBottom(offsetY: number): boolean {
-  return offsetY <= FOLLOW_BOTTOM_MAX_OFFSET
+// Distance from the bottom edge of the content, in pixels.
+export function isNearBottom(offsetY: number, viewportHeight: number, contentHeight: number): boolean {
+  if (contentHeight <= 0 || viewportHeight <= 0) return true
+  return contentHeight - (offsetY + viewportHeight) <= FOLLOW_BOTTOM_MAX_OFFSET
 }
+
+// Older pages are inserted above the reader, which in a plain list pushes every
+// visible row down. This is the case the native helper was built for, and the
+// only one it is used for here: appends and streaming growth at the bottom move
+// nothing above them, so they need no correction. An index of 0 lets any visible
+// child anchor — the loading header or a row.
+export const MAINTAIN_VISIBLE_CONTENT_POSITION = { minIndexForVisible: 0 } as const

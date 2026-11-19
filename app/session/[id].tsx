@@ -25,7 +25,7 @@ import { useKeyboardHeight } from "../../src/lib/use-keyboard-height"
 import { buildMessageData, type MessageDataItem } from "../../src/lib/revert-filter"
 import { splitAnswered, splitByMessage } from "../../src/lib/answered-questions"
 import { runTotals } from "../../src/lib/message-run"
-import { shouldFollowBottom } from "../../src/lib/scroll-follow"
+import { isNearBottom, MAINTAIN_VISIBLE_CONTENT_POSITION } from "../../src/lib/scroll-follow"
 import { collectSubagents } from "../../src/lib/subagent-status"
 import { useTranslation } from "react-i18next"
 import * as ImagePicker from "expo-image-picker"
@@ -245,6 +245,23 @@ export default function SessionScreen() {
   // Whether new/streaming content should keep the transcript pinned to the
   // newest message. False once the user scrolls up, true again at the bottom.
   const followBottomRef = useRef(true)
+  // Hidden until the list has scrolled to the newest message: it mounts at the
+  // oldest row, and showing that frame would flash the start of the history.
+  const [settled, setSettled] = useState(false)
+  // Reveal is time-based, not event-based: an idle list fires no further layout
+  // event, so waiting for a "stable" height could keep the transcript blank.
+  const settleTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const settledRef = useRef(false)
+  const viewportHeightRef = useRef(0)
+  // One automatic history fetch per session while the transcript is shorter than
+  // the viewport; the user can keep paging with the navigator after that.
+  const autoLoadedOlderRef = useRef(false)
+  const revealList = useCallback(() => {
+    if (settleTimerRef.current) clearTimeout(settleTimerRef.current)
+    settleTimerRef.current = undefined
+    settledRef.current = true
+    setSettled(true)
+  }, [])
 
   // Message navigation (#214) — docked strip, not floating controls. `nav` is
   // the placement-independent navigation math (src/lib/message-navigation.ts).
@@ -258,9 +275,9 @@ export default function SessionScreen() {
     if (navJump.current?.timer) clearTimeout(navJump.current.timer)
     navJump.current = null
   }, [])
-  // Index into nav.ids (newest first) of the current navigable message; -1
-  // while unknown. Mirrored into state so the counter and the disabled states
-  // re-render on scroll and on content change.
+  // Index into nav.ids (oldest first, the list's own order) of the current
+  // navigable message; -1 while unknown. Mirrored into state so the counter and
+  // the disabled states re-render on scroll and on content change.
   const [currentNavIndex, setCurrentNavIndex] = useState(-1)
 
   // The store records why a load/send failed; without this banner a failed
@@ -328,7 +345,8 @@ export default function SessionScreen() {
   // message sent concurrently with a revert isn't hidden.
   const revertMessageID = currentSession?.revert?.messageID
 
-  // Inverted FlatList: data is reversed (newest first) so newest renders at bottom.
+  // The transcript is built newest-first; the list renders it reversed so the
+  // newest message sits at the bottom and growth pushes downward.
   // BUG-032: keep a per-message cache so a streaming delta for one message
   // does not allocate new items (and defeat the bubble memo) for the whole chat.
   const messageDataCache = useRef(new Map<string, MessageDataItem>())
@@ -340,6 +358,11 @@ export default function SessionScreen() {
   // the whole run are read in order, so the activity spoiler counts the steps
   // between two answers instead of repeating "Steps: 1" per message.
   const rows = useMemo(() => buildTranscriptRows(messageData), [messageData])
+  // A plain list reads oldest → newest top to bottom, so the newest text grows
+  // at the bottom and can never push text a reader is holding further up.
+  // `rows` stays newest-first (that is how the transcript is built) and this is
+  // the only place the order is flipped.
+  const listRows = useMemo(() => [...rows].reverse(), [rows])
   // Every subagent this session delegated, in call order — the bar under the
   // header counts them and lists them.
   const subagentRefs = useMemo(
@@ -463,8 +486,8 @@ export default function SessionScreen() {
     // Reset the logical viewport before the native callback arrives, so a
     // stale scroll event queued mid-jump can't resurrect the old position.
     cancelJump()
-    nav.manual(0)
-    flatListRef.current?.scrollToOffset({ offset: 0, animated })
+    nav.manual()
+    flatListRef.current?.scrollToEnd({ animated })
   }, [nav, cancelJump])
 
   // Re-select on every focus, not just mount. currentSession/messages/
@@ -538,7 +561,8 @@ export default function SessionScreen() {
   useEffect(() => {
     if (pendingCount === 0) return
     followBottomRef.current = true
-    flatListRef.current?.scrollToOffset({ offset: 0, animated: true })
+    // The card sits under the message that asked it, at the newest end.
+    flatListRef.current?.scrollToEnd({ animated: true })
   }, [pendingCount])
 
   // Sync model chip from latest assistant message
@@ -852,18 +876,19 @@ export default function SessionScreen() {
     }
   }
 
-  // In inverted mode, offset 0 = bottom. Auto-follow and the navigation strip
-  // use separate thresholds on purpose (see scroll-follow.ts).
+  // A plain list: the newest message is at the bottom, so "at the bottom" is a
+  // distance from the end, not an offset from zero. Auto-follow and the
+  // navigation strip use separate thresholds on purpose (see scroll-follow.ts).
   const handleScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-      const { contentOffset, layoutMeasurement } = event.nativeEvent
-      const atBottom = shouldFollowBottom(contentOffset.y)
+      const { contentOffset, layoutMeasurement, contentSize } = event.nativeEvent
+      const atBottom = isNearBottom(contentOffset.y, layoutMeasurement.height, contentSize.height)
       followBottomRef.current = !nav.held && atBottom
       nav.observe(contentOffset.y, layoutMeasurement.height)
       // At the bottom the current message is the newest one: the topmost visible
       // row can be several above it, which read as "3 / 12" at the end of the
       // transcript. Ignored while the navigator holds the position.
-      if (atBottom && !nav.held) nav.setCurrent(nav.ids[0])
+      if (atBottom && !nav.held) nav.setCurrent(nav.ids[nav.ids.length - 1])
       setCurrentNavIndex((prev) => {
         const next = nav.current()
         return prev === next ? prev : next
@@ -872,9 +897,12 @@ export default function SessionScreen() {
     [nav],
   )
 
-  // Debounce: onEndReached can fire multiple times during a single scroll gesture
+  // Debounce: onStartReached can fire multiple times during a single scroll gesture
   const loadingTriggered = useRef(false)
   const handleLoadMore = useCallback(() => {
+    // Following the stream means the reader is at the newest end: an initial
+    // onStartReached at offset 0 would otherwise pull history nobody asked for.
+    if (followBottomRef.current) return
     if (hasMore && !loadingMore && !loadingTriggered.current) {
       loadingTriggered.current = true
       loadOlderMessages()
@@ -888,8 +916,8 @@ export default function SessionScreen() {
   // Targets are the user's own messages: a question never streams or merges,
   // so it is a stable anchor. Assistant rows grow and re-merge, which is what
   // made the counter and the jumps unreliable.
-  const navigableIds = useMemo(() => userRowIds(rows), [rows])
-  const rowIndexById = useMemo(() => new Map(rows.map((row, at) => [row.id, at])), [rows])
+  const navigableIds = useMemo(() => userRowIds(listRows), [listRows])
+  const rowIndexById = useMemo(() => new Map(listRows.map((row, at) => [row.id, at])), [listRows])
   nav.sync(navigableIds)
 
   // The position needs each user message's Y inside the content container, and
@@ -946,19 +974,23 @@ export default function SessionScreen() {
       wakeNavPanel()
       // The navigator owns the position: no auto-follow until a drag or Latest.
       followBottomRef.current = false
-      // A session opens at the newest message, so an unmeasured transcript
-      // still starts from index 0: the first tap pages up instead of doing
-      // nothing (which is what "the buttons do not work until I scroll" was).
-      const current = Math.max(0, nav.current())
+      // A session opens at the newest message and the list runs oldest →
+      // newest, so an unmeasured transcript starts from the last index: the
+      // first tap pages up instead of doing nothing (which is what "the buttons
+      // do not work until I scroll" was).
+      const known = nav.current()
+      const current = known >= 0 ? known : nav.ids.length - 1
       // Previous at the oldest loaded message with older pages still on the
       // server: load the next batch instead of going nowhere. handleLoadMore
       // owns the guard, so a tap cannot double-load; the user taps again once
       // the page lands.
-      if (direction === 1 && current >= nav.ids.length - 1 && hasMore) {
+      if (direction === 1 && current <= 0 && hasMore) {
         handleLoadMore()
         return
       }
-      jumpTo(current + direction)
+      // direction 1 is "previous", which is older, and the list runs oldest to
+      // newest — so a previous step is one index down.
+      jumpTo(current - direction)
     },
     [nav, hasMore, handleLoadMore, jumpTo, wakeNavPanel],
   )
@@ -978,9 +1010,16 @@ export default function SessionScreen() {
     // Frames belong to the previous transcript: cell coordinates are only
     // meaningful for the rows that produced them.
     nav.frames.clear()
+    // A session opens at the newest message, so the first content-size event
+    // must scroll to the end — even if the previous transcript was left half-read.
+    followBottomRef.current = true
+    settledRef.current = false
+    autoLoadedOlderRef.current = false
+    setSettled(false)
     setCurrentNavIndex(-1)
     return () => {
       if (navIdleTimer.current) clearTimeout(navIdleTimer.current)
+      if (settleTimerRef.current) clearTimeout(settleTimerRef.current)
       cancelJump()
     }
   }, [id, nav, cancelJump])
@@ -1103,18 +1142,19 @@ export default function SessionScreen() {
     [messages, providers, currentSession],
   )
 
-  // Docked navigation strip derived state (#214). nav.ids is newest-first
-  // (messageData order); the counter counts from the oldest, so
-  // N = total - index. A single-message session never shows the strip.
+  // Docked navigation strip derived state (#214). nav.ids runs oldest → newest,
+  // the same order as the list, so the counter is index + 1. A single-message
+  // session never shows the strip.
   const navTotal = navigableIds.length
-  const navIndex = currentNavIndex >= 0 ? currentNavIndex : nav.current()
   // Unknown position means "at the newest message", which is where a session
   // opens — the old fallback of 1 claimed the oldest and made the up button
   // look broken.
-  const navCurrent = navIndex >= 0 ? navTotal - navIndex : navTotal
-  const prevDisabled = navIndex >= 0 && navIndex >= navTotal - 1 && !hasMore
-  const nextDisabled = navIndex === 0
-  const prevLoading = loadingMore && navIndex >= 0 && navIndex >= navTotal - 1
+  const navIndex = currentNavIndex >= 0 ? currentNavIndex : nav.current()
+  const resolvedNavIndex = navIndex >= 0 ? navIndex : navTotal - 1
+  const navCurrent = resolvedNavIndex + 1
+  const prevDisabled = resolvedNavIndex <= 0 && !hasMore
+  const nextDisabled = resolvedNavIndex >= navTotal - 1
+  const prevLoading = loadingMore && resolvedNavIndex <= 0
   const navPanelVisible = !isLoading && showNavStrip && navTotal > 1
   // Full text for the reconnect banner's Copy action: same two lines it shows.
   const reconnectCopyText = lastDisconnectReason
@@ -1191,7 +1231,7 @@ export default function SessionScreen() {
             if (hasMore && !loadingMore) loadOlderMessages()
           }}
           onScrollToTop={() => {
-            flatListRef.current?.scrollToEnd({ animated: true })
+            flatListRef.current?.scrollToOffset({ offset: 0, animated: true })
           }}
           onClose={() => setShowInfo(false)}
         />
@@ -1277,18 +1317,37 @@ export default function SessionScreen() {
           <View style={s.listWrap}>
             <FlatList
               ref={flatListRef}
-              data={rows}
-              inverted
+              data={listRows}
+              // The list mounts at offset 0, which is now the oldest message.
+              // Until the first content-size event has scrolled it to the end it
+              // would flash the beginning of the conversation, so it stays
+              // invisible for that frame — long sessions reach the end over a
+              // few rounds as rows are measured.
+              style={settled ? undefined : s.hidden}
               // Android scrolls a focused child into view; a selectable <Text>
               // takes focus on long-press and used to yank the transcript.
               scrollsChildToFocus={false}
               onLayout={(event) => {
+                // The viewport height is also what tells a short transcript that
+                // its history will never auto-load by scrolling.
+                viewportHeightRef.current = event.nativeEvent.layout.height
                 nav.observe(nav.offset, event.nativeEvent.layout.height)
+                // The reveal timer belongs to the mounted list: armed on session
+                // switch it could fire while the spinner is still up, and the
+                // list would then show its first frame at the oldest message.
+                if (settledRef.current) return
+                if (settleTimerRef.current) clearTimeout(settleTimerRef.current)
+                settleTimerRef.current = setTimeout(revealList, 400)
               }}
               onScrollBeginDrag={() => {
                 // The user took over: re-anchor from the viewport from here on,
                 // so dragging back to the bottom resumes auto-follow. manual()
-                // also releases the navigator's hold.
+                // also releases the navigator's hold. The flag is cleared here,
+                // not only in handleScroll: scroll events are throttled to
+                // 100 ms, and a streaming delta inside that window would yank
+                // the list back to the end mid-drag.
+                followBottomRef.current = false
+                revealList()
                 nav.manual()
                 wakeNavPanel()
               }}
@@ -1355,16 +1414,31 @@ export default function SessionScreen() {
               contentContainerStyle={s.messageList}
               onScroll={handleScroll}
               scrollEventThrottle={100}
+              // Older pages are inserted above the reader: the native helper
+              // keeps their rows still. Appends and streaming growth happen
+              // below, so nothing above them moves and nothing is corrected.
+              maintainVisibleContentPosition={MAINTAIN_VISIBLE_CONTENT_POSITION}
               // Follow streaming output and new messages while the user is at
-              // the bottom. maintainVisibleContentPosition is deliberately not
-              // set: on an inverted list it pins the previously visible row, so
-              // each new assistant message would push itself out of view.
-              onContentSizeChange={() => {
-                if (followBottomRef.current) flatListRef.current?.scrollToOffset({ offset: 0, animated: false })
+              // the bottom.
+              onContentSizeChange={(_width, height) => {
+                // The shortest transcript that still has history behind it would
+                // otherwise be stuck: onStartReached fires once at offset 0 and
+                // never again while the content fits the viewport. One-shot, or
+                // every streaming delta would fetch the whole transcript again.
+                if (!autoLoadedOlderRef.current && height <= viewportHeightRef.current && hasMore && !loadingMore) {
+                  autoLoadedOlderRef.current = true
+                  loadOlderMessages()
+                }
+                if (!followBottomRef.current) return
+                flatListRef.current?.scrollToEnd({ animated: false })
+                // Reveal after the jump has been applied, not on a second equal
+                // height — an idle list never produces one.
+                if (!settledRef.current) requestAnimationFrame(revealList)
               }}
-              onEndReached={handleLoadMore}
-              onEndReachedThreshold={0.5}
-              ListFooterComponent={
+              onStartReached={handleLoadMore}
+              onStartReachedThreshold={0.5}
+              // Older pages arrive at the top of a plain list.
+              ListHeaderComponent={
                 loadingMore ? (
                   <View style={s.loadingMore}>
                     <ActivityIndicator size="small" color={isDark ? "#888888" : "#666666"} />
@@ -1436,8 +1510,8 @@ export default function SessionScreen() {
                 </TouchableOpacity>
               </View>
             )}
-            {/* Empty state rendered OUTSIDE the inverted list to avoid the
-                inverted transform mirroring its text/icon (see #ui-mirror). */}
+            {/* Empty state drawn over the (empty) list so the composer keeps its
+                place whether or not the transcript has rows. */}
             {rows.length === 0 && (
               <View style={s.emptyOverlay} pointerEvents="none">
                 <Ionicons name="chatbubble-outline" size={48} color={isDark ? "#444444" : "#cccccc"} />
@@ -1651,6 +1725,8 @@ const s = StyleSheet.create({
   containerDark: { backgroundColor: "#0a0a0a" },
   loading: { flex: 1, justifyContent: "center", alignItems: "center" },
   listWrap: { flex: 1, position: "relative" },
+  // Used only until the list has settled at the newest message.
+  hidden: { opacity: 0 },
   // ScrollView defaults to flexGrow: 1 (RN's baseVertical), which would let an
   // empty prompt area eat the free space and push the message list up. Grow
   // never, shrink only when the prompts do not fit.
@@ -1707,7 +1783,7 @@ const s = StyleSheet.create({
   // Two stacked chevrons form the double-down Latest caret.
   navDoubleCaret: { flexDirection: "column", alignItems: "center" },
 
-  // Loading more (appears at top in inverted list = ListFooterComponent)
+  // Loading more (older pages arrive at the top = ListHeaderComponent)
   loadingMore: {
     flexDirection: "row",
     justifyContent: "center",
@@ -1717,8 +1793,7 @@ const s = StyleSheet.create({
   },
   loadingMoreText: { fontSize: 13, color: "#999999" },
 
-  // Empty state overlay — sits on top of the (empty) inverted list, untransformed,
-  // so its text/icon render upright and un-mirrored on Android.
+  // Empty state overlay — sits on top of the (empty) transcript.
   emptyOverlay: {
     position: "absolute",
     left: 0,

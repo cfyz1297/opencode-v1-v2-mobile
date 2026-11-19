@@ -197,8 +197,8 @@ export function Markdown({ children }: Props) {
 
   // react-native-marked's default <RNMarkdown> export renders blocks inside a
   // FlatList. Chat messages are rendered inside app/session/[id].tsx's own
-  // *inverted* FlatList (each row a MessageBubble) — nesting one
-  // VirtualizedList inside another, especially an inverted one, is a known
+  // FlatList (each row a MessageBubble) — nesting one
+  // VirtualizedList inside another is a known
   // React Native footgun where the inner list's content can fail to lay out
   // (renders zero height) instead of just warning. We already force
   // scrollEnabled: false and a large initialNumToRender here, which defeats

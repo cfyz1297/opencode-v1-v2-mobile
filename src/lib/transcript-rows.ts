@@ -69,7 +69,8 @@ function isUserRow(row: TranscriptRow): boolean {
 }
 
 /**
- * The navigator's targets: the user's own messages, newest first.
+ * The navigator's targets: the user's own messages, in the order the list
+ * renders them (oldest first).
  *
  * A question is a stable anchor — it never streams, never merges and never
  * changes height — while assistant rows grow and re-merge, which is what made

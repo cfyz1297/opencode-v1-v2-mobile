@@ -1,5 +1,7 @@
-// Inverted lists measure from the newest end; a cell's logical end is its
-// visual top. Keep targets by ID because streaming can change list indices.
+// A plain (non-inverted) transcript: frame y and the scroll offset grow from
+// the oldest row at the top to the newest at the bottom, and `ids` uses that
+// same order. The navigator keeps targets by ID because streaming can change
+// list indices.
 export class MessageNavigation {
   ids: string[] = []
   frames = new Map<string, { y: number; height: number }>()
@@ -14,10 +16,10 @@ export class MessageNavigation {
   // messages (6/12 → 3/12) because each tap re-based on the row above.
   held = false
 
-  // The row the list says is on screen. Frames are only reported for rows
-  // inside the render window, so after a fling the frame math can point at the
-  // newest message while the viewport shows an old one — the counter then read
-  // "12 / 12" and a tap seeked from the wrong base.
+  // The row the scroll report says is on screen. Frames are only reported for
+  // rows inside the render window, so after a fling the frame math can point at
+  // the oldest message while the viewport shows a newer one — the counter then
+  // read the wrong position and a tap seeked from the wrong base.
   visibleId: string | undefined
 
   sync(ids: string[]) {
@@ -37,9 +39,8 @@ export class MessageNavigation {
     return this.visible()
   }
 
-  // Called from the list's viewability callback with the row at the viewport's
-  // top edge — the oldest one on screen, which is what "current message" means
-  // for a transcript read from the bottom up.
+  // Called from handleScroll with the row the reader should be counted at.
+  // Ignored while a jump holds the position.
   setCurrent(id: string | undefined) {
     if (this.held) return
     this.visibleId = id && this.ids.includes(id) ? id : undefined
@@ -64,24 +65,26 @@ export class MessageNavigation {
   }
 
   visible() {
-    const top = this.offset + this.height
-    // Include exact starts, but not the end of the older adjacent cell.
+    const top = this.offset
+    // The row under the top edge of the viewport.
     const visible = this.ids.findIndex((id) => {
       const frame = this.frames.get(id)
-      return frame && frame.height > 0 && frame.y < top && frame.y + frame.height >= top - 1
+      return frame && frame.height > 0 && frame.y <= top + 1 && frame.y + frame.height > top + 1
     })
     if (visible >= 0) return visible
     const measured = this.ids.map((id, index) => ({ index, frame: this.frames.get(id) }))
       .filter((item) => item.frame && item.frame.height > 0)
-    // The newest measured row that starts above the edge: for an answer it is
-    // the question it belongs to.
-    const above = measured.filter((item) => item.frame!.y < top).sort((a, b) => b.frame!.y - a.frame!.y)[0]
+    // The closest measured row above the edge: reading an answer means reading
+    // the question it belongs to, and a question sits above its answer.
+    const above = measured.filter((item) => item.frame!.y <= top).sort((a, b) => b.frame!.y - a.frame!.y)[0]
     if (above) return above.index
-    // Nothing measured above the edge (the reader is past every laid-out row,
-    // e.g. only older rows and a long answer are on screen). The nearest row is
-    // still a better answer than "unknown", which would freeze the buttons.
-    const nearest = measured.sort((a, b) => Math.abs(a.frame!.y - top) - Math.abs(b.frame!.y - top))[0]
-    return nearest?.index ?? -1
+    // Nothing measured above the edge (the reader is past every laid-out row):
+    // the first row below is the next one they are about to read.
+    const below = measured.filter((item) => item.frame!.y > top).sort((a, b) => a.frame!.y - b.frame!.y)[0]
+    if (below) return below.index
+    // Nothing measured at all: no position, which keeps the buttons honest
+    // instead of inventing one.
+    return -1
   }
 
   move(direction: 1 | -1) {
@@ -93,11 +96,14 @@ export class MessageNavigation {
     return index
   }
 
+  // A focused row lands at the top of the viewport: a jump is meant to read that
+  // message, and a row aligned to the bottom edge would put its first lines
+  // above the fold.
   destination() {
     if (!this.target) return undefined
     const frame = this.frames.get(this.target)
     if (!frame || frame.height <= 0 || this.height <= 0) return undefined
-    return Math.max(0, frame.y + frame.height - this.height)
+    return Math.max(0, frame.y)
   }
 
   manual(offset?: number) {
@@ -150,7 +156,7 @@ export class MessageNavigation {
     // moved the counter and nothing else. Keep asking the list to jump to the
     // index; each jump mounts rows that report their real frames.
     if (attempt === 0 || this.height <= 0) {
-      list.scrollToIndex({ index, viewPosition: 1, animated: false })
+      list.scrollToIndex({ index, viewPosition: 0, animated: false })
       return true
     }
     // RN may accept estimated metrics without mounting the target. Advance

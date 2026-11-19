@@ -1,0 +1,79 @@
+// The transcript is a plain list: oldest at the top, newest at the bottom. That
+// is the whole fix for "the text I am reading crawls away while an answer
+// streams" — growth at the bottom cannot move text above it.
+//
+// The inverted version needed a correction for the same symptom, and four
+// attempts failed in the field (per-cell deltas were summed, a baseline was read
+// after being overwritten, and the native maintainer did nothing on an inverted
+// list). These checks keep the list uninverted and keep the pieces that depend
+// on the direction in the right place.
+import { test } from "node:test"
+import assert from "node:assert/strict"
+import { readFileSync } from "node:fs"
+
+const sessionSource = readFileSync(new URL("../../../app/session/[id].tsx", import.meta.url), "utf8")
+
+function listBlock(): string {
+  const start = sessionSource.lastIndexOf("<FlatList")
+  assert.ok(start >= 0, "the session screen must render a FlatList")
+  return sessionSource.slice(start, sessionSource.indexOf("ListHeaderComponent", start))
+}
+
+test("the transcript is not inverted", () => {
+  const block = listBlock()
+  assert.doesNotMatch(block, /\binverted\b/, "an inverted list moves every row when the newest one grows")
+  assert.match(block, /data=\{listRows\}/, "rows must be rendered oldest first")
+  assert.match(sessionSource, /const listRows = useMemo\(\(\) => \[\.\.\.rows\]\.reverse\(\)/, "and the order flipped only once")
+})
+
+test("growing content is followed only from the bottom", () => {
+  const block = listBlock()
+  assert.match(block, /if \(!followBottomRef\.current\) return[\s\S]{0,120}scrollToEnd/, "the newest text is kept in view")
+  assert.doesNotMatch(block, /scrollToOffset\(\{ offset: [^)]*\+/, "no measured correction arithmetic is left")
+})
+
+test("older pages load from the start of the list", () => {
+  const block = listBlock()
+  assert.match(block, /onStartReached=\{handleLoadMore\}/, "history lives at the top of a plain list")
+  assert.doesNotMatch(block, /onEndReached=/, "onEndReached would fire at the newest end instead")
+})
+
+// Prepend is the one case a plain list still needs the native helper for: rows
+// inserted above the reader would push their text down.
+test("rows inserted above the reader are kept still", () => {
+  assert.match(listBlock(), /maintainVisibleContentPosition=\{MAINTAIN_VISIBLE_CONTENT_POSITION\}/, "prepends must not move the reader")
+})
+
+test("the list stays hidden until it has settled at the newest message", () => {
+  // It mounts at offset 0, which is now the oldest row: showing that frame
+  // flashes the beginning of a long conversation.
+  assert.match(listBlock(), /style=\{settled \? undefined : s\.hidden\}/, "the first frames must not be shown")
+  assert.match(listBlock(), /requestAnimationFrame\(revealList\)/, "revealed after the jump lands, not on a second equal height")
+  assert.match(sessionSource, /settleTimerRef\.current = setTimeout\(revealList, 400\)/, "and by a timer if no layout event ever comes")
+  const drag = listBlock().slice(listBlock().indexOf("onScrollBeginDrag"))
+  assert.match(drag, /revealList\(\)/, "touching the list reveals it too")
+})
+
+// A short transcript never re-fires onStartReached, so it needs one automatic
+// fetch — but exactly one: without the ref, every streaming delta would fetch
+// the whole transcript again.
+test("a short transcript loads history once, not on every growth", () => {
+  const block = listBlock()
+  assert.match(block, /if \(!autoLoadedOlderRef\.current && height <= viewportHeightRef\.current && hasMore && !loadingMore\)/, "the one-shot guard must cover the whole condition")
+  assert.match(block, /autoLoadedOlderRef\.current = true\n\s*loadOlderMessages\(\)/, "the ref is set before the fetch")
+  assert.match(sessionSource, /autoLoadedOlderRef\.current = false/, "and reset for the next session")
+})
+
+// Without this guard the initial onStartReached at offset 0 pulls a page of
+// history on every session open.
+test("history is not pulled while the reader follows the stream", () => {
+  const at = sessionSource.indexOf("const handleLoadMore")
+  const fn = sessionSource.slice(at, at + 420)
+  assert.match(fn, /if \(followBottomRef\.current\) return/, "loading older requires the reader to be away from the bottom")
+})
+
+// Android scrolls a focused child into view; a selectable <Text> takes focus on
+// long-press and used to yank the transcript (facebook/react-native#33440).
+test("long-press selection still cannot scroll the list", () => {
+  assert.match(listBlock(), /scrollsChildToFocus=\{false\}/, "a focused selectable text must not be scrolled to")
+})

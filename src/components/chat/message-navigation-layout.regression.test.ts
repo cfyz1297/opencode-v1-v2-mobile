@@ -58,7 +58,7 @@ test("a navigator tap owns the position until the user takes over", () => {
   assert.match(around("const moveMessage"), /followBottomRef\.current = false/, "a tap must stop auto-follow")
   const scroll = around("const handleScroll")
   assert.match(scroll, /!nav\.held && atBottom/, "content growth must not snap back while held")
-  assert.match(scroll, /if \(atBottom && !nav\.held\) nav\.setCurrent\(nav\.ids\[0\]\)/, "at the bottom the newest message is current")
+  assert.match(scroll, /if \(atBottom && !nav\.held\) nav\.setCurrent\(nav\.ids\[nav\.ids\.length - 1\]\)/, "at the bottom the newest message is current")
   assert.match(around("onScrollBeginDrag={() =>"), /nav\.manual\(\)/, "a finger on the list takes over")
   assert.match(around("const scrollToBottom"), /nav\.release\(\)/, "Latest hands the position back")
 })
@@ -86,16 +86,16 @@ test("one tap jumps by index, not by a frame-derived offset", () => {
 test("the navigator walks the user's own messages", () => {
   // Assistant rows stream, grow and re-merge, so navigating them was
   // unreliable; a question is a fixed anchor.
-  assert.match(source, /userRowIds\(rows\)/, "targets come from the user rows")
+  assert.match(source, /userRowIds\(listRows\)/, "targets come from the user rows, in list order")
   const jump = source.slice(source.indexOf("const jumpTo"), source.indexOf("const moveMessage"))
   assert.match(jump, /rowIndexById\.get\(id\)/, "the jump maps the question to a list index")
   assert.match(jump, /animated: false/, "an animated jump over a long transcript reads as a freeze")
 })
 
 test("the position comes from measured user rows, not from viewability", () => {
-  // Viewability does not fire on an inverted list until something scrolls, so a
-  // freshly opened session had no position: the counter read "5 / 5" at the top
-  // and the buttons did nothing until a manual swipe.
+  // Viewability does not fire until something scrolls, so a freshly opened
+  // session had no position: the counter read "5 / 5" at the top and the buttons
+  // did nothing until a manual swipe.
   assert.doesNotMatch(source, /onViewableItemsChanged/, "no dependency on the viewability callback")
   assert.doesNotMatch(source, /viewabilityConfig/, "and no viewability config")
   // The cell wrapper is the only view positioned inside the content container;
@@ -109,17 +109,21 @@ test("the position comes from measured user rows, not from viewability", () => {
 })
 
 test("a tap works before anything has been measured", () => {
-  // Opening a session starts at the newest message, so index 0 is the honest
-  // base — not -1, which made every button a no-op.
+  // Opening a session starts at the newest message. The list runs oldest →
+  // newest, so that is the LAST index — not 0, and not -1, which made every
+  // button a no-op.
   const at = source.indexOf("const moveMessage")
   assert.ok(at >= 0, "moveMessage must exist")
   const move = source.slice(at, at + 900)
-  assert.match(move, /Math\.max\(0, nav\.current\(\)\)/, "an unknown position starts from the newest question")
+  assert.match(move, /const current = known >= 0 \? known : nav\.ids\.length - 1/, "an unknown position starts from the newest question")
 })
 
 test("an unknown position does not claim to be the oldest", () => {
-  assert.match(source, /const navCurrent = navIndex >= 0 \? navTotal - navIndex : navTotal/)
-  assert.match(source, /const nextDisabled = navIndex === 0/, "only the newest message disables Next")
+  // The list runs oldest → newest, so an unknown position resolves to the last
+  // row: a session opens at the newest message.
+  assert.match(source, /const resolvedNavIndex = navIndex >= 0 \? navIndex : navTotal - 1/)
+  assert.match(source, /const navCurrent = resolvedNavIndex \+ 1/)
+  assert.match(source, /const nextDisabled = resolvedNavIndex >= navTotal - 1/, "only the newest message disables Next")
 })
 
 test("the buttons are wide enough to hit", () => {

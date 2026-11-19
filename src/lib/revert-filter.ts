@@ -28,9 +28,10 @@ export interface MessageDataItem {
 const EMPTY_PARTS: Part[] = []
 
 /**
- * Assemble the inverted FlatList data for the chat screen: filter messages
- * hidden by the pending revert, attach each message's parts, then reverse so
- * the newest message renders at the bottom of the inverted list.
+ * Assemble the transcript list data for the chat screen: filter messages
+ * hidden by the pending revert and attach each message's parts, newest first.
+ * The chat screen reverses the result once so the newest message renders at the
+ * bottom of a plain list.
  *
  * BUG-032: streaming deltas replace the `parts` record on every token. When a
  * cache is supplied, unchanged messages keep the exact same item object (and
