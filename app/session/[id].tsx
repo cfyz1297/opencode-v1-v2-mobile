@@ -871,15 +871,22 @@ export default function SessionScreen() {
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
       const { contentOffset, layoutMeasurement } = event.nativeEvent
       listOffsetRef.current = contentOffset.y
-      const atBottom = shouldFollowBottom(contentOffset.y)
-      // Not while a finger or a fling is on the list: the drag decides, and a
-      // correction mid-gesture would yank the transcript under the finger.
-      followBottomRef.current = !nav.held && !scrollActiveRef.current && atBottom
       nav.observe(contentOffset.y, layoutMeasurement.height)
-      // At the bottom the current message is the newest one: the topmost visible
-      // row can be several above it, which read as "3 / 12" at the end of the
-      // transcript. Ignored while the navigator holds the position.
-      if (atBottom && !nav.held) nav.setCurrent(nav.ids[0])
+      const atBottom = shouldFollowBottom(contentOffset.y)
+      // Derived from the position on every event, never latched: a missed
+      // gesture-end event used to leave auto-follow off for good, and the
+      // stream then grew off-screen while the list held a stale position.
+      // A jump in flight keeps the navigator in charge instead.
+      followBottomRef.current = atBottom && !nav.held && nav.expected === undefined
+      // Nothing to protect at the newest end; a fling that ends here must not
+      // leave the "gesture owns the position" flag stuck on.
+      if (atBottom) {
+        scrollActiveRef.current = false
+        // At the bottom the current message is the newest one: the topmost
+        // visible row can be several above it, which read as "3 / 12" at the
+        // end of the transcript. Ignored while the navigator holds the position.
+        if (!nav.held) nav.setCurrent(nav.ids[0])
+      }
       setCurrentNavIndex((prev) => {
         const next = nav.current()
         return prev === next ? prev : next
@@ -1407,12 +1414,14 @@ export default function SessionScreen() {
                 // Reading somewhere up the transcript: a growing answer moves
                 // every other row, which looked like the app scrolling under
                 // the finger. Move the offset by the same amount so the text
-                // stays exactly where it was left. A drag, a fling or a
-                // navigator jump owns the position: correcting mid-flight would
-                // fight it.
+                // stays exactly where it was left. A drag, a fling or a jump in
+                // flight owns the position; correcting then would fight it. At
+                // the newest end there is nothing to hold, and a wrong guess
+                // there would hide the answer that is streaming in.
                 const grown = anchorShift(anchoredNewestRef.current, newestCellRef.current)
                 anchoredNewestRef.current = newestCellRef.current
-                if (grown <= 0 || scrollActiveRef.current || nav.held) return
+                if (grown <= 0 || scrollActiveRef.current || nav.expected !== undefined) return
+                if (shouldFollowBottom(listOffsetRef.current)) return
                 const next = listOffsetRef.current + grown
                 listOffsetRef.current = next
                 flatListRef.current?.scrollToOffset({ offset: next, animated: false })
