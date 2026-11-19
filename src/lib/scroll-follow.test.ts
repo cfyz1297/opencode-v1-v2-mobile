@@ -1,6 +1,6 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
-import { shouldFollowBottom, frameShift, contentGrowthAction, FOLLOW_BOTTOM_MAX_OFFSET } from "./scroll-follow.ts"
+import { shouldFollowBottom, frameShift, measuredShift, contentGrowthAction, FOLLOW_BOTTOM_MAX_OFFSET } from "./scroll-follow.ts"
 
 test("the newest end is the bottom of an inverted transcript", () => {
   assert.equal(shouldFollowBottom(0), true)
@@ -31,6 +31,23 @@ test("first measurement and sub-pixel jitter are not movement", () => {
 // below broke a shipped build at least once, so each case is pinned.
 const idle = { atBottom: false, held: false, dragging: false, grown: 0 }
 
+// Rows pushed by one growing answer all report the same move. Summing them
+// multiplied the correction by the number of mounted rows and threw the list
+// across the transcript — the reported "it scrolls itself" regression.
+test("one correction comes from a single move, never from their sum", () => {
+  assert.equal(measuredShift([60, 60, 60, 60]), 60)
+  assert.equal(measuredShift([]), 0)
+  assert.equal(measuredShift([0, 0]), 0)
+})
+
+// shortcut: a far-end change (the "loading older" footer appearing) can be
+// mistaken for the reader's move and drift the list by its height once. Only
+// the newest row's height knows better; upgrade if that drift is reported.
+test("the strongest single move wins, so a lone far-end row cannot multiply", () => {
+  assert.equal(measuredShift([0, 0, 40]), 40)
+  assert.equal(measuredShift([-12, 0, 0]), -12)
+})
+
 test("at the newest end the list pins to the stream", () => {
   assert.deepEqual(contentGrowthAction({ ...idle, atBottom: true }), { kind: "pin" })
 })
@@ -54,4 +71,10 @@ test("a growing answer cannot move the list while nobody reads up there", () => 
 
 test("no movement leaves the offset alone", () => {
   assert.deepEqual(contentGrowthAction({ ...idle, grown: 0 }), { kind: "none" })
+})
+
+// Shrinking content pulls the offset down; clamping that at 0 would land on the
+// newest end, so a negative move must be ignored outright.
+test("shrinking content never scrolls the reader away", () => {
+  assert.deepEqual(contentGrowthAction({ ...idle, grown: -60 }), { kind: "none" })
 })

@@ -25,7 +25,7 @@ import { useKeyboardHeight } from "../../src/lib/use-keyboard-height"
 import { buildMessageData, type MessageDataItem } from "../../src/lib/revert-filter"
 import { splitAnswered, splitByMessage } from "../../src/lib/answered-questions"
 import { runTotals } from "../../src/lib/message-run"
-import { shouldFollowBottom, frameShift, contentGrowthAction } from "../../src/lib/scroll-follow"
+import { shouldFollowBottom, frameShift, measuredShift, contentGrowthAction } from "../../src/lib/scroll-follow"
 import { collectSubagents } from "../../src/lib/subagent-status"
 import { useTranslation } from "react-i18next"
 import * as ImagePicker from "expo-image-picker"
@@ -250,8 +250,8 @@ export default function SessionScreen() {
   // the drag and cancel the fling.
   const scrollActiveRef = useRef(false)
   // How far the rows have moved inside the content since the last content-size
-  // event, summed from their own layouts. Whatever grows, this is the exact
-  // distance the offset must travel to leave the reader's text in place.
+  // event. One correction at a time, taken from the strongest single move: the
+  // rows all shift together, so adding them up would multiply the correction.
   const pendingShiftRef = useRef(0)
   const cellYRef = useRef(new Map<string, number>())
 
@@ -472,6 +472,10 @@ export default function SessionScreen() {
     // stale scroll event queued mid-jump can't resurrect the old position.
     cancelJump()
     nav.manual(0)
+    // The offset the next content-size event reads must already be the target,
+    // or a streaming delta arriving mid-animation is treated as "reading up"
+    // and cancels the jump.
+    listOffsetRef.current = 0
     flatListRef.current?.scrollToOffset({ offset: 0, animated })
   }, [nav, cancelJump])
 
@@ -927,7 +931,10 @@ export default function SessionScreen() {
             // number current even when the content-size event arrives first.
             const y = event.nativeEvent.layout.y
             const known = cellYRef.current.get(row.id)
-            pendingShiftRef.current += frameShift(known, y)
+            const moved = frameShift(known, y)
+            // Strongest single move, not a running sum: every row that is
+            // pushed reports the same distance, and summing multiplied it.
+            pendingShiftRef.current = measuredShift([pendingShiftRef.current, moved])
             cellYRef.current.set(row.id, y)
             props.onLayout?.(event)
             setCurrentNavIndex((prev) => {

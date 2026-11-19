@@ -19,7 +19,8 @@ test("content growth runs through the shared decision", () => {
 })
 
 test("the shift is the movement the rows themselves reported", () => {
-  assert.match(sessionSource, /pendingShiftRef\.current \+= frameShift\(known, y\)/, "cells must report their displacement")
+  assert.match(sessionSource, /const moved = frameShift\(known, y\)/, "cells must report their displacement")
+  assert.match(sessionSource, /measuredShift\(\[pendingShiftRef\.current, moved\]\)/, "one move, not their sum")
   const block = listBlock()
   assert.match(block, /const grown = pendingShiftRef\.current/, "the content-size event must consume the measured movement")
   assert.match(block, /pendingShiftRef\.current = 0/, "the movement must be consumed once")
