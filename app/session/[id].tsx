@@ -25,7 +25,7 @@ import { useKeyboardHeight } from "../../src/lib/use-keyboard-height"
 import { buildMessageData, type MessageDataItem } from "../../src/lib/revert-filter"
 import { splitAnswered, splitByMessage } from "../../src/lib/answered-questions"
 import { runTotals } from "../../src/lib/message-run"
-import { shouldFollowBottom, anchorShift } from "../../src/lib/scroll-follow"
+import { shouldFollowBottom, anchorShift, contentGrowthAction } from "../../src/lib/scroll-follow"
 import { collectSubagents } from "../../src/lib/subagent-status"
 import { useTranslation } from "react-i18next"
 import * as ImagePicker from "expo-image-picker"
@@ -1395,29 +1395,26 @@ export default function SessionScreen() {
               // set: on an inverted list it pins the previously visible row, so
               // each new assistant message would push itself out of view.
               onContentSizeChange={() => {
-                // The decision comes from the live offset, never from a stored
-                // flag: a flag stuck on "reading above" pushed the streaming
-                // answer below the viewport and it looked like nothing arrived.
-                const atBottom = shouldFollowBottom(listOffsetRef.current)
+                // Delta first, baseline second: reading them in the other order
+                // made every shift zero and killed the correction silently.
+                const grown = anchorShift(anchoredNewestRef.current, newestCellRef.current)
                 anchoredNewestRef.current = newestCellRef.current
-                if (atBottom) {
-                  // At offset 0 the inverted list already shows the growing
-                  // answer, so skipping the pin can never hide the stream. A
-                  // navigator tap made at the bottom is left alone: it owns the
-                  // next position, and pinning now would snap it back.
-                  if (!nav.held && !scrollActiveRef.current) {
-                    flatListRef.current?.scrollToOffset({ offset: 0, animated: false })
-                  }
+                const action = contentGrowthAction({
+                  atBottom: shouldFollowBottom(listOffsetRef.current),
+                  held: nav.held,
+                  dragging: scrollActiveRef.current,
+                  jumping: nav.expected !== undefined,
+                  grown,
+                })
+                if (action.kind === "none") return
+                if (action.kind === "pin") {
+                  flatListRef.current?.scrollToOffset({ offset: 0, animated: false })
                   return
                 }
-                // Reading somewhere up the transcript: a growing answer moves
-                // every other row, which looked like the app scrolling under
-                // the finger. Move the offset by the same amount so the text
-                // stays exactly where it was left. A drag or a jump in flight
-                // owns the position; correcting then would fight it.
-                const grown = anchorShift(anchoredNewestRef.current, newestCellRef.current)
-                if (grown <= 0 || scrollActiveRef.current || nav.expected !== undefined) return
-                const next = listOffsetRef.current + grown
+                // Reading up the transcript: a growing answer moves every other
+                // row, which looked like the app scrolling under the finger.
+                // Move the offset by the same amount so the text stays put.
+                const next = listOffsetRef.current + action.by
                 listOffsetRef.current = next
                 flatListRef.current?.scrollToOffset({ offset: next, animated: false })
               }}

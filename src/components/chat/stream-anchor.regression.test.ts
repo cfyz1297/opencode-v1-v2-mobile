@@ -1,7 +1,7 @@
-// Streaming an answer must not scroll the transcript out from under a reader
-// who stopped at some line. The inverted list shifts every older row down when
-// the newest row grows; the screen corrects the offset by that same amount —
-// but only when the viewport really sits away from the newest end.
+// The transcript must keep a reader's place while an answer streams in, and it
+// must keep following the answer at the newest end. The decision itself is
+// unit-tested in src/lib/scroll-follow.test.ts; this file only checks that the
+// screen wires it to the list and reads the delta before overwriting it.
 import { test } from "node:test"
 import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
@@ -14,10 +14,18 @@ function listBlock(): string {
   return sessionSource.slice(start, sessionSource.indexOf("onEndReached", start))
 }
 
-test("content growth while reading away from the bottom is anchored to the newest row", () => {
+test("content growth runs through the shared decision", () => {
+  assert.match(listBlock(), /contentGrowthAction\(\{/, "the list must not re-implement the decision")
+})
+
+// Measured-then-overwritten is the bug that shipped: the shift was always zero
+// and the reading position drifted while an answer streamed.
+test("the growth delta is read before the baseline is replaced", () => {
   const block = listBlock()
-  assert.match(block, /const atBottom = shouldFollowBottom\(listOffsetRef\.current\)/, "the live offset decides")
-  assert.match(block, /onContentSizeChange=\{[\s\S]{0,1400}anchorShift\(/, "the reading position must be kept while an answer streams")
+  const read = block.indexOf("const grown = anchorShift(")
+  const write = block.indexOf("anchoredNewestRef.current = newestCellRef.current")
+  assert.ok(read >= 0 && write >= 0, "both the delta and the baseline must be present")
+  assert.ok(read < write, "writing the baseline first makes the delta zero")
 })
 
 test("the newest row's height is measured as the anchor", () => {
@@ -29,18 +37,7 @@ test("the newest row's height is measured as the anchor", () => {
 // the viewport — the answer looked like it never streamed at all.
 test("following is decided from the live offset, not from a stored flag", () => {
   assert.doesNotMatch(sessionSource, /followBottomRef/, "a latched follow flag is what broke the stream")
-})
-
-// A navigator tap at the bottom owns the next position; pinning to 0 in the
-// same frame snapped it back. Skipping the pin is safe because offset 0 already
-// shows the growing answer.
-test("a jump tapped at the bottom is not undone by a pin", () => {
-  const block = listBlock()
-  assert.match(block, /if \(!nav\.held && !scrollActiveRef\.current\) \{[\s\S]{0,160}scrollToOffset\(\{ offset: 0/, "the pin must yield to the navigator")
-})
-
-test("the correction never runs during a jump", () => {
-  assert.match(listBlock(), /nav\.expected !== undefined\) return/, "a jump in flight owns the position")
+  assert.match(listBlock(), /atBottom: shouldFollowBottom\(listOffsetRef\.current\)/, "the live offset decides")
 })
 
 test("a drag takes over immediately and releases at the bottom", () => {

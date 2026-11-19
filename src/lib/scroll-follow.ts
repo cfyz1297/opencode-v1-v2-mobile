@@ -25,3 +25,27 @@ export function anchorShift(prev: NewestCellFrame | undefined, next: NewestCellF
   if (prev.id === next.id) return Math.max(0, next.height - prev.height)
   return Math.max(0, next.height)
 }
+
+export type GrowthAction = { kind: "pin" } | { kind: "shift"; by: number } | { kind: "none" }
+
+export interface GrowthInput {
+  atBottom: boolean
+  held: boolean
+  dragging: boolean
+  jumping: boolean
+  grown: number
+}
+
+// What to do with the scroll position when the content grew. Kept as one pure
+// decision because the screen previously inlined it and two hand-edits there
+// silently broke streaming: a stored follow flag hid the whole answer, and a
+// baseline written before the delta was read made every shift zero.
+export function contentGrowthAction(input: GrowthInput): GrowthAction {
+  if (input.atBottom) {
+    // Offset 0 already shows the growing answer, so yielding to a navigator
+    // tap can never hide it.
+    return input.held || input.dragging ? { kind: "none" } : { kind: "pin" }
+  }
+  if (input.grown <= 0 || input.dragging || input.jumping) return { kind: "none" }
+  return { kind: "shift", by: input.grown }
+}
