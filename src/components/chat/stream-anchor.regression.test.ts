@@ -27,5 +27,6 @@ test("the newest row's height is measured as the anchor", () => {
 test("a drag takes over immediately and releases at the bottom", () => {
   const block = listBlock()
   assert.match(block, /onScrollBeginDrag=\{[\s\S]{0,300}followBottomRef\.current = false/, "a finger on the list stops auto-follow at once")
-  assert.match(block, /onScrollEndDrag=\{[\s\S]{0,300}shouldFollowBottom/, "releasing at the bottom resumes auto-follow")
+  assert.match(block, /onScrollEndDrag=\{[\s\S]{0,300}handleScroll\(event\)/, "the end of the gesture settles the position")
+  assert.match(block, /onMomentumScrollEnd=\{[\s\S]{0,300}handleScroll\(event\)/, "so does the end of the fling")
 })

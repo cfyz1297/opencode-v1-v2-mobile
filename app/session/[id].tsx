@@ -254,6 +254,9 @@ export default function SessionScreen() {
   // event. Streaming grows exactly this cell; the difference is how far every
   // older row was pushed, so the offset has to grow by it to stay in place.
   const newestCellRef = useRef<{ id: string; height: number } | undefined>(undefined)
+  // Kept in a ref, not in the callback's deps: a new CellRendererComponent
+  // identity remounts every row the list keeps mounted.
+  const newestRowIdRef = useRef<string | undefined>(undefined)
   const anchoredNewestRef = useRef<{ id: string; height: number } | undefined>(undefined)
 
   // Message navigation (#214) — docked strip, not floating controls. `nav` is
@@ -905,7 +908,7 @@ export default function SessionScreen() {
   const rowIndexById = useMemo(() => new Map(rows.map((row, at) => [row.id, at])), [rows])
   nav.sync(navigableIds)
   // rows[0] is the newest row — the assistant answer that streams.
-  const newestRowId = rows[0]?.id
+  newestRowIdRef.current = rows[0]?.id
 
   // The position needs each user message's Y inside the content container, and
   // only the cell wrapper is positioned there: an onLayout on the rendered row
@@ -925,7 +928,7 @@ export default function SessionScreen() {
             if (isUser) nav.frames.set(row.id, event.nativeEvent.layout)
             // The newest row is the one that grows while an answer streams;
             // its height is the anchor correction for everything above it.
-            if (row.id === newestRowId) {
+            if (row.id === newestRowIdRef.current) {
               newestCellRef.current = { id: row.id, height: event.nativeEvent.layout.height }
             }
             props.onLayout?.(event)
@@ -939,7 +942,7 @@ export default function SessionScreen() {
         </View>
       )
     },
-    [nav, newestRowId],
+    [nav],
   )
 
   const jumpTo = useCallback(
@@ -1315,10 +1318,12 @@ export default function SessionScreen() {
                 wakeNavPanel()
               }}
               // Keep the panel up until the fling settles, then let it fade.
+              // The fling's end is the authoritative position: the throttled
+              // scroll stream can drop the last event, which left the counter
+              // one message behind at the top of a session.
               onScrollEndDrag={(event) => {
                 scrollActiveRef.current = false
-                listOffsetRef.current = event.nativeEvent.contentOffset.y
-                followBottomRef.current = shouldFollowBottom(event.nativeEvent.contentOffset.y)
+                handleScroll(event)
                 wakeNavPanel()
               }}
               onMomentumScrollBegin={() => {
@@ -1326,8 +1331,7 @@ export default function SessionScreen() {
               }}
               onMomentumScrollEnd={(event) => {
                 scrollActiveRef.current = false
-                listOffsetRef.current = event.nativeEvent.contentOffset.y
-                followBottomRef.current = shouldFollowBottom(event.nativeEvent.contentOffset.y)
+                handleScroll(event)
                 wakeNavPanel()
               }}
               onScrollToIndexFailed={({ index, averageItemLength }) => {
