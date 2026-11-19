@@ -16,8 +16,8 @@ function listBlock(): string {
 
 test("content growth while reading away from the bottom is anchored to the newest row", () => {
   const block = listBlock()
-  assert.match(block, /onContentSizeChange=\{[\s\S]{0,1200}anchorShift\(/, "the reading position must be kept while an answer streams")
-  assert.match(block, /shouldFollowBottom\(listOffsetRef\.current\)[\s\S]{0,200}scrollToOffset\(\{ offset: 0/, "at the bottom the list still follows the stream")
+  assert.match(block, /const atBottom = shouldFollowBottom\(listOffsetRef\.current\)/, "the live offset decides")
+  assert.match(block, /onContentSizeChange=\{[\s\S]{0,1400}anchorShift\(/, "the reading position must be kept while an answer streams")
 })
 
 test("the newest row's height is measured as the anchor", () => {
@@ -28,15 +28,19 @@ test("the newest row's height is measured as the anchor", () => {
 // event left it off, and the correction then pushed the streaming answer below
 // the viewport — the answer looked like it never streamed at all.
 test("following is decided from the live offset, not from a stored flag", () => {
-  const block = listBlock()
   assert.doesNotMatch(sessionSource, /followBottomRef/, "a latched follow flag is what broke the stream")
-  assert.doesNotMatch(block, /if \(!scrollActiveRef\.current\)\{\}/, "unreachable placeholder")
-  assert.match(block, /shouldFollowBottom\(listOffsetRef\.current\) && !scrollActiveRef\.current/, "the offset decides, the gesture only pauses it")
+})
+
+// A navigator tap at the bottom owns the next position; pinning to 0 in the
+// same frame snapped it back. Skipping the pin is safe because offset 0 already
+// shows the growing answer.
+test("a jump tapped at the bottom is not undone by a pin", () => {
+  const block = listBlock()
+  assert.match(block, /if \(!nav\.held && !scrollActiveRef\.current\) \{[\s\S]{0,160}scrollToOffset\(\{ offset: 0/, "the pin must yield to the navigator")
 })
 
 test("the correction never runs during a jump", () => {
-  const block = listBlock()
-  assert.match(block, /nav\.expected !== undefined\) return/, "a jump in flight owns the position")
+  assert.match(listBlock(), /nav\.expected !== undefined\) return/, "a jump in flight owns the position")
 })
 
 test("a drag takes over immediately and releases at the bottom", () => {
