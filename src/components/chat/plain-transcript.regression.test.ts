@@ -28,7 +28,14 @@ test("the transcript is not inverted", () => {
 
 test("growing content is followed only from the bottom", () => {
   const block = listBlock()
-  assert.match(block, /if \(!followBottomRef\.current\) return[\s\S]{0,120}scrollToEnd/, "the newest text is kept in view")
+  // scrollToEnd stops at the last row's measured frame, which lags the chunk
+  // that just arrived; the content size in the event is the real end.
+  assert.match(
+    block,
+    /if \(!followBottomRef\.current\) return[\s\S]{0,400}scrollToOffset\(\s*\{\s*offset: endScrollOffset\(height, viewportHeightRef\.current\)/,
+    "the newest text is kept in view",
+  )
+  assert.doesNotMatch(block, /\.scrollToEnd\(/, "a row frame must not decide where the end is")
   assert.doesNotMatch(block, /scrollToOffset\(\{ offset: [^)]*\+/, "no measured correction arithmetic is left")
 })
 

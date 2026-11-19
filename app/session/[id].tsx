@@ -25,7 +25,7 @@ import { useKeyboardHeight } from "../../src/lib/use-keyboard-height"
 import { buildMessageData, type MessageDataItem } from "../../src/lib/revert-filter"
 import { splitAnswered, splitByMessage } from "../../src/lib/answered-questions"
 import { runTotals } from "../../src/lib/message-run"
-import { isNearBottom, MAINTAIN_VISIBLE_CONTENT_POSITION } from "../../src/lib/scroll-follow"
+import { endScrollOffset, isNearBottom, MAINTAIN_VISIBLE_CONTENT_POSITION } from "../../src/lib/scroll-follow"
 import { collectSubagents } from "../../src/lib/subagent-status"
 import { useTranslation } from "react-i18next"
 import * as ImagePicker from "expo-image-picker"
@@ -1467,7 +1467,13 @@ export default function SessionScreen() {
                   loadOlderMessages()
                 }
                 if (!followBottomRef.current) return
-                flatListRef.current?.scrollToEnd({ animated: false })
+                // Exactly the end of the content that just arrived: scrollToEnd
+                // would aim at the last row's stale measured frame and stop a
+                // line short of the streaming text.
+                flatListRef.current?.scrollToOffset({
+                  offset: endScrollOffset(height, viewportHeightRef.current),
+                  animated: false,
+                })
                 // Reveal after the jump has been applied, not on a second equal
                 // height — an idle list never produces one.
                 if (!settledRef.current) requestAnimationFrame(revealList)

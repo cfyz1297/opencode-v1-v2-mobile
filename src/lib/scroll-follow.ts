@@ -16,6 +16,14 @@ export function isNearBottom(offsetY: number, viewportHeight: number, contentHei
   return contentHeight - (offsetY + viewportHeight) <= FOLLOW_BOTTOM_MAX_OFFSET
 }
 
+// The offset that shows the last pixel of the content. `scrollToEnd` aims at
+// the last row's measured frame instead, and a streaming chunk grows that row
+// before the frame is re-measured: the list stops a line short and the rest has
+// to be dragged. The height in the content-size event is already the real end.
+export function endScrollOffset(contentHeight: number, viewportHeight: number): number {
+  return Math.max(0, contentHeight - viewportHeight)
+}
+
 // Older pages are inserted above the reader, which in a plain list pushes every
 // visible row down. This is the case the native helper was built for, and the
 // only one it is used for here: appends and streaming growth at the bottom move
