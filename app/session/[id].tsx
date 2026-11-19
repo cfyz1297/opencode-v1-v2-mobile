@@ -1403,10 +1403,12 @@ export default function SessionScreen() {
                 // Reading somewhere up the transcript: a growing answer moves
                 // every other row, which looked like the app scrolling under
                 // the finger. Move the offset by the same amount so the text
-                // stays exactly where it was left.
+                // stays exactly where it was left. A drag, a fling or a
+                // navigator jump owns the position: correcting mid-flight would
+                // fight it.
                 const grown = anchorShift(anchoredNewestRef.current, newestCellRef.current)
                 anchoredNewestRef.current = newestCellRef.current
-                if (grown <= 0 || scrollActiveRef.current) return
+                if (grown <= 0 || scrollActiveRef.current || nav.held) return
                 const next = listOffsetRef.current + grown
                 listOffsetRef.current = next
                 flatListRef.current?.scrollToOffset({ offset: next, animated: false })

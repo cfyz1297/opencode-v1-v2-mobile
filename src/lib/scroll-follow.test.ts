@@ -37,5 +37,6 @@ test("a new newest row shifts the transcript by its whole height", () => {
 
 test("unmeasured cells and first layouts need no correction", () => {
   assert.equal(anchorShift({ id: "a", height: 200 }, undefined), 0)
+  assert.equal(anchorShift(undefined, { id: "b", height: 90 }), 0)
 })
 

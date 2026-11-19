@@ -18,9 +18,10 @@ export interface NewestCellFrame {
 // shifts by the same amount — without the correction the text the user is
 // reading moves under their eyes. A new row counts with its full height
 // (everything behind it shifted that far); growth at the far, oldest end (an
-// older page or the loading footer) leaves the newest row alone, so 0.
+// older page or the loading footer) leaves the newest row alone, so 0. An
+// unknown baseline means no measurement yet, where a guess would be a jump.
 export function anchorShift(prev: NewestCellFrame | undefined, next: NewestCellFrame | undefined): number {
-  if (!next) return 0
-  if (prev && prev.id === next.id) return Math.max(0, next.height - prev.height)
+  if (!prev || !next) return 0
+  if (prev.id === next.id) return Math.max(0, next.height - prev.height)
   return Math.max(0, next.height)
 }
