@@ -25,7 +25,7 @@ import { useKeyboardHeight } from "../../src/lib/use-keyboard-height"
 import { buildMessageData, type MessageDataItem } from "../../src/lib/revert-filter"
 import { splitAnswered, splitByMessage } from "../../src/lib/answered-questions"
 import { runTotals } from "../../src/lib/message-run"
-import { shouldFollowBottom, anchorShift, contentGrowthAction } from "../../src/lib/scroll-follow"
+import { shouldFollowBottom, frameShift, contentGrowthAction } from "../../src/lib/scroll-follow"
 import { collectSubagents } from "../../src/lib/subagent-status"
 import { useTranslation } from "react-i18next"
 import * as ImagePicker from "expo-image-picker"
@@ -249,14 +249,11 @@ export default function SessionScreen() {
   // A finger or a fling owns the position — an anchor correction would fight
   // the drag and cancel the fling.
   const scrollActiveRef = useRef(false)
-  // Height of the newest row, and its value at the previous content-size
-  // event. Streaming grows exactly this cell; the difference is how far every
-  // older row was pushed, so the offset has to grow by it to stay in place.
-  const newestCellRef = useRef<{ id: string; height: number } | undefined>(undefined)
-  // Kept in a ref, not in the callback's deps: a new CellRendererComponent
-  // identity remounts every row the list keeps mounted.
-  const newestRowIdRef = useRef<string | undefined>(undefined)
-  const anchoredNewestRef = useRef<{ id: string; height: number } | undefined>(undefined)
+  // How far the rows have moved inside the content since the last content-size
+  // event, summed from their own layouts. Whatever grows, this is the exact
+  // distance the offset must travel to leave the reader's text in place.
+  const pendingShiftRef = useRef(0)
+  const cellYRef = useRef(new Map<string, number>())
 
   // Message navigation (#214) — docked strip, not floating controls. `nav` is
   // the placement-independent navigation math (src/lib/message-navigation.ts).
@@ -906,8 +903,6 @@ export default function SessionScreen() {
   const navigableIds = useMemo(() => userRowIds(rows), [rows])
   const rowIndexById = useMemo(() => new Map(rows.map((row, at) => [row.id, at])), [rows])
   nav.sync(navigableIds)
-  // rows[0] is the newest row — the assistant answer that streams.
-  newestRowIdRef.current = rows[0]?.id
 
   // The position needs each user message's Y inside the content container, and
   // only the cell wrapper is positioned there: an onLayout on the rendered row
@@ -925,11 +920,15 @@ export default function SessionScreen() {
           style={props.style}
           onLayout={(event) => {
             if (isUser) nav.frames.set(row.id, event.nativeEvent.layout)
-            // The newest row is the one that grows while an answer streams;
-            // its height is the anchor correction for everything above it.
-            if (row.id === newestRowIdRef.current) {
-              newestCellRef.current = { id: row.id, height: event.nativeEvent.layout.height }
-            }
+            // Every row reports where it sits in the content. Streaming pushes
+            // the rows around the reader away from the newest edge, and that
+            // measured movement — not a computed height delta — is what the
+            // offset has to follow. Reading it here, at layout time, keeps the
+            // number current even when the content-size event arrives first.
+            const y = event.nativeEvent.layout.y
+            const known = cellYRef.current.get(row.id)
+            pendingShiftRef.current += frameShift(known, y)
+            cellYRef.current.set(row.id, y)
             props.onLayout?.(event)
             setCurrentNavIndex((prev) => {
               const next = nav.current()
@@ -1395,15 +1394,14 @@ export default function SessionScreen() {
               // set: on an inverted list it pins the previously visible row, so
               // each new assistant message would push itself out of view.
               onContentSizeChange={() => {
-                // Delta first, baseline second: reading them in the other order
-                // made every shift zero and killed the correction silently.
-                const grown = anchorShift(anchoredNewestRef.current, newestCellRef.current)
-                anchoredNewestRef.current = newestCellRef.current
+                // Consume the movement once, before deciding: a skipped event
+                // must not leave a stale delta to be applied later.
+                const grown = pendingShiftRef.current
+                pendingShiftRef.current = 0
                 const action = contentGrowthAction({
                   atBottom: shouldFollowBottom(listOffsetRef.current),
                   held: nav.held,
                   dragging: scrollActiveRef.current,
-                  jumping: nav.expected !== undefined,
                   grown,
                 })
                 if (action.kind === "none") return
@@ -1411,10 +1409,10 @@ export default function SessionScreen() {
                   flatListRef.current?.scrollToOffset({ offset: 0, animated: false })
                   return
                 }
-                // Reading up the transcript: a growing answer moves every other
-                // row, which looked like the app scrolling under the finger.
-                // Move the offset by the same amount so the text stays put.
-                const next = listOffsetRef.current + action.by
+                // Reading up the transcript: the rows around the reader moved
+                // by exactly this much, so move the offset with them and the
+                // text they are reading does not move on screen at all.
+                const next = Math.max(0, listOffsetRef.current + action.by)
                 listOffsetRef.current = next
                 flatListRef.current?.scrollToOffset({ offset: next, animated: false })
               }}

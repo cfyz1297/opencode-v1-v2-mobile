@@ -1,7 +1,7 @@
 // The transcript must keep a reader's place while an answer streams in, and it
 // must keep following the answer at the newest end. The decision itself is
-// unit-tested in src/lib/scroll-follow.test.ts; this file only checks that the
-// screen wires it to the list and reads the delta before overwriting it.
+// unit-tested in src/lib/scroll-follow.test.ts; this file checks that the screen
+// actually measures the movement and wires it to the list.
 import { test } from "node:test"
 import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
@@ -18,26 +18,25 @@ test("content growth runs through the shared decision", () => {
   assert.match(listBlock(), /contentGrowthAction\(\{/, "the list must not re-implement the decision")
 })
 
-// Measured-then-overwritten is the bug that shipped: the shift was always zero
-// and the reading position drifted while an answer streamed.
-test("the growth delta is read before the baseline is replaced", () => {
+test("the shift is the movement the rows themselves reported", () => {
+  assert.match(sessionSource, /pendingShiftRef\.current \+= frameShift\(known, y\)/, "cells must report their displacement")
   const block = listBlock()
-  const read = block.indexOf("const grown = anchorShift(")
-  const write = block.indexOf("anchoredNewestRef.current = newestCellRef.current")
-  assert.ok(read >= 0 && write >= 0, "both the delta and the baseline must be present")
-  assert.ok(read < write, "writing the baseline first makes the delta zero")
+  assert.match(block, /const grown = pendingShiftRef\.current/, "the content-size event must consume the measured movement")
+  assert.match(block, /pendingShiftRef\.current = 0/, "the movement must be consumed once")
 })
 
-test("the newest row's height is measured as the anchor", () => {
-  assert.match(sessionSource, /row\.id === newestRowId[\s\S]{0,200}newestCellRef\.current/, "cell layouts must record the newest row")
-})
-
-// The regression this guards: auto-follow was a stored flag, a missed gesture
+// The regression this guards: following was a stored flag, a missed gesture
 // event left it off, and the correction then pushed the streaming answer below
 // the viewport — the answer looked like it never streamed at all.
 test("following is decided from the live offset, not from a stored flag", () => {
   assert.doesNotMatch(sessionSource, /followBottomRef/, "a latched follow flag is what broke the stream")
   assert.match(listBlock(), /atBottom: shouldFollowBottom\(listOffsetRef\.current\)/, "the live offset decides")
+})
+
+// A height delta taken from the newest row was the previous mechanism; it went
+// blind whenever the streaming row's identity changed.
+test("the anchor no longer depends on the newest row's identity", () => {
+  assert.doesNotMatch(sessionSource, /newestRowIdRef|newestCellRef|anchoredNewestRef/, "no id-keyed height bookkeeping")
 })
 
 test("a drag takes over immediately and releases at the bottom", () => {

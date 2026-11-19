@@ -8,44 +8,34 @@ export function shouldFollowBottom(offsetY: number): boolean {
   return offsetY <= FOLLOW_BOTTOM_MAX_OFFSET
 }
 
-export interface NewestCellFrame {
-  id: string
-  height: number
-}
-
-// How far the reading position must move when the newest row changed height.
-// Streaming grows exactly that row, and in an inverted list every other row
-// shifts by the same amount — without the correction the text the user is
-// reading moves under their eyes. A new row counts with its full height
-// (everything behind it shifted that far); growth at the far, oldest end (an
-// older page or the loading footer) leaves the newest row alone, so 0. An
-// unknown baseline means no measurement yet, where a guess would be a jump.
-export function anchorShift(prev: NewestCellFrame | undefined, next: NewestCellFrame | undefined): number {
-  if (!prev || !next) return 0
-  if (prev.id === next.id) return Math.max(0, next.height - prev.height)
-  return Math.max(0, next.height)
+// How far a row moved inside the content since the previous layout.
+//
+// Measured, not inferred: whatever grew — a streaming answer, a question card,
+// a collapsed block — the rows around the reader report the same displacement,
+// and that is exactly how far the scroll offset has to move to keep them still.
+// Two earlier versions derived it from the newest row's height and both failed
+// in the field: one hid the whole answer behind a stored follow flag, the other
+// read the baseline before the delta and shifted by zero forever.
+export function frameShift(prevY: number | undefined, nextY: number): number {
+  if (prevY === undefined) return 0
+  const delta = nextY - prevY
+  // Sub-pixel jitter from text metrics is not a scroll.
+  return Math.abs(delta) < 1 ? 0 : delta
 }
 
 export type GrowthAction = { kind: "pin" } | { kind: "shift"; by: number } | { kind: "none" }
 
 export interface GrowthInput {
   atBottom: boolean
+  // A navigator tap owns the next position; pinning now would snap it back.
   held: boolean
+  // A finger or a fling owns the position; a correction now would fight it.
   dragging: boolean
-  jumping: boolean
   grown: number
 }
 
-// What to do with the scroll position when the content grew. Kept as one pure
-// decision because the screen previously inlined it and two hand-edits there
-// silently broke streaming: a stored follow flag hid the whole answer, and a
-// baseline written before the delta was read made every shift zero.
 export function contentGrowthAction(input: GrowthInput): GrowthAction {
-  if (input.atBottom) {
-    // Offset 0 already shows the growing answer, so yielding to a navigator
-    // tap can never hide it.
-    return input.held || input.dragging ? { kind: "none" } : { kind: "pin" }
-  }
-  if (input.grown <= 0 || input.dragging || input.jumping) return { kind: "none" }
+  if (input.atBottom) return input.held || input.dragging ? { kind: "none" } : { kind: "pin" }
+  if (input.grown === 0 || input.dragging) return { kind: "none" }
   return { kind: "shift", by: input.grown }
 }
