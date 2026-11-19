@@ -58,7 +58,7 @@ test("a navigator tap owns the position until the user takes over", () => {
   assert.doesNotMatch(around("const moveMessage", 1200), /followBottomRef/, "a tap must not latch a follow flag either")
   const scroll = around("const handleScroll", 1200)
   assert.doesNotMatch(scroll, /followBottomRef/, "no stored follow flag: a stuck one hid the stream")
-  assert.match(scroll, /if \(!nav\.held\) nav\.setCurrent\(nav\.ids\[0\]\)/, "at the bottom the newest message is current")
+  assert.match(scroll, /if \(atBottom && !nav\.held\) nav\.setCurrent\(nav\.ids\[0\]\)/, "at the bottom the newest message is current")
   assert.match(around("onScrollBeginDrag={() =>"), /nav\.manual\(\)/, "a finger on the list takes over")
   assert.match(around("const scrollToBottom"), /nav\.release\(\)/, "Latest hands the position back")
 })

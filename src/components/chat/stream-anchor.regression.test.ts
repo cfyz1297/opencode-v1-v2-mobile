@@ -1,7 +1,9 @@
-// The transcript must keep a reader's place while an answer streams in, and it
-// must keep following the answer at the newest end. The decision itself is
-// unit-tested in src/lib/scroll-follow.test.ts; this file checks that the screen
-// actually measures the movement and wires it to the list.
+// Keeping a reader's place while an answer streams is the native
+// maintainVisibleContentPosition helper's job. Four hand-rolled versions of that
+// correction shipped bugs — a latched follow flag hid the answer, a baseline
+// written before its delta shifted by zero, summing cells multiplied the shift,
+// and the content-size event arrives before the cells' own layouts so the delta
+// was always a frame late. These checks keep the screen on the native path.
 import { test } from "node:test"
 import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
@@ -14,35 +16,27 @@ function listBlock(): string {
   return sessionSource.slice(start, sessionSource.indexOf("onEndReached", start))
 }
 
-test("content growth runs through the shared decision", () => {
-  assert.match(listBlock(), /contentGrowthAction\(\{/, "the list must not re-implement the decision")
+test("the transcript hands scroll maintenance to the native helper", () => {
+  assert.match(listBlock(), /maintainVisibleContentPosition=\{MAINTAIN_VISIBLE_CONTENT_POSITION\}/, "the list must use the shared config")
 })
 
-test("the shift is the movement the rows themselves reported", () => {
-  assert.match(sessionSource, /const moved = frameShift\(known, y\)/, "cells must report their displacement")
-  assert.match(sessionSource, /measuredShift\(\[pendingShiftRef\.current, moved\]\)/, "one move, not their sum")
-  const block = listBlock()
-  assert.match(block, /const grown = pendingShiftRef\.current/, "the content-size event must consume the measured movement")
-  assert.match(block, /pendingShiftRef\.current = 0/, "the movement must be consumed once")
+// The pin half was never the reported bug — the measured correction was. It
+// stays because the native helper bounces a row when a new message arrives at
+// the newest end.
+test("content growth never recomputes a reading shift", () => {
+  assert.doesNotMatch(sessionSource, /contentGrowthAction|pendingShiftRef|cellYRef|frameShift|measuredShift/, "no leftover correction machinery")
+  assert.match(listBlock(), /onContentSizeChange=\{[\s\S]{0,200}atBottomRef\.current[\s\S]{0,120}scrollToOffset\(\{ offset: 0, animated: false \}\)/, "the pin must be instant and conditional")
 })
 
-// The regression this guards: following was a stored flag, a missed gesture
-// event left it off, and the correction then pushed the streaming answer below
-// the viewport — the answer looked like it never streamed at all.
-test("following is decided from the live offset, not from a stored flag", () => {
-  assert.doesNotMatch(sessionSource, /followBottomRef/, "a latched follow flag is what broke the stream")
-  assert.match(listBlock(), /atBottom: shouldFollowBottom\(listOffsetRef\.current\)/, "the live offset decides")
+// Android scrolls a focused child into view; a selectable <Text> takes focus on
+// long-press and used to yank the transcript (facebook/react-native#33440).
+test("long-press selection still cannot scroll the list", () => {
+  assert.match(listBlock(), /scrollsChildToFocus=\{false\}/, "a focused selectable text must not be scrolled to")
 })
 
-// A height delta taken from the newest row was the previous mechanism; it went
-// blind whenever the streaming row's identity changed.
-test("the anchor no longer depends on the newest row's identity", () => {
-  assert.doesNotMatch(sessionSource, /newestRowIdRef|newestCellRef|anchoredNewestRef/, "no id-keyed height bookkeeping")
-})
-
-test("a drag takes over immediately and releases at the bottom", () => {
-  const block = listBlock()
-  assert.match(block, /onScrollBeginDrag=\{[\s\S]{0,300}scrollActiveRef\.current = true/, "a finger on the list owns the position at once")
-  assert.match(block, /onScrollEndDrag=\{[\s\S]{0,300}handleScroll\(event\)/, "the end of the gesture settles the position")
-  assert.match(block, /onMomentumScrollEnd=\{[\s\S]{0,300}handleScroll\(event\)/, "so does the end of the fling")
+// The native maintainer cancels a running fling whenever an answer grows, so a
+// gliding jump to the newest end stops mid-flight while streaming.
+test("jumps to the newest end are instant", () => {
+  assert.doesNotMatch(sessionSource, /scrollToBottom\(true\)/, "an animated jump is cancelled by the maintainer")
+  assert.doesNotMatch(sessionSource, /scrollToOffset\(\{ offset: 0, animated: true \}\)/, "same for the pending-question jump")
 })

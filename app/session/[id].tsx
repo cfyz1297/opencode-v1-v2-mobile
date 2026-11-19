@@ -25,7 +25,7 @@ import { useKeyboardHeight } from "../../src/lib/use-keyboard-height"
 import { buildMessageData, type MessageDataItem } from "../../src/lib/revert-filter"
 import { splitAnswered, splitByMessage } from "../../src/lib/answered-questions"
 import { runTotals } from "../../src/lib/message-run"
-import { shouldFollowBottom, frameShift, measuredShift, contentGrowthAction } from "../../src/lib/scroll-follow"
+import { shouldFollowBottom, MAINTAIN_VISIBLE_CONTENT_POSITION } from "../../src/lib/scroll-follow"
 import { collectSubagents } from "../../src/lib/subagent-status"
 import { useTranslation } from "react-i18next"
 import * as ImagePicker from "expo-image-picker"
@@ -242,18 +242,12 @@ export default function SessionScreen() {
     if (navIdleTimer.current) clearTimeout(navIdleTimer.current)
     navIdleTimer.current = setTimeout(() => setShowNavStrip(false), NAV_PANEL_IDLE_MS)
   }, [])
-  // The list's own offset: onContentSizeChange arrives without an event, and
-  // every follow decision is derived from this — a latched "reading above" flag
-  // once stayed false and pushed the streaming answer out of view.
-  const listOffsetRef = useRef(0)
-  // A finger or a fling owns the position — an anchor correction would fight
-  // the drag and cancel the fling.
-  const scrollActiveRef = useRef(false)
-  // How far the rows have moved inside the content since the last content-size
-  // event. One correction at a time, taken from the strongest single move: the
-  // rows all shift together, so adding them up would multiply the correction.
-  const pendingShiftRef = useRef(0)
-  const cellYRef = useRef(new Map<string, number>())
+
+  // Whether the viewport sits at the newest end, read without an event. The
+  // native scroll maintainer is right for a reader further up, but for a new
+  // message at the newest end it jumps a row and glides back — a bounce on the
+  // most common action, so that case is pinned instantly instead.
+  const atBottomRef = useRef(true)
 
   // Message navigation (#214) — docked strip, not floating controls. `nav` is
   // the placement-independent navigation math (src/lib/message-navigation.ts).
@@ -472,10 +466,6 @@ export default function SessionScreen() {
     // stale scroll event queued mid-jump can't resurrect the old position.
     cancelJump()
     nav.manual(0)
-    // The offset the next content-size event reads must already be the target,
-    // or a streaming delta arriving mid-animation is treated as "reading up"
-    // and cancels the jump.
-    listOffsetRef.current = 0
     flatListRef.current?.scrollToOffset({ offset: 0, animated })
   }, [nav, cancelJump])
 
@@ -549,7 +539,9 @@ export default function SessionScreen() {
   const pendingCount = questions.length
   useEffect(() => {
     if (pendingCount === 0) return
-    flatListRef.current?.scrollToOffset({ offset: 0, animated: true })
+    // Instant for the same reason as send: a running animation would be
+    // cancelled by the streaming answer's growth.
+    flatListRef.current?.scrollToOffset({ offset: 0, animated: false })
   }, [pendingCount])
 
   // Sync model chip from latest assistant message
@@ -824,8 +816,10 @@ export default function SessionScreen() {
     setInput("")
     setAttachments([])
     // Sending is an explicit "jump to the answer" — even if the user had
-    // scrolled up to read history.
-    scrollToBottom(true)
+    // scrolled up to read history. Instant, not animated: the native scroll
+    // maintainer cancels a running fling whenever a streaming answer grows, so
+    // an animated jump would stop mid-flight.
+    scrollToBottom(false)
 
     // Server slash commands (no attachments for commands)
     if (text.startsWith("/") && files.length === 0) {
@@ -863,23 +857,19 @@ export default function SessionScreen() {
     }
   }
 
-  // In inverted mode, offset 0 = bottom. Auto-follow and the navigation strip
-  // use separate thresholds on purpose (see scroll-follow.ts).
+  // In inverted mode, offset 0 = bottom. The navigation strip decides "at the
+  // bottom" from this offset; following the stream is the native maintainer's
+  // job (see scroll-follow.ts).
   const handleScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
       const { contentOffset, layoutMeasurement } = event.nativeEvent
-      listOffsetRef.current = contentOffset.y
       nav.observe(contentOffset.y, layoutMeasurement.height)
       const atBottom = shouldFollowBottom(contentOffset.y)
-      // Nothing to protect at the newest end; a fling that ends here must not
-      // leave the "gesture owns the position" flag stuck on.
-      if (atBottom) {
-        scrollActiveRef.current = false
-        // At the bottom the current message is the newest one: the topmost
-        // visible row can be several above it, which read as "3 / 12" at the
-        // end of the transcript. Ignored while the navigator holds the position.
-        if (!nav.held) nav.setCurrent(nav.ids[0])
-      }
+      atBottomRef.current = atBottom
+      // At the bottom the current message is the newest one: the topmost
+      // visible row can be several above it, which read as "3 / 12" at the end
+      // of the transcript. Ignored while the navigator holds the position.
+      if (atBottom && !nav.held) nav.setCurrent(nav.ids[0])
       setCurrentNavIndex((prev) => {
         const next = nav.current()
         return prev === next ? prev : next
@@ -924,18 +914,6 @@ export default function SessionScreen() {
           style={props.style}
           onLayout={(event) => {
             if (isUser) nav.frames.set(row.id, event.nativeEvent.layout)
-            // Every row reports where it sits in the content. Streaming pushes
-            // the rows around the reader away from the newest edge, and that
-            // measured movement — not a computed height delta — is what the
-            // offset has to follow. Reading it here, at layout time, keeps the
-            // number current even when the content-size event arrives first.
-            const y = event.nativeEvent.layout.y
-            const known = cellYRef.current.get(row.id)
-            const moved = frameShift(known, y)
-            // Strongest single move, not a running sum: every row that is
-            // pushed reports the same distance, and summing multiplied it.
-            pendingShiftRef.current = measuredShift([pendingShiftRef.current, moved])
-            cellYRef.current.set(row.id, y)
             props.onLayout?.(event)
             setCurrentNavIndex((prev) => {
               const next = nav.current()
@@ -1004,6 +982,8 @@ export default function SessionScreen() {
     // Frames belong to the previous transcript: cell coordinates are only
     // meaningful for the rows that produced them.
     nav.frames.clear()
+    // A session opens at the newest end, before any scroll event says so.
+    atBottomRef.current = true
     setCurrentNavIndex(-1)
     return () => {
       if (navIdleTimer.current) clearTimeout(navIdleTimer.current)
@@ -1312,10 +1292,8 @@ export default function SessionScreen() {
                 nav.observe(nav.offset, event.nativeEvent.layout.height)
               }}
               onScrollBeginDrag={() => {
-                // The user took over: re-anchor from the viewport from here on,
-                // so dragging back to the bottom resumes auto-follow. manual()
-                // also releases the navigator's hold.
-                scrollActiveRef.current = true
+                // A finger on the list releases the navigator's hold, so taps
+                // and the counter follow the viewport again.
                 nav.manual()
                 wakeNavPanel()
               }}
@@ -1324,15 +1302,10 @@ export default function SessionScreen() {
               // scroll stream can drop the last event, which left the counter
               // one message behind at the top of a session.
               onScrollEndDrag={(event) => {
-                scrollActiveRef.current = false
                 handleScroll(event)
                 wakeNavPanel()
               }}
-              onMomentumScrollBegin={() => {
-                scrollActiveRef.current = true
-              }}
               onMomentumScrollEnd={(event) => {
-                scrollActiveRef.current = false
                 handleScroll(event)
                 wakeNavPanel()
               }}
@@ -1396,32 +1369,15 @@ export default function SessionScreen() {
               contentContainerStyle={s.messageList}
               onScroll={handleScroll}
               scrollEventThrottle={100}
-              // Follow streaming output and new messages while the user is at
-              // the bottom. maintainVisibleContentPosition is deliberately not
-              // set: on an inverted list it pins the previously visible row, so
-              // each new assistant message would push itself out of view.
+              // Reading further up is the native maintainer's job: it measures
+              // the anchor view after mount, so it cannot drift out of step the
+              // way the JS correction did. At the newest end it would jump a row
+              // and glide back, so that case is pinned here instead. See
+              // scroll-follow.ts for the config.
+              maintainVisibleContentPosition={MAINTAIN_VISIBLE_CONTENT_POSITION}
               onContentSizeChange={() => {
-                // Consume the movement once, before deciding: a skipped event
-                // must not leave a stale delta to be applied later.
-                const grown = pendingShiftRef.current
-                pendingShiftRef.current = 0
-                const action = contentGrowthAction({
-                  atBottom: shouldFollowBottom(listOffsetRef.current),
-                  held: nav.held,
-                  dragging: scrollActiveRef.current,
-                  grown,
-                })
-                if (action.kind === "none") return
-                if (action.kind === "pin") {
-                  flatListRef.current?.scrollToOffset({ offset: 0, animated: false })
-                  return
-                }
-                // Reading up the transcript: the rows around the reader moved
-                // by exactly this much, so move the offset with them and the
-                // text they are reading does not move on screen at all.
-                const next = Math.max(0, listOffsetRef.current + action.by)
-                listOffsetRef.current = next
-                flatListRef.current?.scrollToOffset({ offset: next, animated: false })
+                if (!atBottomRef.current) return
+                flatListRef.current?.scrollToOffset({ offset: 0, animated: false })
               }}
               onEndReached={handleLoadMore}
               onEndReachedThreshold={0.5}
@@ -1479,7 +1435,7 @@ export default function SessionScreen() {
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[s.navBtn, s.navLatest, isDark && s.navLatestDark]}
-                  onPress={() => scrollToBottom(true)}
+                  onPress={() => scrollToBottom(false)}
                   accessibilityRole="button"
                   accessibilityLabel={t("session.nav.latestLabel")}
                   hitSlop={6}
