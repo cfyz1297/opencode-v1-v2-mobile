@@ -883,10 +883,13 @@ export default function SessionScreen() {
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
       const { contentOffset, layoutMeasurement, contentSize } = event.nativeEvent
       const atBottom = isNearBottom(contentOffset.y, layoutMeasurement.height, contentSize.height)
-      // Until the list has reached the newest message the offset is still near
-      // the top, where it mounted; that must not read as "the reader scrolled
-      // away" and stop the jump to the end.
-      if (settledRef.current) followBottomRef.current = !nav.held && atBottom
+      // Deliberately NOT deriving auto-follow here. A streaming answer grows
+      // faster than scroll events arrive (100 ms throttle), so a sample taken
+      // just after growth still carries the old offset: the distance looks like
+      // "the reader scrolled away" and following stops for good — which is
+      // exactly the reported "the bottom never follows the answer". Following
+      // is decided by user gestures instead: a drag away clears it, the end of
+      // a drag or a fling that lands at the bottom restores it.
       nav.observe(contentOffset.y, layoutMeasurement.height)
       // At the bottom the current message is the newest one: the topmost visible
       // row can be several above it, which read as "3 / 12" at the end of the
@@ -898,6 +901,18 @@ export default function SessionScreen() {
       })
     },
     [nav],
+  )
+
+  // Where a gesture ended decides whether the list follows the stream. Both the
+  // end of a drag and the end of a fling run through here: they are the same
+  // decision and must not drift apart.
+  const settleFollow = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const { contentOffset, layoutMeasurement, contentSize } = event.nativeEvent
+      followBottomRef.current = isNearBottom(contentOffset.y, layoutMeasurement.height, contentSize.height)
+      handleScroll(event)
+    },
+    [handleScroll],
   )
 
   // Debounce: onStartReached can fire multiple times during a single scroll gesture
@@ -1365,9 +1380,17 @@ export default function SessionScreen() {
                 nav.manual()
                 wakeNavPanel()
               }}
-              // Keep the panel up until the fling settles, then let it fade.
-              onScrollEndDrag={wakeNavPanel}
-              onMomentumScrollEnd={wakeNavPanel}
+              // The end of the gesture is the authoritative position: the throttled
+              // scroll stream can drop its last sample, and the follow decision
+              // belongs to the user's movement, not to every sample.
+              onScrollEndDrag={(event) => {
+                settleFollow(event)
+                wakeNavPanel()
+              }}
+              onMomentumScrollEnd={(event) => {
+                settleFollow(event)
+                wakeNavPanel()
+              }}
               onScrollToIndexFailed={({ index, averageItemLength }) => {
                 // The target was never measured: jump approximately so its rows
                 // mount, then settle on the index — but only if this jump is

@@ -60,7 +60,25 @@ test("the list stays hidden until it has settled at the newest message", () => {
 // long history — caught by the emulator smoke run on the first attempt.
 test("a cold reload opens at the newest message again", () => {
   assert.match(sessionSource, /if \(!isLoading\) return[\s\S]{0,200}settledRef\.current = false/, "a reload must hide the list again")
-  assert.match(sessionSource, /if \(settledRef\.current\) followBottomRef\.current = !nav\.held && atBottom/, "the mounting offset must not stop the jump to the end")
+  assert.match(sessionSource, /if \(!isLoading\) return[\s\S]{0,240}followBottomRef\.current = true/, "a reload follows the stream again")
+})
+
+// The reported bug: at the bottom the list stopped following the answer. Follow
+// was derived from every scroll sample, and a streaming delta grows the content
+// between two samples (100 ms throttle), so the sample looked like "scrolled
+// away" and following switched off for good.
+test("following is decided by the gesture, never by a scroll sample", () => {
+  const scroll = sessionSource.slice(
+    sessionSource.indexOf("const handleScroll"),
+    sessionSource.indexOf("const settleFollow"),
+  )
+  assert.doesNotMatch(scroll, /followBottomRef\.current =/, "a stale sample must not switch following off")
+  const block = listBlock()
+  assert.match(block, /onScrollBeginDrag=\{[\s\S]{0,600}followBottomRef\.current = false/, "a drag takes the position")
+  assert.match(block, /onScrollEndDrag=\{[\s\S]{0,200}settleFollow\(event\)/, "landing at the bottom gives it back")
+  assert.match(block, /onMomentumScrollEnd=\{[\s\S]{0,200}settleFollow\(event\)/, "so does a fling that ends there")
+  const settle = sessionSource.slice(sessionSource.indexOf("const settleFollow"), sessionSource.indexOf("const measureCell"))
+  assert.match(settle, /followBottomRef\.current = isNearBottom\(/, "one decision point for both gestures")
 })
 
 // A short transcript never re-fires onStartReached, so it needs one automatic

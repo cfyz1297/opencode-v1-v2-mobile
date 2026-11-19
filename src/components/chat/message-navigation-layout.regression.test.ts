@@ -39,8 +39,8 @@ test("nothing is docked between the list and the status bar any more", () => {
 test("the panel shows only while the user scrolls, then hides itself", () => {
   assert.match(source, /navPanelVisible = [^\n]*showNavStrip/, "visibility must be scroll-activity driven")
   assert.match(source, /onScrollBeginDrag=\{/, "a drag must wake the panel")
-  assert.match(source, /onScrollEndDrag=\{wakeNavPanel\}/, "the fling must keep it up")
-  assert.match(source, /onMomentumScrollEnd=\{wakeNavPanel\}/, "and so must the momentum end")
+  assert.match(source, /onScrollEndDrag=\{[\s\S]{0,200}wakeNavPanel\(\)/, "the fling must keep it up")
+  assert.match(source, /onMomentumScrollEnd=\{[\s\S]{0,200}wakeNavPanel\(\)/, "and so must the momentum end")
   assert.match(source, /setTimeout\(\(\) => setShowNavStrip\(false\)/, "it must hide on idle")
   assert.match(source, /clearTimeout\(navIdleTimer\.current\)/, "the idle timer must be cancelled and cleaned up")
 })
@@ -57,7 +57,10 @@ test("a navigator tap owns the position until the user takes over", () => {
   assert.match(jump, /nav\.jumpTo\(id\)/, "the jump sets and holds the position in one step")
   assert.match(around("const moveMessage"), /followBottomRef\.current = false/, "a tap must stop auto-follow")
   const scroll = around("const handleScroll", 1200)
-  assert.match(scroll, /!nav\.held && atBottom/, "content growth must not snap back while held")
+  // Following is decided by the gesture (the tap above clears it, and only the
+  // end of a drag or a fling can restore it): a scroll sample must never turn it
+  // back on, which is what dragged the reader to the bottom mid-jump.
+  assert.doesNotMatch(scroll, /followBottomRef\.current =/, "no scroll sample may change auto-follow")
   assert.match(scroll, /if \(atBottom && !nav\.held\) nav\.setCurrent\(nav\.ids\[nav\.ids\.length - 1\]\)/, "at the bottom the newest message is current")
   assert.match(around("onScrollBeginDrag={() =>"), /nav\.manual\(\)/, "a finger on the list takes over")
   assert.match(around("const scrollToBottom"), /nav\.release\(\)/, "Latest hands the position back")
