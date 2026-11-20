@@ -132,15 +132,33 @@ export function visibleSubagents(
   return refs.filter((ref) => ref.wave === latest || statusOf(ref) === "running")
 }
 
+/** The stamp a subagent row shows as "N ago" — also the list's order key. */
+export function subagentSince(child: Pick<Session, "time"> | undefined): number | undefined {
+  return child?.time?.updated ?? child?.time?.created
+}
+
 /**
- * Call order with the ones still working pulled to the top: a running subagent
- * must never be hidden under a finished one, however long the list grows.
+ * Call order with the ones still working pulled to the top, and finished rows
+ * newest first: the list answers "what is happening now" and "what happened
+ * last", so a fresh run must not sit under an older one. `timeOf` returns the
+ * same stamp the row shows as "N ago"; rows without session data keep call
+ * order.
  */
 export function orderSubagents(
   refs: readonly SubagentRef[],
   statusOf: (ref: SubagentRef) => SubagentStatus,
+  timeOf?: (ref: SubagentRef) => number | undefined,
 ): SubagentRef[] {
-  const running = refs.filter((ref) => statusOf(ref) === "running")
-  const rest = refs.filter((ref) => statusOf(ref) !== "running")
-  return [...running, ...rest]
+  return refs
+    .map((ref, index) => ({
+      ref,
+      index,
+      running: statusOf(ref) === "running",
+      time: timeOf?.(ref) ?? Number.NEGATIVE_INFINITY,
+    }))
+    .sort((a, b) => {
+      if (a.running !== b.running) return a.running ? -1 : 1
+      return a.time === b.time ? a.index - b.index : b.time - a.time
+    })
+    .map((entry) => entry.ref)
 }

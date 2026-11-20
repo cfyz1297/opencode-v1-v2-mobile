@@ -7,6 +7,7 @@ import { useSessions } from "../../stores/sessions"
 import {
   deriveSubagentStatus,
   orderSubagents,
+  subagentSince,
   visibleSubagents,
   type SubagentRef,
 } from "../../lib/subagent-status"
@@ -28,8 +29,9 @@ type View_ = "current" | "all"
  *           batch starts). Spinner while any of them works, check once none does.
  *   right — every subagent this session has delegated, in call order.
  *
- * Both open the same list component over their own set, running rows first, so
- * "who is working" and "who worked" stay one tap apart.
+ * Both open the same list component over their own set, running rows first and
+ * finished ones newest first, so "who is working" and "who worked" stay one tap
+ * apart.
  */
 export function SubagentBar({ refs, isDark }: Props) {
   const { t } = useTranslation()
@@ -40,16 +42,17 @@ export function SubagentBar({ refs, isDark }: Props) {
 
   if (refs.length === 0) return null
 
+  const childOf = (ref: SubagentRef) =>
+    (ref.parentID ? children[ref.parentID] : undefined)?.find((c) => c.id === ref.sessionID)
+
   const statusOf = (ref: SubagentRef) =>
-    deriveSubagentStatus(
-      (ref.parentID ? children[ref.parentID] : undefined)?.find((c) => c.id === ref.sessionID),
-      live[ref.sessionID],
-      errors[ref.sessionID],
-    )
+    deriveSubagentStatus(childOf(ref), live[ref.sessionID], errors[ref.sessionID])
 
   const current = visibleSubagents(refs, statusOf)
   const running = refs.filter((ref) => statusOf(ref) === "running").length
-  const shown = open === "all" ? orderSubagents(refs, statusOf) : orderSubagents(current, statusOf)
+  const shown = orderSubagents(open === "all" ? refs : current, statusOf, (ref) =>
+    subagentSince(childOf(ref)),
+  )
 
   const toggle = (view: View_) => setOpen((value) => (value === view ? null : view))
 

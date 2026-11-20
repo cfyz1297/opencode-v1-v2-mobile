@@ -4,7 +4,7 @@ import { Ionicons } from "@expo/vector-icons"
 import { useTranslation } from "react-i18next"
 import { useSessions } from "../../stores/sessions"
 import { useEvents } from "../../stores/events"
-import { deriveSubagentStatus, subagentStatusKey, type SubagentStatus } from "../../lib/subagent-status"
+import { deriveSubagentStatus, subagentSince, subagentStatusKey, type SubagentStatus } from "../../lib/subagent-status"
 
 // Status → pill colour, matching the transcript's existing language
 // (ToolCallCard.statusColor: completed green, running amber, error red).
@@ -58,7 +58,7 @@ export function SubagentRow({ sessionID, parentID, agent, fallbackTitle, testIDP
 
   const status = deriveSubagentStatus(child, live, error)
   const title = child?.title || fallbackTitle || t("chat.subagents.title")
-  const since = child?.time?.updated ?? child?.time?.created
+  const since = subagentSince(child)
   const meta = [agent, since ? formatRelative(since, t) : null].filter(Boolean).join(" · ")
 
   const open = () => {

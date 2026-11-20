@@ -63,6 +63,30 @@ test("a running subagent is never buried under finished ones", () => {
   assert.deepEqual(ordered.map((r) => r.sessionID), ["c3", "c1", "c2"])
 })
 
+test("finished subagents are ordered newest first, not in call order", () => {
+  // The screenshot bug: run-4 (3 h ago) sat above run-5 (2 h ago) because the
+  // list kept call order. The row's own "N ago" stamp is the order key.
+  const refs = collectSubagents([
+    { parts: [part("run-4", 1), part("run-5", 2), part("run-6", 3), part("run-7", 4)] },
+  ])
+  const times: Record<string, number> = { "run-4": 10, "run-5": 20, "run-6": 30, "run-7": 40 }
+  const ordered = orderSubagents(refs, done, (ref) => times[ref.sessionID])
+  assert.deepEqual(ordered.map((r) => r.sessionID), ["run-7", "run-6", "run-5", "run-4"])
+})
+
+test("a running subagent stays above newer finished ones", () => {
+  const refs = collectSubagents([{ parts: [part("running", 1), part("finished", 2)] }])
+  const statusOf = (ref: { sessionID: string }) =>
+    ref.sessionID === "running" ? ("running" as const) : ("done" as const)
+  const ordered = orderSubagents(refs, statusOf, (ref) => (ref.sessionID === "running" ? 1 : 99))
+  assert.deepEqual(ordered.map((r) => r.sessionID), ["running", "finished"])
+})
+
+test("rows with no session data keep call order", () => {
+  const refs = collectSubagents([{ parts: [part("c1", 1), part("c2", 2)] }])
+  assert.deepEqual(orderSubagents(refs, done, () => undefined).map((r) => r.sessionID), ["c1", "c2"])
+})
+
 // A wave is one user turn: the prompt that delegated the batch.
 const turn = (role: string, parts: unknown[]) => ({ message: { role }, parts: parts as never })
 const done = () => "done" as const
