@@ -24,6 +24,25 @@ export function endScrollOffset(contentHeight: number, viewportHeight: number): 
   return Math.max(0, contentHeight - viewportHeight)
 }
 
+// Far past any transcript, and still inside the int Android converts it to.
+export const FOLLOW_TO_END = 10_000_000
+
+// Where a "keep me at the end" scroll should aim. Android's ScrollView clips a
+// scroll command to its real content, so aiming past the end lands exactly on
+// it — no measurement involved, which matters because any measured end lags a
+// streaming chunk by a frame. iOS does not clip a programmatic offset, so it
+// keeps the measured arithmetic, and `null` means nothing is measured yet and
+// the list's own end is the better guess.
+export function followScrollOffset(
+  contentHeight: number,
+  viewportHeight: number,
+  platform: string,
+): number | null {
+  if (platform === "android") return FOLLOW_TO_END
+  if (contentHeight <= 0 || viewportHeight <= 0) return null
+  return endScrollOffset(contentHeight, viewportHeight)
+}
+
 // Older pages are inserted above the reader, which in a plain list pushes every
 // visible row down. This is the case the native helper was built for, and the
 // only one it is used for here: appends and streaming growth at the bottom move

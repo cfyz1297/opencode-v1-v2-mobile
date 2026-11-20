@@ -25,7 +25,7 @@ import { useKeyboardHeight } from "../../src/lib/use-keyboard-height"
 import { buildMessageData, type MessageDataItem } from "../../src/lib/revert-filter"
 import { splitAnswered, splitByMessage } from "../../src/lib/answered-questions"
 import { runTotals } from "../../src/lib/message-run"
-import { endScrollOffset, isNearBottom, MAINTAIN_VISIBLE_CONTENT_POSITION } from "../../src/lib/scroll-follow"
+import { followScrollOffset, isNearBottom, MAINTAIN_VISIBLE_CONTENT_POSITION } from "../../src/lib/scroll-follow"
 import { collectSubagents } from "../../src/lib/subagent-status"
 import { useTranslation } from "react-i18next"
 import * as ImagePicker from "expo-image-picker"
@@ -266,18 +266,17 @@ export default function SessionScreen() {
     setSettled(true)
   }, [])
 
-  // The real end of the content. scrollToEnd picks the last row's measured
-  // frame, and a streaming chunk grows that row before it is re-measured, so
-  // the list would stop a line short of the newest text.
-  const scrollToMeasuredEnd = useCallback((animated: boolean) => {
-    const height = contentHeightRef.current
-    const viewport = viewportHeightRef.current
-    if (height <= 0 || viewport <= 0) {
-      // Never measured yet: the list's own end beats offset 0.
+  // The real end of the content. A measured offset lags the streaming chunk
+  // that just arrived, so on Android the scroll aims past the end and the
+  // native ScrollView clips it to the exact content bottom.
+  const scrollToContentEnd = useCallback((animated: boolean) => {
+    const offset = followScrollOffset(contentHeightRef.current, viewportHeightRef.current, Platform.OS)
+    if (offset === null) {
+      // Nothing measured yet: the list's own end beats offset 0.
       flatListRef.current?.scrollToEnd({ animated })
       return
     }
-    flatListRef.current?.scrollToOffset({ offset: endScrollOffset(height, viewport), animated })
+    flatListRef.current?.scrollToOffset({ offset, animated })
   }, [])
 
   // Message navigation (#214) — docked strip, not floating controls. `nav` is
@@ -504,8 +503,8 @@ export default function SessionScreen() {
     // stale scroll event queued mid-jump can't resurrect the old position.
     cancelJump()
     nav.manual()
-    scrollToMeasuredEnd(animated)
-  }, [nav, cancelJump, scrollToMeasuredEnd])
+    scrollToContentEnd(animated)
+  }, [nav, cancelJump, scrollToContentEnd])
 
   // Re-select on every focus, not just mount. currentSession/messages/
   // permissions are a single global store, and the native stack keeps screens
@@ -579,8 +578,8 @@ export default function SessionScreen() {
     if (pendingCount === 0) return
     followBottomRef.current = true
     // The card sits under the message that asked it, at the newest end.
-    scrollToMeasuredEnd(true)
-  }, [pendingCount, scrollToMeasuredEnd])
+    scrollToContentEnd(true)
+  }, [pendingCount, scrollToContentEnd])
 
   // Sync model chip from latest assistant message
   useEffect(() => {
@@ -1376,8 +1375,17 @@ export default function SessionScreen() {
               onLayout={(event) => {
                 // The viewport height is also what tells a short transcript that
                 // its history will never auto-load by scrolling.
-                viewportHeightRef.current = event.nativeEvent.layout.height
-                nav.observe(nav.offset, event.nativeEvent.layout.height)
+                const height = event.nativeEvent.layout.height
+                const resized = height !== viewportHeightRef.current
+                viewportHeightRef.current = height
+                nav.observe(nav.offset, height)
+                // The composer, the status row, banners and the keyboard resize
+                // the list while an answer streams. The scroll offset stays, so
+                // the newest line slides out of view — or, when the list grows,
+                // the content ends above the bottom with empty space under it.
+                // Re-anchor while following; a reader up in the history is not
+                // moved.
+                if (resized && settledRef.current && followBottomRef.current) scrollToContentEnd(false)
                 // The reveal timer belongs to the mounted list: armed on session
                 // switch it could fire while the spinner is still up, and the
                 // list would then show its first frame at the oldest message.
@@ -1493,7 +1501,7 @@ export default function SessionScreen() {
                 // Exactly the end of the content that just arrived: scrollToEnd
                 // would aim at the last row's stale measured frame and stop a
                 // line short of the streaming text.
-                scrollToMeasuredEnd(false)
+                scrollToContentEnd(false)
                 // Reveal after the jump has been applied, not on a second equal
                 // height — an idle list never produces one.
                 if (!settledRef.current) requestAnimationFrame(revealList)

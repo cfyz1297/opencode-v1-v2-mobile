@@ -32,7 +32,7 @@ test("growing content is followed only from the bottom", () => {
   // that just arrived; the measured content height is the real end.
   assert.match(
     block,
-    /if \(!followBottomRef\.current\) return[\s\S]{0,400}scrollToMeasuredEnd\(false\)/,
+    /if \(!followBottomRef\.current\) return[\s\S]{0,400}scrollToContentEnd\(false\)/,
     "the newest text is kept in view",
   )
   assert.doesNotMatch(block, /\.scrollToEnd\(/, "a row frame must not decide where the end is")
@@ -90,16 +90,32 @@ test("following is decided by the gesture, never by a scroll sample", () => {
 
 // The same stale-frame trap sits behind "Latest" and the pending-question jump:
 // both used scrollToEnd, so both could stop a line short of the newest text.
-test("jumps to the newest end use the measured content height", () => {
+test("jumps to the newest end aim past it and let the native list clip", () => {
   const helper = sessionSource.slice(
-    sessionSource.indexOf("const scrollToMeasuredEnd"),
+    sessionSource.indexOf("const scrollToContentEnd"),
     sessionSource.indexOf("const nav ="),
   )
-  assert.match(helper, /endScrollOffset\(height, viewport\)/, "the jump targets the measured end")
+  assert.match(helper, /followScrollOffset\(contentHeightRef\.current, viewportHeightRef\.current, Platform\.OS\)/, "the platform decides how to aim")
   assert.match(sessionSource, /contentHeightRef\.current = height/, "the height comes from the content-size event")
   const jump = sessionSource.slice(sessionSource.indexOf("const scrollToBottom"), sessionSource.indexOf("// Re-select on every focus"))
-  assert.match(jump, /scrollToMeasuredEnd\(animated\)/, "Latest goes through it")
-  assert.match(sessionSource, /followBottomRef\.current = true\n\s*\/\/ The card sits[^\n]*\n\s*scrollToMeasuredEnd\(true\)/, "so does the pending-question jump")
+  assert.match(jump, /scrollToContentEnd\(animated\)/, "Latest goes through it")
+  assert.match(sessionSource, /followBottomRef\.current = true\n\s*\/\/ The card sits[^\n]*\n\s*scrollToContentEnd\(true\)/, "so does the pending-question jump")
+})
+
+// The composer, the status row, banners and the keyboard resize the list while
+// an answer streams; a fixed offset then leaves the newest line out of view, or
+// the content above the bottom.
+test("a resized list is landed on the end again while following", () => {
+  const layout = sessionSource.slice(
+    sessionSource.indexOf("onLayout={(event) => {"),
+    sessionSource.indexOf("onScrollBeginDrag="),
+  )
+  assert.match(layout, /const resized = height !== viewportHeightRef\.current/, "only a real size change")
+  assert.match(
+    layout,
+    /if \(resized && settledRef\.current && followBottomRef\.current\) scrollToContentEnd\(false\)/,
+    "re-anchored while following, and only then",
+  )
 })
 
 // A short transcript never re-fires onStartReached, so it needs one automatic

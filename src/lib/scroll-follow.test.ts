@@ -1,6 +1,6 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
-import { isNearBottom, endScrollOffset, FOLLOW_BOTTOM_MAX_OFFSET } from "./scroll-follow.ts"
+import { isNearBottom, followScrollOffset, FOLLOW_TO_END, FOLLOW_BOTTOM_MAX_OFFSET } from "./scroll-follow.ts"
 
 test("the bottom is the end of a plain transcript", () => {
   // 2000 px viewport, 3000 px content: the bottom means offset 1000.
@@ -17,13 +17,18 @@ test("content shorter than the viewport always counts as the bottom", () => {
   assert.equal(isNearBottom(0, 2000, 800), true)
 })
 
-// scrollToEnd uses the last row's measured frame, which lags the chunk that
-// just arrived during streaming; the content size in the event is already the
-// real end, so following has to use it directly.
-test("the end offset comes from the content size, not a row frame", () => {
-  assert.equal(endScrollOffset(3000, 2000), 1000)
-  assert.equal(endScrollOffset(800, 2000), 0)
-  assert.equal(endScrollOffset(0, 0), 0)
+// A measured end lags the streaming chunk that just arrived: the height event
+// fires for the layout the chunk produced, but by the time the scroll lands
+// the text has grown again. Android clips the command to the real content, so
+// aiming past the end is the only exact answer there.
+test("following aims past the end on Android and measures elsewhere", () => {
+  assert.equal(followScrollOffset(3000, 2000, "android"), FOLLOW_TO_END)
+  assert.equal(followScrollOffset(0, 0, "android"), FOLLOW_TO_END)
+  assert.equal(followScrollOffset(3000, 2000, "ios"), 1000)
+  assert.equal(followScrollOffset(800, 2000, "ios"), 0)
+  assert.equal(followScrollOffset(3000, 0, "ios"), null, "unmeasured viewport has no arithmetic answer")
+  // The constant must survive the density conversion inside an int.
+  assert.ok(FOLLOW_TO_END * 4 < 2 ** 31)
 })
 
 test("before the first measurement the list counts as the bottom", () => {
