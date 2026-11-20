@@ -6,6 +6,7 @@ import { send as notify } from "../lib/notifications"
 import { PERMISSION_NOTIFICATION_KEY, QUESTION_NOTIFICATION_KEY, sanitizeBody } from "../lib/notify-format"
 import i18n from "../lib/i18n/config"
 import { statusFromPart } from "../lib/status-labels"
+import { nextRunStart } from "../lib/run-clock"
 import { isAuthError } from "../lib/api-error"
 import { isSessionActuallyIdle } from "../lib/session-status-reconcile"
 import { isStreamStalled, shouldReconnectOnResume } from "../lib/stream-watchdog"
@@ -38,6 +39,9 @@ interface EventsState {
   lastDisconnectReason: string | null
   sessionStatus: Record<string, SessionStatus>
   statusText: Record<string, string>
+  // Start of the current run per session, so the status bar clock moves from
+  // the first busy event instead of staying blank.
+  runStartedAt: Record<string, number>
   // Last error per session, kept for the subagent row: a child that failed
   // shows why without opening it. Cleared when that session starts a new run.
   sessionErrors: Record<string, string>
@@ -511,6 +515,7 @@ export const useEvents = create<EventsState>((set, get) => ({
   lastDisconnectReason: null,
   sessionStatus: {},
   statusText: {},
+  runStartedAt: {},
   sessionErrors: {},
   permissions: {},
   questions: {},
@@ -672,16 +677,25 @@ export const useEvents = create<EventsState>((set, get) => ({
                 recoveredNotifiedAt.delete(sessionID)
               }
 
-              set((state) => ({
-                sessionStatus: { ...state.sessionStatus, [sessionID]: status },
-                // A failed child stops showing "failed" once it runs again.
-                sessionErrors:
-                  status.type === "busy" && state.sessionErrors[sessionID]
-                    ? Object.fromEntries(Object.entries(state.sessionErrors).filter(([id]) => id !== sessionID))
-                    : state.sessionErrors,
-                // Clear status text when idle
-                statusText: status.type === "idle" ? { ...state.statusText, [sessionID]: "" } : state.statusText,
-              }))
+              set((state) => {
+                const runStart = nextRunStart(state.runStartedAt[sessionID], status.type, Date.now())
+                return {
+                  sessionStatus: { ...state.sessionStatus, [sessionID]: status },
+                  // A failed child stops showing "failed" once it runs again.
+                  sessionErrors:
+                    status.type === "busy" && state.sessionErrors[sessionID]
+                      ? Object.fromEntries(Object.entries(state.sessionErrors).filter(([id]) => id !== sessionID))
+                      : state.sessionErrors,
+                  // Clear status text when idle
+                  statusText: status.type === "idle" ? { ...state.statusText, [sessionID]: "" } : state.statusText,
+                  runStartedAt:
+                    runStart === undefined
+                      ? Object.fromEntries(Object.entries(state.runStartedAt).filter(([id]) => id !== sessionID))
+                      : state.runStartedAt[sessionID] === runStart
+                        ? state.runStartedAt
+                        : { ...state.runStartedAt, [sessionID]: runStart },
+                }
+              })
 
               // SSE is the source of truth — update sending state unconditionally
               if (status.type === "idle") {
@@ -920,6 +934,7 @@ export const useEvents = create<EventsState>((set, get) => ({
       lastDisconnectReason: null,
       sessionStatus: {},
       statusText: {},
+      runStartedAt: {},
       sessionErrors: {},
       permissions: {},
       questions: {},

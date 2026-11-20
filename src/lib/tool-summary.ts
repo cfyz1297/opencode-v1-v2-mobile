@@ -51,6 +51,15 @@ export interface ToolActivity {
   failed: boolean
 }
 
+// A call is live from its first event until a terminal one closes it. V2 parts
+// arrive as "pending" while the tool input streams, so waiting for the literal
+// "running" status left the clock frozen from call time to execution.
+export function isLiveTool(tool: Part): boolean {
+  const state = tool.state
+  if (state?.status === "completed" || state?.status === "error") return false
+  return typeof state?.time?.start === "number" && state.time.end === undefined
+}
+
 export function summarizeToolActivity(tools: Part[], now = Date.now()): ToolActivity {
   const counts = new Map<ToolKind, number>()
   let totalMs = 0
@@ -61,7 +70,7 @@ export function summarizeToolActivity(tools: Part[], now = Date.now()): ToolActi
     const kind = toolKind(tool.tool)
     counts.set(kind, (counts.get(kind) ?? 0) + 1)
     const state = tool.state
-    if (state?.status === "running") running = true
+    if (isLiveTool(tool)) running = true
     if (state?.status === "error") failed = true
     const start = state?.time?.start
     if (typeof start !== "number") continue

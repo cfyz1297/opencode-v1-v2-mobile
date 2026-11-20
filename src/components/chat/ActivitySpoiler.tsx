@@ -4,7 +4,7 @@ import { Ionicons } from "@expo/vector-icons"
 import { useTranslation } from "react-i18next"
 import type { Part } from "../../lib/sdk"
 import { formatDurationMs } from "../../lib/tool-duration"
-import { summarizeToolActivity, toolKind } from "../../lib/tool-summary"
+import { isLiveTool, summarizeToolActivity, toolKind } from "../../lib/tool-summary"
 import { ReasoningBlock } from "./ReasoningBlock"
 import { ToolRun } from "./ToolRun"
 
@@ -45,7 +45,7 @@ export function ActivitySpoiler({ reasoning, tools, isDark }: Props) {
   // The segment's first start anchors the clock; a segment with two running
   // calls already gets its sum from the tools' own timestamps.
   const firstStart = tools.find((tool) => tool.state?.time?.start)?.state?.time?.start
-  const now = useTickingNow(tools.some((tool) => tool.state?.status === "running"), firstStart)
+  const now = useTickingNow(tools.some(isLiveTool), firstStart)
   const summary = summarizeToolActivity(tools, now)
   const reasonCount = reasoning ? 1 : 0
   const steps = tools.length + reasonCount

@@ -7,6 +7,7 @@ import { DiffView } from "./DiffView"
 import { SubagentRow } from "./SubagentRow"
 import { delegatedAgent, delegatedDescription, isShellTool, toolCommand, toolDetailText, toolTitle } from "../../lib/tool-view"
 import { formatToolDuration } from "../../lib/tool-duration"
+import { isLiveTool } from "../../lib/tool-summary"
 
 const TOOL_ICONS: Record<string, string> = {
   read: "glasses-outline",
@@ -327,7 +328,8 @@ export function ToolCallCard({ tool, isDark }: Props) {
   const status = tool.state?.status || "pending"
   const color = statusColor(status)
   const error = tool.state?.error?.message
-  const now = useRunningClock(tool.state?.time?.start, status === "running")
+  const live = isLiveTool(tool)
+  const now = useRunningClock(tool.state?.time?.start, live)
   const elapsed = formatToolDuration(tool.state?.time?.start, tool.state?.time?.end, now)
   // An empty object is what a tool sends at input.started, before any argument
   // has arrived: counting it as detail gave a chevron that opened onto nothing.
@@ -365,7 +367,7 @@ export function ToolCallCard({ tool, isDark }: Props) {
             {elapsed && <Text style={[s.elapsed, isDark && s.elapsedDark]}>{elapsed}</Text>}
           </View>
           <View style={s.headerRight}>
-            {status === "running" && <ActivityIndicator size="small" color={color} />}
+            {live && <ActivityIndicator size="small" color={color} />}
             {status === "completed" && <Ionicons name="checkmark" size={14} color="#22c55e" />}
             {status === "error" && <Ionicons name="close" size={14} color="#ef4444" />}
             {hasDetail && (

@@ -39,6 +39,18 @@ test("a running call counts up to now so the total moves", () => {
   assert.equal(summary.running, true)
 })
 
+test("a call that has started but not finished counts as running", () => {
+  // V2 opens the window at input.started while the tool is still "pending";
+  // waiting for the literal "running" status left the clock frozen exactly
+  // during the phase the user watches longest.
+  assert.equal(summarizeToolActivity([tool("shell", "pending", 1000)], 12_000).running, true)
+})
+
+test("a terminal state without an end stamp is not running", () => {
+  assert.equal(summarizeToolActivity([tool("shell", "completed", 1000)], 12_000).running, false)
+  assert.equal(summarizeToolActivity([tool("shell", "error", 1000)], 12_000).running, false)
+})
+
 test("calls without timestamps add nothing instead of skewing the total", () => {
   const summary = summarizeToolActivity([tool("shell", "completed"), tool("read", "completed", 0, 700)])
   assert.equal(summary.totalMs, 700)
