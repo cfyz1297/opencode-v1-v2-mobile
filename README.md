@@ -8,9 +8,9 @@ A fork of [dzianisv/opencode-mobile](https://github.com/dzianisv/opencode-mobile
 
 The repository used to be called `opencode-mobile`; it was renamed to `opencode-v1-v2-mobile` in 0.3.0. Old links redirect, and the APK file name (`opencode-mobile-v2.apk`) is kept unchanged so the built-in update check and the release signature chain keep working.
 
-Version **0.3.21 (86)**. Installs over 0.3.20 — no uninstall needed.
+Version **0.3.22 (87)**. Installs over 0.3.21 — no uninstall needed.
 
-> **Status:** every build runs 833 automated tests plus an Android CUA smoke on an emulator. Not yet exercised against a real opencode 1.18.x server, and the tablet layout, tunnel wizard and offline history have been checked in code and on the emulator only.
+> **Status:** every build runs 849 automated tests plus an Android CUA smoke on an emulator. Not yet exercised against a real opencode 1.18.x server, and the tablet layout, tunnel wizard and offline history have been checked in code and on the emulator only.
 
 ## Is this the app you are looking for?
 
@@ -109,11 +109,11 @@ V2 specifics (verified on 2.0.27): Basic authentication only as `opencode:<passw
 
 ## How the fork differs from upstream
 
-The base is [dzianisv/opencode-mobile](https://github.com/dzianisv/opencode-mobile) at tag `v0.4.15` (2026-08-14). The 1.x transport from `v0.4.16` and the header fix from `v0.4.17` were ported by hand. Upstream has since shipped `v0.4.16` … `v0.4.23`; those releases were read commit by commit and only what fits one user with one server was taken. From `v0.4.15` the fork runs its own version line, currently **0.3.21**.
+The base is [dzianisv/opencode-mobile](https://github.com/dzianisv/opencode-mobile) at tag `v0.4.15` (2026-08-14). The 1.x transport from `v0.4.16` and the header fix from `v0.4.17` were ported by hand. Upstream has since shipped `v0.4.16` … `v0.4.23`; those releases were read commit by commit and only what fits one user with one server was taken. From `v0.4.15` the fork runs its own version line, currently **0.3.22**.
 
 The intended setup is opencode `serve` running **in Termux on the same phone**, reached over `127.0.0.1` — that is why the app allows cleartext to the loopback address and keeps a foreground service alive for notifications. A remote server on the LAN, a Cloudflare tunnel or Tailscale works too; nothing in the app assumes a backend of its own.
 
-| What | Upstream (`v0.4.23`) | This fork (0.3.21) |
+| What | Upstream (`v0.4.23`) | This fork (0.3.22) |
 |---|---|---|
 | Server API | 1.x only (`/session`, `/global/*`) | **both** 1.x and 2.x (`/api/*`), auto-detected, forceable in Settings |
 | Target | many users, app-store delivery | one user, one server, one channel: an APK |
@@ -193,7 +193,17 @@ A separate pure-Java client without Gradle (`aapt → ecj → d8 → apksigner`)
 ## Updates
 
 <details>
-<summary>Changelog by version (0.2.11 - 0.3.21)</summary>
+<summary>Changelog by version (0.2.11 - 0.3.22)</summary>
+
+### 0.3.22
+
+- **The transcript stays with the answer while it streams.** The list was inverted, which in React Native grows the newest row *upward*: every existing row shifted on every token, and the text crawled out from under the reader. Four compensations were tried on a device — per-cell height deltas, the newest cell's height, the content's total height, and React Native's own `maintainVisibleContentPosition` — and none of them survived a real streaming answer. The list is now a plain one: growth happens at the bottom and cannot move text above it. History still loads when you reach the top, with the spinner as the header, and `maintainVisibleContentPosition` is kept only for that one case, a page inserted above the reader.
+- **Following the answer does not switch itself off.** Auto-follow used to be recalculated from every scroll sample. Those samples are throttled to 100 ms while a streaming delta grows the content continuously, so the sample carried the offset from *before* the growth, its distance from the end looked like the reader had scrolled away, and following stayed off for the rest of the session. Following now belongs to gestures: a drag takes it away, the end of a drag or a fling that lands at the bottom gives it back. A scroll sample never changes it.
+- **The last line is no longer left behind.** `scrollToEnd` aims at the last row's *measured* frame, and that frame always trails the chunk that just arrived — the list stopped a line short and the rest had to be dragged. On Android the scroll now aims past the end and the native `ScrollView` clips it to the real content bottom, so no JavaScript measurement takes part.
+- **A finger lift no longer fights the fling,** and another resize no longer pushes the text out of view. Releasing a finger with velocity still leaves momentum ahead, so follow is re-armed at the end of the fling, not at the lift. The composer, the "Working…" row, banners and the keyboard all change the list height during a run; while following, the list lands on the end again after a real size change, instead of leaving the newest line below the fold or empty space under the text.
+- **A reloaded transcript opens at the newest message.** Coming back from a subagent session re-mounted the list at offset 0, which in a plain list is the *oldest* row, and the mounting offset read as "the reader scrolled away" — the conversation opened at its beginning. A reload now counts as a fresh open: hidden until it reaches the end.
+- **Selecting text no longer scrolls the transcript.** A long-press on a message used to move the list; text selection now owns the gesture and the list stays where it is.
+- **The message navigator follows the plain list.** The counter counts from the oldest, a jump aligns its message to the top, and a transcript whose rows are not laid out yet starts at the newest message instead of index 0 — which after the flip is the oldest.
 
 ### 0.3.21
 
