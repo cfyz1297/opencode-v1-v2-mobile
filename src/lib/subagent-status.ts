@@ -141,8 +141,8 @@ export function subagentSince(child: Pick<Session, "time"> | undefined): number 
  * Call order with the ones still working pulled to the top, and finished rows
  * newest first: the list answers "what is happening now" and "what happened
  * last", so a fresh run must not sit under an older one. `timeOf` returns the
- * same stamp the row shows as "N ago"; rows without session data keep call
- * order.
+ * same stamp the row shows as "N ago"; rows without a stamp sort after the
+ * stamped ones, keeping call order among themselves.
  */
 export function orderSubagents(
   refs: readonly SubagentRef[],

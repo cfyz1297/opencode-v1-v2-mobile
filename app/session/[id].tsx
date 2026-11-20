@@ -63,6 +63,7 @@ import { MessageNavigation } from "../../src/lib/message-navigation"
 import type { CellRendererProps } from "@react-native/virtualized-lists"
 import {
   buildTranscriptRows,
+  rowChrome,
   rowMessage,
   rowMessages,
   rowParts,
@@ -71,6 +72,9 @@ import {
 } from "../../src/lib/transcript-rows"
 import { log } from "../../src/lib/logbuffer"
 
+// Stable empty list: `|| []` allocated a new array on every render, so every
+// memo downstream (rows, chrome, loose cards) rebuilt on each keystroke.
+const EMPTY: never[] = []
 
 // --- Builtin slash commands ---
 const BUILTIN_COMMANDS: SlashCommand[] = [
@@ -208,9 +212,9 @@ export default function SessionScreen() {
 
   // Permission & question state
   const sessionID = currentSession?.id
-  const permissions = useEvents((s) => (sessionID ? s.permissions[sessionID] : undefined)) || []
-  const questions = useEvents((s) => (sessionID ? s.questions[sessionID] : undefined)) || []
-  const answeredQuestions = useEvents((s) => (sessionID ? s.answeredQuestions[sessionID] : undefined)) || []
+  const permissions = useEvents((s) => (sessionID ? s.permissions[sessionID] : undefined)) || EMPTY
+  const questions = useEvents((s) => (sessionID ? s.questions[sessionID] : undefined)) || EMPTY
+  const answeredQuestions = useEvents((s) => (sessionID ? s.answeredQuestions[sessionID] : undefined)) || EMPTY
   // Cards stay where the question was asked (V2 names the message), not above
   // the composer below the newest answer.
   const answered = useMemo(() => splitAnswered(answeredQuestions), [answeredQuestions])
@@ -1460,11 +1464,9 @@ export default function SessionScreen() {
               renderItem={({ item: row, index }) => {
                 const message = rowMessage(row)
                 const isUser = message.role === "user"
-                // A run split at a question keeps its header once: the newer
-                // chunk is the continuation, and only the newest chunk shows
-                // the token/cost footer.
-                const continued = index > 0 && listRows[index - 1].kind === "run"
-                const showMeta = !(index + 1 < listRows.length && listRows[index + 1].kind === "run")
+                // A run split at a question keeps one header, and only its
+                // newest chunk carries the token/cost footer.
+                const { continued, showMeta } = rowChrome(listRows, index)
                 return (
                   <View>
                     <MessageBubble

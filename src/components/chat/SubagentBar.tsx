@@ -27,7 +27,7 @@ type View_ = "current" | "all"
  *           running and just finished alike, plus anything still working from
  *           an earlier prompt (a long-running child must not vanish when a new
  *           batch starts). Spinner while any of them works, check once none does.
- *   right — every subagent this session has delegated, in call order.
+ *   right — every subagent this session has delegated, newest finished first.
  *
  * Both open the same list component over their own set, running rows first and
  * finished ones newest first, so "who is working" and "who worked" stay one tap

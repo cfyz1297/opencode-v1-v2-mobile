@@ -75,6 +75,27 @@ function isUserRow(row: TranscriptRow): boolean {
 }
 
 /**
+ * The bubble chrome for one row: `continued` hides the role header on an
+ * assistant chunk that continues the run above it, `showMeta` keeps the
+ * token/cost footer on the run's last chunk only.
+ *
+ * Positional on purpose — a user row after an assistant run is NOT a
+ * continuation, which is what a bare "previous row is a run" check got wrong.
+ */
+export function rowChrome(
+  rows: readonly TranscriptRow[],
+  index: number,
+): { continued: boolean; showMeta: boolean } {
+  const row = rows[index]
+  const previous = rows[index - 1]
+  const next = rows[index + 1]
+  return {
+    continued: row?.kind === "run" && previous?.kind === "run",
+    showMeta: !(row?.kind === "run" && next?.kind === "run"),
+  }
+}
+
+/**
  * The navigator's targets: the user's own messages, in the order the list
  * renders them (oldest first).
  *

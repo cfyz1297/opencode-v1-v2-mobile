@@ -149,6 +149,10 @@ function finishRunLocally(sessionID: string) {
   useEvents.setState((state) => ({
     sessionStatus: { ...state.sessionStatus, [sessionID]: { type: "idle" } },
     statusText: { ...state.statusText, [sessionID]: "" },
+    // This path exists for runs whose idle event was lost, so nothing else
+    // will ever clear the clock — a start left behind makes the NEXT run open
+    // with a huge elapsed time.
+    runStartedAt: Object.fromEntries(Object.entries(state.runStartedAt).filter(([id]) => id !== sessionID)),
   }))
   useSessions.setState((state) => ({ sending: { ...state.sending, [sessionID]: false } }))
   sessionActivityAt.delete(sessionID)
@@ -311,9 +315,11 @@ async function activeSessionIDs(client: Client): Promise<Set<string> | null> {
 // server's active list for sessions with no local status (idle ones are never
 // touched), so the session screen polls their prompts and the clock can start.
 // A stale entry is cleared by the usual quiet-run resync.
-async function adoptActiveSessions(client: Client) {
+async function adoptActiveSessions(client: Client, signal: AbortSignal) {
   const active = await activeSessionIDs(client)
-  if (!active) return
+  // The fetch can outlive its connection: disconnect() clears the store and
+  // connect() starts over for another server, whose ids may overlap.
+  if (!active || signal.aborted) return
   const missing = sessionsWithoutStatus(active, useEvents.getState().sessionStatus)
   if (missing.length === 0) return
   const now = Date.now()
@@ -571,7 +577,7 @@ export const useEvents = create<EventsState>((set, get) => ({
     const currentController = controller
     set({ connected: true, authError: false })
     // The server still owns runs this process has never heard of after a crash.
-    void adoptActiveSessions(client)
+    void adoptActiveSessions(client, currentController.signal)
     // Grace period: the watchdog measures silence from here until the first
     // chunk lands.
     lastStreamActivityAt = Date.now()

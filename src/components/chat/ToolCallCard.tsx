@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react"
+import { useState, useCallback } from "react"
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Platform } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { useTranslation } from "react-i18next"
@@ -8,6 +8,7 @@ import { SubagentRow } from "./SubagentRow"
 import { delegatedAgent, delegatedDescription, isShellTool, toolCommand, toolDetailText, toolTitle } from "../../lib/tool-view"
 import { formatToolDuration } from "../../lib/tool-duration"
 import { isLiveTool } from "../../lib/tool-summary"
+import { useTickingNow } from "../../lib/use-ticking-now"
 
 const TOOL_ICONS: Record<string, string> = {
   read: "glasses-outline",
@@ -301,19 +302,6 @@ function ErrorBanner({ message, isDark }: { message: string; isDark: boolean }) 
 // --- Duration display ---
 // A running tool has no end timestamp, so it needs a clock that ticks: without
 // one the row stayed blank for the whole call and a long command looked frozen.
-function useRunningClock(start: number | undefined, running: boolean): number | undefined {
-  const [now, setNow] = useState<number | undefined>(undefined)
-  useEffect(() => {
-    if (!running || !start) {
-      setNow(undefined)
-      return
-    }
-    setNow(Date.now())
-    const id = setInterval(() => setNow(Date.now()), 1000)
-    return () => clearInterval(id)
-  }, [running, start])
-  return now
-}
 
 // --- Main component ---
 interface Props {
@@ -329,7 +317,7 @@ export function ToolCallCard({ tool, isDark }: Props) {
   const color = statusColor(status)
   const error = tool.state?.error?.message
   const live = isLiveTool(tool)
-  const now = useRunningClock(tool.state?.time?.start, live)
+  const now = useTickingNow(live, tool.state?.time?.start)
   const elapsed = formatToolDuration(tool.state?.time?.start, tool.state?.time?.end, now)
   // An empty object is what a tool sends at input.started, before any argument
   // has arrived: counting it as detail gave a chevron that opened onto nothing.

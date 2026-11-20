@@ -567,9 +567,29 @@ test("a run that ends while the app is backgrounded still notifies", async () =>
   await app.advance(6_000)
 
   assert.equal(app.events.getState().sessionStatus[SESSION].type, "idle")
+  // The next run of this session must start its clock from scratch: a start
+  // left behind by a recovered run showed "Working… · 42m" on a fresh send.
+  assert.equal(app.events.getState().runStartedAt[SESSION], undefined)
   const completed = app.notified.filter((n) => n.category === "completed")
   assert.equal(completed.length, 1)
   assert.equal(completed[0].force, true)
+})
+
+test("a run the app never saw starts as busy after a cold start", async () => {
+  const app = harness()
+  // A crash wipes every busy flag, but the server still owns the run — and the
+  // question it is blocked on. Nothing polls the forms without a busy status.
+  app.setActive([SESSION])
+  app.connect()
+  await app.settle()
+
+  assert.equal(app.events.getState().sessionStatus[SESSION].type, "busy")
+  assert.equal(typeof app.events.getState().runStartedAt[SESSION], "number")
+
+  // The server's own idle event ends it, and the adopted clock goes with it.
+  await app.push({ type: "session.status", properties: { sessionID: SESSION, status: { type: "idle" } } })
+  assert.equal(app.events.getState().sessionStatus[SESSION].type, "idle")
+  assert.equal(app.events.getState().runStartedAt[SESSION], undefined)
 })
 
 test("the background watch stays off while the app is open", async () => {

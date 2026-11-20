@@ -74,10 +74,12 @@ export function summarizeToolActivity(tools: Part[], now = Date.now()): ToolActi
     if (state?.status === "error") failed = true
     const start = state?.time?.start
     if (typeof start !== "number") continue
-    // A running call is counted up to now, so the total moves while the user
-    // watches instead of staying at zero until the run ends.
-    const end = state?.time?.end ?? now
-    if (end >= start) totalMs += end - start
+    // A live call is counted up to now, so the total moves while the user
+    // watches instead of staying at zero until the run ends. A finished call
+    // with no end stamp has an unknown duration: counting it to `now` made an
+    // old segment's total grow on every render.
+    const end = state?.time?.end ?? (isLiveTool(tool) ? now : undefined)
+    if (end !== undefined && end >= start) totalMs += end - start
   }
 
   // Stable order: most used first, ties keep the order they appeared in.

@@ -107,7 +107,12 @@ test("three in one turn, two finished: all three stay in the current batch", () 
   const statusOf = (ref: { sessionID: string }) => (ref.sessionID === "c3" ? busy() : done())
   const current = visibleSubagents(refs, statusOf)
   assert.deepEqual(current.map((r) => r.sessionID), ["c1", "c2", "c3"])
-  assert.deepEqual(orderSubagents(current, statusOf).map((r) => r.sessionID), ["c3", "c1", "c2"])
+  // Production always passes the row's own stamp; with none the call order
+  // fallback applies and c3 stays on top as the only running one.
+  assert.deepEqual(
+    orderSubagents(current, statusOf, () => undefined).map((r) => r.sessionID),
+    ["c3", "c1", "c2"],
+  )
 })
 
 test("a new turn shows its own batch plus the subagent still working from the last one", () => {

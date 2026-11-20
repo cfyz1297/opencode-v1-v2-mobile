@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { useTranslation } from "react-i18next"
 import type { Part } from "../../lib/sdk"
 import { formatDurationMs } from "../../lib/tool-duration"
 import { isLiveTool, summarizeToolActivity, toolKind } from "../../lib/tool-summary"
+import { useTickingNow } from "../../lib/use-ticking-now"
 import { ReasoningBlock } from "./ReasoningBlock"
 import { ToolRun } from "./ToolRun"
 
@@ -13,22 +14,6 @@ interface Props {
   reasoning?: Part
   tools: Part[]
   isDark: boolean
-}
-
-// A running block's total has to move, otherwise it reads as a frozen 0.0s for
-// the whole call. Same one-second clock the tool cards use.
-function useTickingNow(running: boolean, start: number | undefined): number | undefined {
-  const [now, setNow] = useState<number | undefined>(undefined)
-  useEffect(() => {
-    if (!running || !start) {
-      setNow(undefined)
-      return
-    }
-    setNow(Date.now())
-    const id = setInterval(() => setNow(Date.now()), 1000)
-    return () => clearInterval(id)
-  }, [running, start])
-  return now
 }
 
 // One spoiler per segment between two answers: the model's thinking and every

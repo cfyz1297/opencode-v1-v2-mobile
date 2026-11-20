@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react"
 import { View, Text, StyleSheet, ActivityIndicator } from "react-native"
 import { useTranslation } from "react-i18next"
 import { useEvents } from "../../stores/events"
 import { useSessions } from "../../stores/sessions"
 import { formatDurationMs } from "../../lib/tool-duration"
+import { useTickingNow } from "../../lib/use-ticking-now"
 
 interface Props {
   sessionID: string
@@ -25,16 +25,7 @@ export function StatusIndicator({ sessionID, isDark }: Props) {
 
   // A second per second so the bar proves the run is alive: a frozen label was
   // indistinguishable from a stalled agent while the model was still thinking.
-  const [now, setNow] = useState<number | undefined>(undefined)
-  useEffect(() => {
-    if (!busy || !startedAt) {
-      setNow(undefined)
-      return
-    }
-    setNow(Date.now())
-    const id = setInterval(() => setNow(Date.now()), 1000)
-    return () => clearInterval(id)
-  }, [busy, startedAt])
+  const now = useTickingNow(busy, startedAt)
 
   if (!busy) return null
 

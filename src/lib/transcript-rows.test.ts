@@ -2,6 +2,7 @@ import { test } from "node:test"
 import assert from "node:assert/strict"
 import {
   buildTranscriptRows,
+  rowChrome,
   rowMessage,
   rowMessages,
   rowParts,
@@ -142,6 +143,33 @@ test("userRowIds lists only the user's own rows, newest first", () => {
   ])
   // A merged assistant run is one row and never a target.
   assert.deepEqual(userRowIds(rows), ["u2", "u1"])
+})
+
+// List order (oldest first): a run split at a question is two rows in a row.
+test("a chunk that continues a run above hides its header, but a user row never does", () => {
+  const rows = buildTranscriptRows([item("u2", "user"), item("a3", "assistant"), item("a2", "assistant")])
+  const listRows = [...rows].reverse()
+  // listRows: [u2, run(a2..a3)] — the user row follows nothing and must keep
+  // its "You" header; a positional check would have hidden it.
+  assert.deepEqual(rowChrome(listRows, 0), { continued: false, showMeta: true })
+  assert.deepEqual(rowChrome(listRows, 1), { continued: false, showMeta: true })
+})
+
+test("the older chunk of a split run is continued and shows no footer", () => {
+  const older = buildTranscriptRows(
+    [item("a4", "assistant"), item("a3", "assistant"), item("a2", "assistant")],
+    (id) => id === "a2",
+  )
+  // Store order is newest first; list order is oldest first.
+  const split = [...older].reverse()
+  assert.deepEqual(
+    split.map((row) => (row.kind === "run" ? row.items.map((i) => i.message.id) : [row.id])),
+    [["a2"], ["a4", "a3"]],
+  )
+  assert.deepEqual(rowChrome(split, 0), { continued: false, showMeta: false })
+  // The second row continues the split run: no repeated header, and it ends
+  // the run so it carries the token/cost footer.
+  assert.deepEqual(rowChrome(split, 1), { continued: true, showMeta: true })
 })
 
 

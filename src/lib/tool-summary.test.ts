@@ -51,6 +51,13 @@ test("a terminal state without an end stamp is not running", () => {
   assert.equal(summarizeToolActivity([tool("shell", "error", 1000)], 12_000).running, false)
 })
 
+test("a finished call with no end stamp adds nothing instead of growing forever", () => {
+  // History can carry a completed tool whose time.completed is missing. Counting
+  // it up to `now` made an old segment's total grow with every render.
+  const summary = summarizeToolActivity([tool("shell", "completed", 1000)], 12_000)
+  assert.equal(summary.totalMs, 0)
+})
+
 test("calls without timestamps add nothing instead of skewing the total", () => {
   const summary = summarizeToolActivity([tool("shell", "completed"), tool("read", "completed", 0, 700)])
   assert.equal(summary.totalMs, 700)

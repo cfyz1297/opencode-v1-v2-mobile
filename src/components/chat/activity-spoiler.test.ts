@@ -11,6 +11,7 @@ import { readFileSync } from "node:fs"
 
 const bubble = readFileSync(new URL("./MessageBubble.tsx", import.meta.url), "utf8")
 const spoiler = readFileSync(new URL("./ActivitySpoiler.tsx", import.meta.url), "utf8")
+const clock = readFileSync(new URL("../../lib/use-ticking-now.ts", import.meta.url), "utf8")
 const stylesheet = spoiler.slice(spoiler.indexOf("const s = StyleSheet.create("))
 
 test("the bubble folds activity into one spoiler and keeps text on screen", () => {
@@ -39,9 +40,12 @@ test("the collapsed line names the tools and their total time", () => {
 })
 
 test("a running block keeps its total moving", () => {
-  assert.match(spoiler, /useTickingNow/, "a running run needs a clock")
-  assert.match(spoiler, /setInterval\(\(\) => setNow\(Date\.now\(\)\), 1000\)/, "the clock ticks once a second")
-  assert.match(spoiler, /return \(\) => clearInterval\(id\)/, "and stops when the run ends")
+  // One shared clock for the spoiler, the tool card and the status bar: three
+  // copies drifted apart once already, leaving two of them frozen.
+  assert.match(spoiler, /import \{ useTickingNow \} from "\.\.\/\.\.\/lib\/use-ticking-now"/, "the spoiler uses the shared clock")
+  assert.match(spoiler, /useTickingNow\(tools\.some\(isLiveTool\)/, "a running run starts the clock")
+  assert.match(clock, /setInterval\(\(\) => setNow\(Date\.now\(\)\), 1000\)/, "the clock ticks once a second")
+  assert.match(clock, /return \(\) => clearInterval\(id\)/, "and stops when the run ends")
 })
 
 test("the spoiler reports progress and failure while collapsed", () => {
