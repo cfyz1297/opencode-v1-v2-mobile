@@ -31,7 +31,7 @@
 - `any` формально не запрещён механически, но встречается точечно: 16 вхождений `as any`/`: any` в `src`+`app` без тестов, почти всё — иконки `@expo/vector-icons` и границы событий: `name={icon as any}` (`src/components/chat/ToolCallCard.tsx:358`), `(event as any).payload` (`src/stores/events.ts:642`). `AGENTS.md` требует «без `any`» — фактически это правило нарушается.
 - TypeScript: `strict: true`, наследование `expo/tsconfig.base`, `allowImportingTsExtensions: true`, `types: ["node"]` (`tsconfig.json`). `include` — `**/*.ts` и `**/*.tsx`, поэтому `npm run typecheck` проверяет и тесты.
 - Запуск: `npm run typecheck`, `npm test`, `npm run test:coverage`, `npm run check:versions`.
-- Числа на 2026-11-20: **849 тестов**, покрытие **98.32 % строк / 87.02 % ветвей / 96.75 % функций**; `typecheck` — чисто.
+- Числа на 2026-11-20: **852 теста**, покрытие **98.27 % строк / 86.85 % ветвей / 96.75 % функций**; `typecheck` — чисто.
 
 ### 3) Импорты и модули
 
@@ -58,7 +58,7 @@
 - Каталог: тест лежит рядом с модулем (`src/lib/*.test.ts`), один тест — один файл модуля.
 - Раннер: встроенный `node:test`, ассерты `node:assert/strict`; `describe/it` редки — почти всё плоские `test(...)`.
 - Моки: внедрение зависимостей (фейковое хранилище, фейковый `fetch`), подмена `expo/fetch` через `registerHooks` (`src/lib/sdk.integration.test.ts`), HTTP-заглушка для интеграционных (`tests/fixtures/mock-opencode-server.ts`), «экранный» харнесс на `vm` + `typescript` (`src/lib/connections-screen.test.ts`), статические проверки исходников регулярками для того, что нельзя отрендерить (`src/lib/text-metrics.test.ts`, `src/components/wide-content-scroll.regression.test.ts`, `src/lib/keep-alive-config.test.ts`).
-- Покрытие: гейт 80 % по строкам/ветвям/функциям (`package.json`); фактически 98.32 / 87.02 / 96.75 (прогон 2026-11-20).
+- Покрытие: гейт 80 % по строкам/ветвям/функциям (`package.json`); фактически 98.27 / 86.85 / 96.75 (прогон 2026-11-20).
 - Чистые модули для Android-поведения: когда исправление целиком в нативном атрибуте (`lineHeight`, `nestedScrollEnabled`, `foregroundServiceType`), тест фиксирует инвариант по исходнику, а комментарий в тесте объясняет физику бага — см. `src/lib/text-metrics.test.ts`, `src/lib/scroll-config.test.ts`, `src/lib/keep-alive-config.test.ts`.
 - Подробности — `docs/codebase/TESTING.md`.
 

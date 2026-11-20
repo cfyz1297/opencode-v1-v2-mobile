@@ -119,22 +119,22 @@
 
 1. **Панель сабагентов на V1 — как в апстриме.** Отдельной работы нет. `collectSubagents()` уже гейтится наличием дочерних сессий: если V1 их не отдаёт, бар просто не появляется, а поведение транспорта не меняется.
 2. **ESLint и Prettier не вводятся.** В апстриме их нет (`devDependencies` — только `@types/react` и `typescript`), а в форке к ним добавлен лишь `@types/node`. Гейты остаются `tsc --noEmit` + тесты.
-3. **iOS не поддерживается.** README прав по смыслу; iOS-блок в `app.json` и скрипт `ios` — мёртвый конфиг. Удаление — отдельная правка `app.json` (защищённая конфигурация, нужен профиль `standard`), сейчас не сделана.
+3. **iOS не поддерживается — сделано.** iOS-блок удалён из `app.json`, скрипт `npm run ios` — из `package.json`; `expo prebuild --platform android` от этого не зависит.
 4. **Серверы V1 старше 1.18.x не поддерживаются отдельно.** В апстриме нет даже `permission.updated` (`search/code` по репозиторию — 0 совпадений), вся обработка поколений прав — добавка форка (`src/lib/sdk-v1.ts:26-32`, `normalizeV1Event`). Уже написанный маппинг двух форматов остаётся: его удаление — это как раз изменение поведения V1, которого владелец не хочет. Новую работу под ещё более старые серверы не начинать.
 5. **Эвристика по переписке остаётся бессрочно; минимальная версия V2 не навязывается.** `/api/session/active` — добавка форка (в апстриме 0 совпадений), а `activeSessionIDs()` возвращает `null`, когда эндпоинта нет, и вызывающие падают на `isSessionActuallyIdle` (`src/stores/events.ts:294-313`). Обе ветки работают, выбор сервера не ограничен.
 6. **Источник истины о релизе — код и тег.** `app.json` + `package.json` + `android/app/build.gradle` (сверяются `npm run check:versions` и шагом CI по `aapt`) задают номер; тег `vX.Y.Z` фиксирует коммит; `HANDOFF.md` — человеческий журнал (обновляется при релизе), README — публичное лицо. При расхождении прав код.
-7. **GitHub Pages не нужен.** Унаследованный сайт апстрима (`/privacy` с Sentry и VIBE TECHNOLOGIES LLC) выключается, а не переписывается.
-8. **Lockfile добавляется в проверку версии.** `package-lock.json` сейчас держит `0.3.21`, потому что `check:versions` его не читает; правка `scripts/check-version-parity.mjs` — две строки, отдельной задачей.
+7. **GitHub Pages не нужен — сделано.** Сайт апстрима (`/privacy` с Sentry и VIBE TECHNOLOGIES LLC) убран: API удаления Pages отвечает 422, поэтому удалена ветка `gh-pages`, из которой он публиковался. Восстановить можно из апстрима (`dzianisv/opencode-mobile`, ветка `gh-pages`).
+8. **Lockfile в проверке версии — сделано.** `check-version-parity.mjs` читает `package-lock.json` (`version` и `packages[""]`), несовпадение валит `npm run check:versions`, то есть и CI до сборки.
 
 ### 7) Intent vs reality (расхождения документации и кода)
 
 | Заявлено | Фактически | Evidence |
 |----------|-----------|----------|
-| `HANDOFF.md`, таблица «Состояние» | **Исправлено:** таблица приведена к 0.3.22 / 87, 849 тестов (2026-11-20) | `HANDOFF.md` |
-| `AGENTS.md`: «651 тест на 0.3.3» | 849 тестов на 0.3.22 | `AGENTS.md`, локальный прогон |
-| `package-lock.json`, поле `version` | Заявлено `0.3.21`, релиз и APK — `0.3.22`: `check:versions` сверяет только `package.json`, `app.json` и `build.gradle`. **Решение:** добавить lockfile в проверку (§6 п. 8) | `package-lock.json:3`, `scripts/check-version-parity.mjs` |
+| `HANDOFF.md`, таблица «Состояние» | **Исправлено:** таблица приведена к 0.3.22 / 87, 852 теста (2026-11-20) | `HANDOFF.md` |
+| `AGENTS.md`: «651 тест на 0.3.3» | 852 теста на 0.3.22 | `AGENTS.md`, локальный прогон |
+| `package-lock.json`, поле `version` | **Исправлено:** `check:versions` сверяет и lockfile (`version` + `packages[""]`), тест `scripts/check-version-parity.test.mjs`; файл приведён к `0.3.22` | `package-lock.json:3`, `scripts/check-version-parity.mjs` |
 | README: «`npm audit` — 34 записи (7 high)» | **Исправлено на 0.3.21:** `npm audit --omit=dev` — 27 записей (2 moderate, 25 high), только сборочная цепочка; на 0.3.22 не перемерялось | `README.md`, прогон 2026-11-18 |
-| README: «iOS build — no, this fork removed it» | **Решение зафиксировано (2026-11-20): iOS не поддерживается.** iOS-сборки нет, но мёртвый iOS-блок в `app.json` и скрипт `npm run ios` пока остались — удаление отдельной правкой защищённой конфигурации | `app.json`, `package.json`, §6 п. 3 |
+| README: «iOS build — no, this fork removed it» | **Исправлено:** iOS-блок удалён из `app.json`, скрипт `npm run ios` — из `package.json`; iOS в форке не поддерживается | `app.json`, `package.json` |
 | Старая карта: «заголовки уведомлений захардкожены по-английски» | **Неверно и на 0.3.3:** в `events.ts` уже тогда заголовки — `i18n.t("notifications.titles.*")`; сейчас так же локализованы и тела | `git show b0d31bc:src/stores/events.ts` (grep `title:`), `src/lib/i18n/en.json:342-359` |
 | Старая карта: «401/403 на `/api/info` → V2» | **Неверно и на 0.3.3:** уже там `wantsAuth` возвращает `api: undefined` (поколение неизвестно, запись не сохраняется) | `git show b0d31bc:src/lib/api-detect.ts:63-68`, `src/lib/api-detect.ts:63-68` |
 | README: «работает с opencode 1.x и 2.x» | Правда для транспортов; **живой сервер 1.18.x не проверялся** — только собственный мок-сервер | `src/lib/sdk-v1.integration.test.ts`, README §Status |

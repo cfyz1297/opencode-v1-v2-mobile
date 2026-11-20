@@ -6,7 +6,6 @@
   "scripts": {
     "start": "expo start",
     "start:clear": "expo start --clear",
-    "ios": "expo run:ios",
     "android": "expo run:android",
     "typecheck": "tsc --noEmit",
     "check:versions": "node scripts/check-version-parity.mjs",

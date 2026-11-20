@@ -16,7 +16,7 @@
 | Пакетный менеджер | npm; lockfile v3; `legacy-peer-deps=true` | `package-lock.json`, `.npmrc`, `.github/workflows/build.yml` |
 | Модульная система / сборка | Metro + `expo-router/entry` (JS), затем `expo prebuild` → Gradle `assembleRelease` (Android) | `package.json` (`main`), `metro.config.js`, `.github/workflows/build.yml` |
 | Версия приложения | **0.3.22, versionCode 87** | `package.json`, `app.json`, `android/app/build.gradle` |
-| Тесты | **849 тестов, 0 падений**; покрытие **98.32 % строк / 87.02 % ветвей / 96.75 % функций**; `npm run typecheck` — чисто | локальный прогон 2026-11-20 |
+| Тесты | **852 теста, 0 падений**; покрытие **98.27 % строк / 86.85 % ветвей / 96.75 % функций**; `npm run typecheck` — чисто | локальный прогон 2026-11-20 |
 
 ### 2) Продакшн-фреймворки и зависимости
 
@@ -69,13 +69,13 @@ npm start                           # Expo dev server
 npm run android                     # dev-сборка (expo run:android)
 npx expo prebuild --platform android --no-install
 cd android && ./gradlew assembleRelease   # релизный APK
-npm test                            # 849 тестов через scripts/run-tests.mjs
+npm test                            # 852 теста через scripts/run-tests.mjs
 npm run test:coverage               # те же тесты + пороги 80 %
 npm run typecheck                   # tsc --noEmit
 npm run check:versions              # паритет версий в трёх файлах
 ```
 
-Версия живёт в трёх местах: `package.json`, `app.json` (`version` + `android.versionCode`) и `android/app/build.gradle`. Литералов версии в workflow больше нет — шаг проверки APK читает ожидаемые значения из `app.json` (`EXPECTED_VERSION_CODE=$(node -p "require('./app.json').expo.android.versionCode")`). Четвёртое место — `version` в корне `package-lock.json`: `check:versions` его не сверяет, поэтому после релиза там остаётся прошлый номер (на 0.3.22 — `0.3.21`). На сборку это не влияет, но это единственная несверяемая копия номера. Релиз: тег `vX.Y.Z` → GitHub Release с `opencode-mobile-v2.apk` и `SHA256SUMS.txt`; сам релиз публикуется вручную (job публикации в workflow отсутствует).
+Версия живёт в трёх местах: `package.json`, `app.json` (`version` + `android.versionCode`) и `android/app/build.gradle`. Литералов версии в workflow больше нет — шаг проверки APK читает ожидаемые значения из `app.json` (`EXPECTED_VERSION_CODE=$(node -p "require('./app.json').expo.android.versionCode")`). Четвёртое место — `version` в корне `package-lock.json` и в `packages[""]`: с 0.3.22 `check:versions` сверяет и их (`scripts/check-version-parity.mjs`), так что отставший lockfile теперь валит сборку. iOS-блок из `app.json` и скрипт `npm run ios` удалены — iOS в форке не поддерживается. Релиз: тег `vX.Y.Z` → GitHub Release с `opencode-mobile-v2.apk` и `SHA256SUMS.txt`; сам релиз публикуется вручную (job публикации в workflow отсутствует).
 
 ### 5) Окружение и конфигурация
 

@@ -12,19 +12,19 @@
 - Вспомогательные приёмы: `node:module` `registerHooks` (подмена `expo/fetch`), `node:vm` + пакет `typescript` (рендер экранов с детерминированными адаптерами), `readFileSync` (статический анализ исходников), `node:http` (настоящий loopback-сервер для транспортов).
 
 ```bash
-npm test                 # 849 тестов, 0 падений (2026-11-20)
+npm test                 # 852 теста, 0 падений (2026-11-20)
 npm run test:coverage    # + пороги 80 % (lines/branches/functions)
 npm run typecheck        # tsc --noEmit (тесты входят в проверку)
 npm run check:versions   # паритет версий
 ```
 
-- Замеры 2026-11-20 (0.3.22): **tests 849 / pass 849 / fail 0**, покрытие **98.32 % строк, 87.02 % ветвей, 96.75 % функций**; `typecheck` — чисто.
+- Замеры 2026-11-20 (0.3.22): **tests 852 / pass 852 / fail 0**, покрытие **98.27 % строк, 86.85 % ветвей, 96.75 % функций**; `typecheck` — чисто.
 - Тесты используют реальные таймеры (sleep-ы в сотни мс, `node:vm`-рендер), поэтому под параллельной нагрузкой падают по таймауту без изменения кода. Перед выводом «тесты красные» перепроверять в простое. Полный прогон — около 3 минут.
 
 ### 2) Раскладка тестов
 
 - Размещение: **рядом с модулем** — `src/lib/<name>.test.ts` для `src/lib/<name>.ts`. Исключения: `src/components/chat/diff-compute.test.ts`, `src/components/chat/message-bubble-error.test.ts`, `src/components/chat/activity-spoiler.test.ts`, `src/components/chat/message-navigation-layout.regression.test.ts`, `src/components/chat/session-banners-theme.test.ts`, `src/components/markdown/markdown-render.guards.test.ts`, `src/components/wide-content-scroll.regression.test.ts`, `src/components/markdown-inline-code.regression.test.ts`, `src/components/subagent-bar-theme.test.ts`, `src/lib/i18n/catalog-parity.test.ts`, `src/stores/catalog-failure.test.ts`.
-- Количество: **115 `.test.ts` в `src/` + 1 `.test.mjs` в `scripts/`** = 116 файлов.
+- Количество: **115 `.test.ts` в `src/` + 2 `.test.mjs` в `scripts/`** = 117 файлов.
 - Суффиксы: `.regression.test.ts` (13 файлов, статический инвариант UI — `composer-taps`, `session-info`, `session-header`, `variant-picker-keyboard`, `dialog-back-gesture`, `tool-call-card`, `update-banner`, `markdown-inline-code`, `wide-content-scroll`, `message-navigation-layout`, `subagent-resume`, `plain-transcript`, `text-selection-scroll`), `.integration.test.ts` (HTTP — `sdk`, `sdk-v1`, `session-list`, `providers-screen`), `.smoke.test.ts` (`providers-navigation`, `provider-connect-screen`).
 - Явных setup-файлов и глобальных хуков нет: каждый тест сам поднимает окружение (`before`/`after` в `sdk.integration.test.ts`, `sdk-v1.integration.test.ts`).
 - Отдельно от `npm test`: CUA smoke `scripts/cua-roadmap-smoke.mjs` — только в CI на эмуляторе (API 35).
@@ -57,7 +57,7 @@ npm run check:versions   # паритет версий
 ### 5) Покрытие и сигналы качества
 
 - Инструмент: `--experimental-test-coverage`; пороги 80 % строк/ветвей/функций; исключены `tests/**` и сами тесты (`package.json`).
-- Текущее покрытие: **98.32 / 87.02 / 96.75** (2026-11-20).
+- Текущее покрытие: **98.27 / 86.85 / 96.75** (2026-11-20).
 - Наиболее «дырявые» по ветвям: `src/lib/v2-compat.ts` и `src/lib/sdk.ts` — там живут непроверенные ветки протокола; `sdk-v1.ts` покрыт HTTP-тестами, но не всеми ошибками сети.
 - Гейт в CI: job `test` выполняет `npm run check:versions` → `npm run typecheck` → `npm run test:coverage`, затем `build`; `roadmap-smoke` запускает CUA-эмулятор.
 - Канарейки против сторонних библиотек: `markdown-render.guards.test.ts` читает установленный `MDImage` и падает, когда библиотека сама ограничит эффект, — сигнал убрать наше переопределение. Тот же приём годится для любой другой подмены.

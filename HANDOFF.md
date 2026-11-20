@@ -18,8 +18,10 @@
 | APK | 102 700 514 байт, SHA256 `ae055ea3a59c6f1804d43bfd5be6ffbc938d5448c1af38a3ee6dc1eb290f6187` (артефакт CI `app-release`) |
 | Подпись | production keystore, сертификат SHA-256 `0b409f5f6c2ce47a84b7f4ded0403a82a99470f668d6a924d0a09c4ab7821686`; CI сверяет его без скачивания предыдущего APK |
 | Каналы | только `Build Android APK` и `Security scan`. Play / F-Droid / App Store не используются |
-| Тесты | `npm test` — **849 passed, 0 failed**; `npm run typecheck` — чисто; покрытие — 98.32 % строк / 87.02 % ветвей / 96.75 % функций |
+| Тесты | `npm test` — **849 passed, 0 failed** на теге `v0.3.22`; покрытие — 98.32 % строк / 87.02 % ветвей / 96.75 % функций |
 | Документация | `README.md` — английский (основной), `README.ru.md` — русский, `docs/codebase/` — карта проекта |
+
+На `main` после релиза: **852 теста** (3 добавились вместе с проверкой lockfile), `check:versions` теперь сверяет и `package-lock.json`, iOS-блок из `app.json` удалён.
 
 ## Что вошло в 0.3.22
 

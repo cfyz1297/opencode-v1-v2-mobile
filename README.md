@@ -10,7 +10,7 @@ The repository used to be called `opencode-mobile`; it was renamed to `opencode-
 
 Version **0.3.22 (87)**. Installs over 0.3.21 — no uninstall needed.
 
-> **Status:** every build runs 849 automated tests plus an Android CUA smoke on an emulator. Not yet exercised against a real opencode 1.18.x server, and the tablet layout, tunnel wizard and offline history have been checked in code and on the emulator only.
+> **Status:** every build runs 852 automated tests plus an Android CUA smoke on an emulator. Not yet exercised against a real opencode 1.18.x server, and the tablet layout, tunnel wizard and offline history have been checked in code and on the emulator only.
 
 ## Is this the app you are looking for?
 
@@ -22,7 +22,7 @@ Version **0.3.22 (87)**. Installs over 0.3.21 — no uninstall needed.
 | A phone client for a server in **Termux**, on a laptop or a VPS | yes (LAN, Tailscale, Cloudflare, ngrok) |
 | Approve tools, read diffs, stop a run from the phone | yes |
 | No telemetry, no account, no Play Store | yes — APK from Releases only |
-| An iOS build | no — upstream still carries an iOS config, this fork removed it |
+| An iOS build | no — upstream still carries an iOS config, this fork removed it, including the `app.json` block and the `npm run ios` script |
 
 Related projects: [dzianisv/opencode-mobile](https://github.com/dzianisv/opencode-mobile) (upstream, V1 only), [sst/opencode](https://github.com/sst/opencode) (the agent itself), `opencode serve` in Termux on Android.
 
@@ -117,7 +117,7 @@ The intended setup is opencode `serve` running **in Termux on the same phone**, 
 |---|---|---|
 | Server API | 1.x only (`/session`, `/global/*`) | **both** 1.x and 2.x (`/api/*`), auto-detected, forceable in Settings |
 | Target | many users, app-store delivery | one user, one server, one channel: an APK |
-| Delivery | Google Play, self-hosted F-Droid, APK, EAS, iOS config still present | APK from GitHub Releases only; `eas.json`, store workflows, fastlane and the iOS target removed |
+| Delivery | Google Play, self-hosted F-Droid, APK, EAS, iOS config still present | APK from GitHub Releases only; `eas.json`, store workflows, fastlane, the iOS target and its `app.json` config removed |
 | Telemetry | Sentry + PostHog | both dependencies and the Sentry plugin removed |
 | Languages | en / ru / zh-Hans, 322 keys each | same three, 461 keys each, with a parity test that fails the build when one drifts |
 | Orientation | portrait only | any; tablet layout from 768 dp, two panes from 1000 dp |
