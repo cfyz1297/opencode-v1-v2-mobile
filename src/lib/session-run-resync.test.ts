@@ -7,7 +7,7 @@ import { runInNewContext } from "node:vm"
 import { isStreamStalled, shouldReconnectOnResume } from "./stream-watchdog.ts"
 import { isSessionActuallyIdle } from "./session-status-reconcile.ts"
 import { runsNeedingResync } from "./run-watchdog.ts"
-import { nextRunStart } from "./run-clock.ts"
+import { newestUserMessageAt, nextRunStart, retimeRunStart } from "./run-clock.ts"
 import { sessionsWithoutStatus } from "./active-sessions.ts"
 
 const require = createRequire(import.meta.url)
@@ -183,7 +183,7 @@ function harness() {
     "../lib/session-status-reconcile": { isSessionActuallyIdle },
     "../lib/stream-watchdog": { isStreamStalled, shouldReconnectOnResume },
     "../lib/run-watchdog": { runsNeedingResync },
-    "../lib/run-clock": { nextRunStart },
+    "../lib/run-clock": { nextRunStart, newestUserMessageAt, retimeRunStart },
     "../lib/active-sessions": { sessionsWithoutStatus },
     "../lib/pending-questions": { reconcilePendingQuestions: (local: unknown) => local },
     "../lib/answered-questions": { recordAnswered: (list: unknown) => list },
@@ -590,6 +590,30 @@ test("a run the app never saw starts as busy after a cold start", async () => {
   await app.push({ type: "session.status", properties: { sessionID: SESSION, status: { type: "idle" } } })
   assert.equal(app.events.getState().sessionStatus[SESSION].type, "idle")
   assert.equal(app.events.getState().runStartedAt[SESSION], undefined)
+})
+
+test("a run replaced while the socket was down does not inherit the old clock", async () => {
+  const app = harness()
+  app.heartbeatEvery(15_000)
+  app.setActive([SESSION])
+  app.connect()
+  await app.settle()
+  await app.push(busyEvent)
+  const firstRunStart = app.events.getState().runStartedAt[SESSION]
+  assert.equal(firstRunStart, app.now())
+
+  // The socket dies. Meanwhile run 1 ends and run 2 starts: the transcript the
+  // server returns now carries a user message newer than the recorded start,
+  // and the server reports the session busy again.
+  await app.breakStream()
+  app.setTranscript([
+    ...COMPLETED_TRANSCRIPT,
+    { info: { id: "u2", sessionID: SESSION, role: "user", time: { created: firstRunStart + 5_000 } }, parts: [] },
+  ])
+  await app.advance(30_000) // the quiet-run resync fires once the socket is back
+
+  assert.equal(app.events.getState().runStartedAt[SESSION], firstRunStart + 5_000)
+  assert.equal(app.events.getState().sessionStatus[SESSION].type, "busy", "the run is still running")
 })
 
 test("the background watch stays off while the app is open", async () => {

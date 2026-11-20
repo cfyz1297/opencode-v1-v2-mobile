@@ -22,7 +22,7 @@ import { useLocalSearchParams, useRouter, useFocusEffect, useNavigation } from "
 import { Ionicons } from "@expo/vector-icons"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { useKeyboardHeight } from "../../src/lib/use-keyboard-height"
-import { buildMessageData, type MessageDataItem } from "../../src/lib/revert-filter"
+import { buildMessageData, isHiddenByRevert, type MessageDataItem } from "../../src/lib/revert-filter"
 import { looseCards, splitAnswered, splitByMessage } from "../../src/lib/answered-questions"
 import { runTotals } from "../../src/lib/message-run"
 import { followScrollOffset, isNearBottom, MAINTAIN_VISIBLE_CONTENT_POSITION } from "../../src/lib/scroll-follow"
@@ -403,7 +403,13 @@ export default function SessionScreen() {
     () => new Set(rows.flatMap((row) => rowMessages(row).map((message) => message.id))),
     [rows],
   )
-  const looseAnswered = useMemo(() => looseCards(answered, renderedMessageIDs), [answered, renderedMessageIDs])
+  const looseAnswered = useMemo(
+    () =>
+      looseCards(answered, renderedMessageIDs, (item) =>
+        isHiddenByRevert(item.request.tool?.messageID ?? "", revertMessageID),
+      ),
+    [answered, renderedMessageIDs, revertMessageID],
+  )
   const loosePending = useMemo(() => looseCards(pending, renderedMessageIDs), [pending, renderedMessageIDs])
   // Every subagent this session delegated, in call order — the bar under the
   // header counts them and lists them.

@@ -145,29 +145,30 @@ test("userRowIds lists only the user's own rows, newest first", () => {
   assert.deepEqual(userRowIds(rows), ["u2", "u1"])
 })
 
-// List order (oldest first): a run split at a question is two rows in a row.
-test("a chunk that continues a run above hides its header, but a user row never does", () => {
+// List order (oldest first). Store order is newest first, so this reverses.
+test("a user message after an assistant run keeps its header", () => {
   const rows = buildTranscriptRows([item("u2", "user"), item("a3", "assistant"), item("a2", "assistant")])
   const listRows = [...rows].reverse()
-  // listRows: [u2, run(a2..a3)] — the user row follows nothing and must keep
-  // its "You" header; a positional check would have hidden it.
+  // listRows: [run(a3, a2), u2]. The user row follows a run — the exact case a
+  // positional "previous row is a run" check got wrong by hiding its "You".
+  assert.equal(listRows[1].kind, "single")
   assert.deepEqual(rowChrome(listRows, 0), { continued: false, showMeta: true })
   assert.deepEqual(rowChrome(listRows, 1), { continued: false, showMeta: true })
 })
 
-test("the older chunk of a split run is continued and shows no footer", () => {
-  const older = buildTranscriptRows(
+test("a run split at a question keeps one header and one footer", () => {
+  const rows = buildTranscriptRows(
     [item("a4", "assistant"), item("a3", "assistant"), item("a2", "assistant")],
     (id) => id === "a2",
   )
-  // Store order is newest first; list order is oldest first.
-  const split = [...older].reverse()
+  const split = [...rows].reverse()
   assert.deepEqual(
     split.map((row) => (row.kind === "run" ? row.items.map((i) => i.message.id) : [row.id])),
     [["a2"], ["a4", "a3"]],
   )
+  // The chunk before the question opens the run: header yes, no footer yet.
   assert.deepEqual(rowChrome(split, 0), { continued: false, showMeta: false })
-  // The second row continues the split run: no repeated header, and it ends
+  // The chunk after it continues the same run: no repeated header, and it ends
   // the run so it carries the token/cost footer.
   assert.deepEqual(rowChrome(split, 1), { continued: true, showMeta: true })
 })

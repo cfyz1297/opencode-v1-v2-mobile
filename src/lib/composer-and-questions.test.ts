@@ -39,8 +39,11 @@ test("answered questions are kept in the transcript instead of a 2.5s echo", () 
   // V1 requests carry no message reference — they still have to render, and a
   // card whose message is not among the loaded rows must not vanish after a
   // crash (looseCards folds both cases into one list).
-  assert.match(screen, /looseCards\(answered, renderedMessageIDs\)/)
+  assert.match(screen, /looseCards\(answered, renderedMessageIDs/)
   assert.match(screen, /looseAnswered\.map\(/)
+  // A revert removes the asking message, so its card must not come back above
+  // the composer as a loose one.
+  assert.match(screen, /looseCards\(answered, renderedMessageIDs, \(item\) =>\s*isHiddenByRevert\(/)
   // The old transient confirmation hid the answer after 2500ms.
   assert.doesNotMatch(screen, /setTimeout\(\(\) => setQuestionSentText\(null\), 2500\)/)
   assert.doesNotMatch(screen, /questionSentText/)

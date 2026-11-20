@@ -48,16 +48,20 @@ export function formatAnswer(answers: readonly string[][]): string {
  * reference at all (V1), or a message id that is not among the rendered rows.
  * Dropping the second kind made a question vanish after a cold start, when
  * the server had the prompt but the transcript had not loaded its message.
+ *
+ * `hidden` filters out cards whose message a pending revert removed — without
+ * it a stale answered card reappeared above the composer after an edit.
  */
 export function looseCards<R>(
   split: { byMessage: Map<string, R[]>; unplaced: R[] },
   renderedMessageIDs: ReadonlySet<string>,
+  hidden?: (item: R) => boolean,
 ): R[] {
   const loose = [...split.unplaced]
   for (const [messageID, list] of split.byMessage) {
     if (!renderedMessageIDs.has(messageID)) loose.push(...list)
   }
-  return loose
+  return hidden ? loose.filter((item) => !hidden(item)) : loose
 }
 
 /**

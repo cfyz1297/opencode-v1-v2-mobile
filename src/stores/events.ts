@@ -6,7 +6,7 @@ import { send as notify } from "../lib/notifications"
 import { PERMISSION_NOTIFICATION_KEY, QUESTION_NOTIFICATION_KEY, sanitizeBody } from "../lib/notify-format"
 import i18n from "../lib/i18n/config"
 import { statusFromPart } from "../lib/status-labels"
-import { nextRunStart } from "../lib/run-clock"
+import { newestUserMessageAt, nextRunStart, retimeRunStart } from "../lib/run-clock"
 import { sessionsWithoutStatus } from "../lib/active-sessions"
 import { isAuthError } from "../lib/api-error"
 import { isSessionActuallyIdle } from "../lib/session-status-reconcile"
@@ -381,6 +381,17 @@ async function resyncBusySessions(only?: ReadonlySet<string>, options: { backgro
           // the streamed parts: show everything the server already has, from
           // the response we already paid for.
           if (viewing()) useSessions.getState().applyServerMessages(response)
+          // The run may have been replaced while the socket was down: run 1
+          // ended, run 2 started, and the server is busy again. The newest
+          // user message is the only boundary that survived the gap, so the
+          // clock counts run 2 instead of run 1 + run 2.
+          const started = useEvents.getState().runStartedAt[sessionID]
+          const retimed = retimeRunStart(started, newestUserMessageAt(messages))
+          if (retimed !== undefined && retimed !== started) {
+            useEvents.setState((state) => ({
+              runStartedAt: { ...state.runStartedAt, [sessionID]: retimed },
+            }))
+          }
           return // server says still busy - leave the status alone
         }
 

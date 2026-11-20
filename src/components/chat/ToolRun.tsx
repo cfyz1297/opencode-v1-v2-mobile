@@ -4,6 +4,7 @@ import { Ionicons } from "@expo/vector-icons"
 import { useTranslation } from "react-i18next"
 import type { Part } from "../../lib/sdk"
 import { isCommandRun } from "../../lib/part-runs"
+import { isLiveTool } from "../../lib/tool-summary"
 import { ToolCallCard } from "./ToolCallCard"
 
 interface Props {
@@ -22,7 +23,7 @@ export function ToolRun({ tools, isDark }: Props) {
   // away from its output.
   if (tools.length === 1) return <ToolCallCard tool={tools[0]} isDark={isDark} />
 
-  const running = tools.some((tool) => tool.state?.status === "running")
+  const running = tools.some(isLiveTool)
   const failed = tools.some((tool) => tool.state?.status === "error")
   const label = t(isCommandRun(tools) ? "chat.toolRun.commands" : "chat.toolRun.tools", {
     n: tools.length,

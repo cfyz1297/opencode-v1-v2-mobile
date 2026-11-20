@@ -79,6 +79,18 @@ test("a card whose message is not in the transcript is still rendered", () => {
   assert.deepEqual(loose.map((item) => item.request.id), ["form-1"])
 })
 
+test("a card whose message a revert removed is not put back above the composer", () => {
+  const list = recordAnswered([], withTool({ messageID: "msg_050", callID: "call_1" }), [["Expo"]])
+  const split = splitAnswered(list)
+  const rendered = new Set<string>()
+  assert.deepEqual(
+    looseCards(split, rendered, (item) => (item.request.tool?.messageID ?? "") >= "msg_040"),
+    [],
+  )
+  // Undoing the revert brings it back: the store was never mutated.
+  assert.equal(looseCards(split, rendered).length, 1)
+})
+
 test("a card whose message is rendered is not repeated as loose", () => {
   const list = recordAnswered([], withTool({ messageID: "msg_1", callID: "call_1" }), [["Expo"]])
   assert.deepEqual(looseCards(splitAnswered(list), new Set(["msg_1"])), [])
