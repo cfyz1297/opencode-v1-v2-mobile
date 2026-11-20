@@ -33,10 +33,14 @@ test("answered questions are kept in the transcript instead of a 2.5s echo", () 
   assert.match(screen, /answered\.byMessage\.get\(owned\.id\)/)
   assert.match(screen, /<AnsweredQuestionCard/)
   // Rendering them above the composer put the card below every later answer,
-  // detached from the question it answered.
-  assert.doesNotMatch(screen, /answeredQuestions\.map\(/)
-  // V1 requests carry no message reference — they still have to render.
-  assert.match(screen, /answered\.unplaced\.map\(/)
+  // detached from the question it answered. (A bare .map over the raw list is
+  // still used to collect message ids; this guards direct JSX rendering.)
+  assert.doesNotMatch(screen, /\{answeredQuestions\.map\(/)
+  // V1 requests carry no message reference — they still have to render, and a
+  // card whose message is not among the loaded rows must not vanish after a
+  // crash (looseCards folds both cases into one list).
+  assert.match(screen, /looseCards\(answered, renderedMessageIDs\)/)
+  assert.match(screen, /looseAnswered\.map\(/)
   // The old transient confirmation hid the answer after 2500ms.
   assert.doesNotMatch(screen, /setTimeout\(\(\) => setQuestionSentText\(null\), 2500\)/)
   assert.doesNotMatch(screen, /questionSentText/)

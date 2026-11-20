@@ -98,6 +98,30 @@ test("an empty transcript has no rows", () => {
   assert.deepEqual(buildTranscriptRows([]), [])
 })
 
+test("a question ends the run at the step that asked it", () => {
+  // Newest-first store order. The answered card is drawn under the row, so
+  // the row has to end at the message that asked — otherwise the card sinks
+  // to the bottom of the whole run, far below the text the user answered.
+  const rows = buildTranscriptRows(
+    [item("a3", "assistant"), item("a2", "assistant"), item("a1", "assistant")],
+    (id) => id === "a2",
+  )
+  assert.deepEqual(
+    rows.map((row) => (row.kind === "run" ? row.items.map((i) => i.message.id) : [row.id])),
+    [
+      ["a3"],
+      ["a2", "a1"],
+    ],
+  )
+  // The newest question of a run needs no extra row: the card after the run
+  // already sits where it was asked.
+  const live = buildTranscriptRows(
+    [item("a3", "assistant"), item("a2", "assistant")],
+    (id) => id === "a3",
+  )
+  assert.equal(live.length, 1)
+})
+
 // The navigator walks the user's own messages: a question is a stable anchor,
 // while assistant rows grow, merge and stream. These two helpers are the whole
 // "which question am I reading" rule.

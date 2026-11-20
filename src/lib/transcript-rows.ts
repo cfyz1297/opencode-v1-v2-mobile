@@ -27,7 +27,10 @@ export type TranscriptRow =
       items: TranscriptItem[]
     }
 
-export function buildTranscriptRows(items: TranscriptItem[]): TranscriptRow[] {
+export function buildTranscriptRows(
+  items: TranscriptItem[],
+  asksQuestion?: (messageID: string) => boolean,
+): TranscriptRow[] {
   const rows: TranscriptRow[] = []
   items.forEach((item, index) => {
     if (item.message.role !== "assistant") {
@@ -35,7 +38,10 @@ export function buildTranscriptRows(items: TranscriptItem[]): TranscriptRow[] {
       return
     }
     const last = rows[rows.length - 1]
-    if (last?.kind === "run") {
+    // A question card is drawn under the row that owns its message. Merging
+    // the steps after it into the same row pushed the card past the rest of
+    // the run, so the run stops at the asking message.
+    if (last?.kind === "run" && !asksQuestion?.(item.message.id)) {
       last.items.push(item)
       last.id = item.message.id
       return

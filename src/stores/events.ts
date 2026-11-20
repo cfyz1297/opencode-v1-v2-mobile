@@ -7,6 +7,7 @@ import { PERMISSION_NOTIFICATION_KEY, QUESTION_NOTIFICATION_KEY, sanitizeBody } 
 import i18n from "../lib/i18n/config"
 import { statusFromPart } from "../lib/status-labels"
 import { nextRunStart } from "../lib/run-clock"
+import { sessionsWithoutStatus } from "../lib/active-sessions"
 import { isAuthError } from "../lib/api-error"
 import { isSessionActuallyIdle } from "../lib/session-status-reconcile"
 import { isStreamStalled, shouldReconnectOnResume } from "../lib/stream-watchdog"
@@ -305,6 +306,27 @@ async function activeSessionIDs(client: Client): Promise<Set<string> | null> {
   }
 }
 
+// Cold start: no SSE event can tell this process which runs are live, and a run
+// blocked on a question is exactly the one the user must see. Adopt the
+// server's active list for sessions with no local status (idle ones are never
+// touched), so the session screen polls their prompts and the clock can start.
+// A stale entry is cleared by the usual quiet-run resync.
+async function adoptActiveSessions(client: Client) {
+  const active = await activeSessionIDs(client)
+  if (!active) return
+  const missing = sessionsWithoutStatus(active, useEvents.getState().sessionStatus)
+  if (missing.length === 0) return
+  const now = Date.now()
+  useEvents.setState((state) => ({
+    sessionStatus: {
+      ...state.sessionStatus,
+      ...Object.fromEntries(missing.map((id) => [id, { type: "busy" as const }])),
+    },
+    runStartedAt: { ...state.runStartedAt, ...Object.fromEntries(missing.map((id) => [id, now])) },
+  }))
+  syncKeepAlive()
+}
+
 // Re-sync any session currently marked "busy" against the server after an
 // SSE reconnect. sessionStatus/sending are SSE-driven and there is normally
 // no other path to idle — if the server's busy -> idle `session.status`
@@ -548,6 +570,8 @@ export const useEvents = create<EventsState>((set, get) => ({
     controller = new AbortController()
     const currentController = controller
     set({ connected: true, authError: false })
+    // The server still owns runs this process has never heard of after a crash.
+    void adoptActiveSessions(client)
     // Grace period: the watchdog measures silence from here until the first
     // chunk lands.
     lastStreamActivityAt = Date.now()

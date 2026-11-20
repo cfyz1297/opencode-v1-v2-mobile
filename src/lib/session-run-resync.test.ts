@@ -8,6 +8,7 @@ import { isStreamStalled, shouldReconnectOnResume } from "./stream-watchdog.ts"
 import { isSessionActuallyIdle } from "./session-status-reconcile.ts"
 import { runsNeedingResync } from "./run-watchdog.ts"
 import { nextRunStart } from "./run-clock.ts"
+import { sessionsWithoutStatus } from "./active-sessions.ts"
 
 const require = createRequire(import.meta.url)
 const ts = require("typescript")
@@ -183,6 +184,7 @@ function harness() {
     "../lib/stream-watchdog": { isStreamStalled, shouldReconnectOnResume },
     "../lib/run-watchdog": { runsNeedingResync },
     "../lib/run-clock": { nextRunStart },
+    "../lib/active-sessions": { sessionsWithoutStatus },
     "../lib/pending-questions": { reconcilePendingQuestions: (local: unknown) => local },
     "../lib/answered-questions": { recordAnswered: (list: unknown) => list },
     "../lib/disconnect-reason": { disconnectReasonText: (reason: unknown) => String(reason) },

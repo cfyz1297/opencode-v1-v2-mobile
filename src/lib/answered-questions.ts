@@ -44,6 +44,23 @@ export function formatAnswer(answers: readonly string[][]): string {
 }
 
 /**
+ * Cards the row-based transcript cannot draw where they belong: no message
+ * reference at all (V1), or a message id that is not among the rendered rows.
+ * Dropping the second kind made a question vanish after a cold start, when
+ * the server had the prompt but the transcript had not loaded its message.
+ */
+export function looseCards<R>(
+  split: { byMessage: Map<string, R[]>; unplaced: R[] },
+  renderedMessageIDs: ReadonlySet<string>,
+): R[] {
+  const loose = [...split.unplaced]
+  for (const [messageID, list] of split.byMessage) {
+    if (!renderedMessageIDs.has(messageID)) loose.push(...list)
+  }
+  return loose
+}
+
+/**
  * Group requests by the message that asked them. Entries without a tool
  * reference (V1) stay unplaced.
  */

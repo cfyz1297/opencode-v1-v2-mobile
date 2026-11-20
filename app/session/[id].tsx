@@ -23,7 +23,7 @@ import { Ionicons } from "@expo/vector-icons"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { useKeyboardHeight } from "../../src/lib/use-keyboard-height"
 import { buildMessageData, type MessageDataItem } from "../../src/lib/revert-filter"
-import { splitAnswered, splitByMessage } from "../../src/lib/answered-questions"
+import { looseCards, splitAnswered, splitByMessage } from "../../src/lib/answered-questions"
 import { runTotals } from "../../src/lib/message-run"
 import { followScrollOffset, isNearBottom, MAINTAIN_VISIBLE_CONTENT_POSITION } from "../../src/lib/scroll-follow"
 import { collectSubagents } from "../../src/lib/subagent-status"
@@ -218,6 +218,17 @@ export default function SessionScreen() {
   // drawn under the message that asked it (like the answered card) and the
   // transcript jumps to it when it arrives.
   const pending = useMemo(() => splitByMessage(questions, (q) => q), [questions])
+  // Messages that asked a question end their run row, so the card stays at the
+  // point the user answered instead of sinking to the bottom of the turn.
+  const questionMessageIDs = useMemo(
+    () =>
+      new Set(
+        [...questions, ...answeredQuestions.map((item) => item.request)]
+          .map((request) => request.tool?.messageID)
+          .filter((id): id is string => !!id),
+      ),
+    [questions, answeredQuestions],
+  )
   const sessionBusy = useEvents((s) => (sessionID ? s.sessionStatus[sessionID]?.type === "busy" : false))
   const canStop = isSending || sessionBusy
 
@@ -373,12 +384,23 @@ export default function SessionScreen() {
   // Consecutive assistant steps (one per tool call) are ONE row: the parts of
   // the whole run are read in order, so the activity spoiler counts the steps
   // between two answers instead of repeating "Steps: 1" per message.
-  const rows = useMemo(() => buildTranscriptRows(messageData), [messageData])
+  const rows = useMemo(
+    () => buildTranscriptRows(messageData, (id) => questionMessageIDs.has(id)),
+    [messageData, questionMessageIDs],
+  )
   // A plain list reads oldest → newest top to bottom, so the newest text grows
   // at the bottom and can never push text a reader is holding further up.
   // `rows` stays newest-first (that is how the transcript is built) and this is
   // the only place the order is flipped.
   const listRows = useMemo(() => [...rows].reverse(), [rows])
+  // A question whose message is not among the rendered rows (cold start, a
+  // message the server has not persisted yet) used to be dropped silently.
+  const renderedMessageIDs = useMemo(
+    () => new Set(rows.flatMap((row) => rowMessages(row).map((message) => message.id))),
+    [rows],
+  )
+  const looseAnswered = useMemo(() => looseCards(answered, renderedMessageIDs), [answered, renderedMessageIDs])
+  const loosePending = useMemo(() => looseCards(pending, renderedMessageIDs), [pending, renderedMessageIDs])
   // Every subagent this session delegated, in call order — the bar under the
   // header counts them and lists them.
   const subagentRefs = useMemo(
@@ -1435,9 +1457,14 @@ export default function SessionScreen() {
               }}
               keyExtractor={(row) => row.id}
               CellRendererComponent={measureCell}
-              renderItem={({ item: row }) => {
+              renderItem={({ item: row, index }) => {
                 const message = rowMessage(row)
                 const isUser = message.role === "user"
+                // A run split at a question keeps its header once: the newer
+                // chunk is the continuation, and only the newest chunk shows
+                // the token/cost footer.
+                const continued = index > 0 && listRows[index - 1].kind === "run"
+                const showMeta = !(index + 1 < listRows.length && listRows[index + 1].kind === "run")
                 return (
                   <View>
                     <MessageBubble
@@ -1445,6 +1472,8 @@ export default function SessionScreen() {
                       parts={rowParts(row)}
                       isDark={isDark}
                       totals={totals[row.index]}
+                      continued={continued}
+                      showMeta={showMeta}
                       onLongPress={isUser ? handleMessageLongPress : undefined}
                       onRevert={isUser ? handleMessageRevert : undefined}
                     />
@@ -1618,9 +1647,9 @@ export default function SessionScreen() {
             />
           ))}
 
-          {/* Answered questions without a tool reference (V1) stay above the
-              composer — there is nowhere to place them in the transcript. */}
-          {answered.unplaced.map((item) => (
+          {/* Answered questions without a tool reference (V1) or whose message
+              the transcript has not rendered stay above the composer. */}
+          {looseAnswered.map((item) => (
             <AnsweredQuestionCard
               key={item.request.id}
               request={item.request}
@@ -1629,9 +1658,10 @@ export default function SessionScreen() {
             />
           ))}
 
-          {/* Pending questions without a tool reference (V1) stay above the
-              composer; placed ones are drawn under the asking message. */}
-          {pending.unplaced.map((q) => (
+          {/* Pending questions without a tool reference (V1) — or whose message
+              is not in the rendered rows — stay above the composer; placed
+              ones are drawn under the asking message. */}
+          {loosePending.map((q) => (
             <QuestionPrompt
               key={q.id}
               request={q}

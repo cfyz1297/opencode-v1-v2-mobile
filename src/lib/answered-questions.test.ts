@@ -1,6 +1,6 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
-import { formatAnswer, recordAnswered, splitAnswered } from "./answered-questions.ts"
+import { formatAnswer, looseCards, recordAnswered, splitAnswered } from "./answered-questions.ts"
 
 const request = { id: "form-1", questions: [{ header: "Stack", question: "Which stack?" }] }
 
@@ -68,4 +68,18 @@ test("a request without tool metadata stays unplaced instead of being dropped", 
   const { byMessage, unplaced } = splitAnswered(recordAnswered([], request, [["Expo"]]))
   assert.equal(byMessage.size, 0)
   assert.deepEqual(unplaced.map((item) => item.request.id), ["form-1"])
+})
+
+test("a card whose message is not in the transcript is still rendered", () => {
+  // After a crash the question is fetched from the server while its message
+  // may not be in the loaded rows yet. The card was silently dropped because
+  // only rendered rows looked their questions up.
+  const list = recordAnswered([], withTool({ messageID: "msg_missing", callID: "call_1" }), [["Expo"]])
+  const loose = looseCards(splitAnswered(list), new Set(["msg_other"]))
+  assert.deepEqual(loose.map((item) => item.request.id), ["form-1"])
+})
+
+test("a card whose message is rendered is not repeated as loose", () => {
+  const list = recordAnswered([], withTool({ messageID: "msg_1", callID: "call_1" }), [["Expo"]])
+  assert.deepEqual(looseCards(splitAnswered(list), new Set(["msg_1"])), [])
 })
