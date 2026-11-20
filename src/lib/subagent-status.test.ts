@@ -22,8 +22,18 @@ test("an error wins over a stale busy status", () => {
 })
 
 test("a child that was created but never started is idle", () => {
-  assert.equal(deriveSubagentStatus(child(), { type: "idle" }, undefined), "idle")
+  // Nothing observed for it: no live event, no stamp.
+  assert.equal(deriveSubagentStatus(child(), undefined, undefined), "idle")
   assert.equal(deriveSubagentStatus(undefined, undefined, undefined), "idle")
+})
+
+test("a child that just went idle flips to done without re-entering the screen", () => {
+  // The child row is fetched when the screen opens, so its cached copy has no
+  // idle stamp, and V2 never sends session.updated to refresh it. The live
+  // idle event is then the only evidence the run finished — without it the pill
+  // read "Ожидает" for a subagent that had already completed.
+  assert.equal(deriveSubagentStatus(child(), { type: "idle" }, undefined), "done")
+  assert.equal(deriveSubagentStatus(undefined, { type: "idle" }, undefined), "done")
 })
 
 test("the summary counts each child exactly once", () => {

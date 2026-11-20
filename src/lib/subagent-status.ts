@@ -28,6 +28,12 @@ export function deriveSubagentStatus(
 ): SubagentStatus {
   if (error) return "failed"
   if (live?.type === "busy" || live?.type === "retry") return "running"
+  // An idle event is proof the run happened and ended. It is the only live
+  // evidence a child has: the row is fetched when the screen opens, so its
+  // cached copy carries no idle stamp, and V2 sends no session.updated to
+  // refresh it — waiting for a stamp left a finished subagent on "Ожидает"
+  // until the screen was re-entered.
+  if (live?.type === "idle") return "done"
   // No live status (a cold open, or a child that never emitted an event to this
   // client): the run stamps are the next best evidence. A busy stamp newer than
   // the idle one means the child is still working — without this a running
