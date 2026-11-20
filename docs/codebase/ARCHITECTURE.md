@@ -1,6 +1,6 @@
 # Архитектура
 
-Актуально на 2026-11-18, версия 0.3.21 / 86. Транспорт по-прежнему **двухпротокольный**; слои живучести (foreground-сервис + headless-задача, 0.3.17) и сабагентов (0.3.20) на месте, а в 0.3.21 появился слой **логического транскрипта**: `transcript-rows` склеивает шаги ассистента в одну строку ленты, `part-runs` — работу между ответами в один спойлер, `message-navigation` считает позицию по раскладке для навигатора.
+Актуально на 2026-11-20, версия 0.3.22 / 87. Транспорт по-прежнему **двухпротокольный**; слои живучести (foreground-сервис + headless-задача, 0.3.17) и сабагентов (0.3.20) на месте, слой логического транскрипта (0.3.21) тоже. Главное изменение 0.3.22 — **лента чата перестала быть инвертированной**: `src/lib/scroll-follow.ts` держит правила «где конец контента» и «кто владеет позицией», а экран только применяет их к `FlatList`.
 
 ## Обязательные разделы
 
@@ -40,7 +40,8 @@
 6. **Состояние.** `src/stores/events.ts` маршрутизирует события: статусы (`sessionStatus`), ошибки (`sessionErrors`), уведомления, permissions/questions; части сообщений склеиваются батчером ~40 мс. `session.created` с `parentID` уходит в `childrenByParent`, а не в общий список сессий.
 7. **Фон.** При уходе в background `setKeepAlive(true)` поднимает сервис, `flushHeld()` публикует отложенные алерты (не старше 3 с), `startBackgroundWatch()` опрашивает `/api/session/active` раз в 5 с и сравнивает с прошлым тиком; возврат в foreground останавливает опрос, выбрасывает отложенные (`dropHeld`), перечитывает каталог и при долгом отсутствии вызывает `resumeFromBackground()`.
 8. **Выход.** Экран строит строки ленты через `buildTranscriptRows()` (`src/lib/transcript-rows.ts`): подряд идущие сообщения ассистента — одна строка, её части читаются в порядке модели и режутся на отрезки `groupParts()` (`src/lib/part-runs.ts`). Текст рисуется напрямую, отрезок — `ActivitySpoiler` со сводкой `summarizeToolActivity()` (`src/lib/tool-summary.ts`), делегирование сабагента — отдельной карточкой. Статистика — `computeSessionStats()` (`src/lib/session-stats.ts:21`), карточки инструментов — `tool-view.ts` + `tool-duration.ts`, сабагенты — `collectSubagents()` (`src/lib/subagent-status.ts`) и `SubagentBar`.
-9. **Навигатор.** Компактная панель над композером двигается по сообщениям пользователя: `MessageNavigation` (`src/lib/message-navigation.ts`) хранит кадры ячеек (`CellRendererComponent` даёт координаты в контенте), `userRowIds()` — цели, `scrollToIndex` — переход.
+9. **Прокрутка ленты.** Список **обычный**, не инвертированный: старые сообщения сверху, новые снизу. Рост контента при стриме идёт вниз и не может сдвинуть текст выше читателя, поэтому компенсация не нужна. Владение позицией — у жестов: `onScrollBeginDrag` сбрасывает `followBottomRef`; `settleFollow()` возвращает его, только если жест закончился у низа; `onScrollEndDrag` без velocity и `onMomentumScrollEnd` — точки решения. `scrollToContentEnd()` — единственный вход на «конец контента»: `followScrollOffset()` (`src/lib/scroll-follow.ts:36`) на Android отдаёт `FOLLOW_TO_END` (нативный `ScrollView` обрезает команду до реального низа), на других платформах — `max(0, height − viewport)`, а неразмеренное состояние (`null`) уходит в `scrollToEnd`. `onContentSizeChange` вызывает его при росте контента, `FlatList.onLayout` — при реальном изменении высоты вьюпорта (клавиатура, композер, баннеры), `onStartReached` + спиннер в заголовке — подгрузка истории; `maintainVisibleContentPosition` включён только ради вставки старой страницы сверху (`MAINTAIN_VISIBLE_CONTENT_POSITION`).
+10. **Навигатор.** Компактная панель над композером двигается по сообщениям пользователя: `MessageNavigation` (`src/lib/message-navigation.ts`) хранит кадры ячеек (`CellRendererComponent` даёт координаты в контенте), `userRowIds()` — цели, `scrollToIndex` — переход; позиция считается от старой строки к новой, неизвестная трактуется как последняя.
 
 ### 3) Ответственность слоёв
 
@@ -57,6 +58,7 @@
 | `src/lib/transcript-rows.ts` | Склейка шагов ассистента в строку ленты, цели навигатора (сообщения пользователя) | Отрисовка, сеть | `src/lib/transcript-rows.ts` |
 | `src/lib/part-runs.ts` | Отрезки между ответами: рассуждения + инструменты в один блок; делегирование выносится отдельно | Отрисовка | `src/lib/part-runs.ts` |
 | `src/lib/message-navigation.ts` | Позиция в ленте по разложенным кадрам, шаг на одно сообщение, владение позицией после прыжка | Сеть, отрисовка | `src/lib/message-navigation.ts` |
+| `src/lib/scroll-follow.ts` | Правила ленты: «у низа ли читатель» (`isNearBottom`), offset конца контента, платформенный выбор цели прокрутки, параметры `maintainVisibleContentPosition` | Знание о данных сессии, отрисовка, сам список | `src/lib/scroll-follow.ts` |
 | `src/lib/tool-summary.ts` | Имена и сумма времени инструментов для свёрнутой строки | Рендер | `src/lib/tool-summary.ts` |
 | `src/lib/sdk.ts` | Фасад, V2-транспорт, `probeServer`, `createClient` | V1-детали, UI | `src/lib/sdk.ts` |
 | `src/lib/sdk-v1.ts` | V1-транспорт, нормализация V1-событий и permissions | V2-детали, UI | `src/lib/sdk-v1.ts` |
@@ -81,7 +83,10 @@
 | Группировка по волнам | `collectSubagents()` (`src/lib/subagent-status.ts`) | Новый промпт = новая партия сабагентов; «текущая» кнопка показывает последнюю волну + всё ещё работающих |
 | Логическая строка ленты | `buildTranscriptRows()` (`src/lib/transcript-rows.ts`) | Один ответ = одна шапка, один «Скопировать», одна сводка токенов |
 | Спойлер на отрезок | `groupParts()` (`src/lib/part-runs.ts`) + `ActivitySpoiler` | Долгий прогон не выталкивает ответ с экрана; делегирование остаётся снаружи |
-| Позиция по раскладке, не по событию | `MessageNavigation.observe()` + `CellRendererComponent` | `onViewableItemsChanged` на инвертированном списке не срабатывает до первого скролла — позиция была неизвестна |
+| Позиция по раскладке, не по событию | `MessageNavigation.observe()` + `CellRendererComponent` | `onViewableItemsChanged` не срабатывает до первого скролла, а `onLayout` на самом `renderItem` даёт `y = 0` относительно ячейки |
+| Владение позицией у жеста | `onScrollBeginDrag` / `settleFollow` (`app/session/[id].tsx:925,1403`) | События прокрутки приходят раз в 100 мс и несут смещение до прироста стрима — решать по ним нельзя |
+| Нативный клип вместо измерения | `followScrollOffset()` (`src/lib/scroll-follow.ts:36`) | Измеренная высота всегда отстаёт на кусок; `ScrollView` на Android обрезает завышенный offset сам |
+| Переякорь на изменение вьюпорта | `FlatList.onLayout` → `scrollToContentEnd` | Композер, клавиатура и баннеры меняют высоту списка во время прогона, offset при этом не пересчитывается |
 | Общее рукопожатие SSE | `dialStream()` (`src/lib/sse.ts`) + `CONNECT_TIMEOUT_MS` | Ни один транспорт не висит вечно после «подключено» |
 | Дочерние сессии отдельно от списка | `childrenByParent` (`src/stores/sessions.ts:71`) | Сабагент не должен появляться в Recent и не должен исчезать из карточки |
 | Singleton-сторы (zustand) | `src/stores/*.ts` | Глобальное состояние без DI-контейнера |
@@ -104,15 +109,16 @@
 - **Фоновое удержание зависит от политики Android.** `dataSync` ограничен 6 ч за 24 на Android 15, поэтому тип сервиса — `dataSync|specialUse` с `onTimeout`-остановкой; при отзыве разрешения или убийстве процесса уведомления замолкают (`plugins/native/keepalive/KeepAliveService.kt`).
 - **Курсор сообщений сервера может не листать.** На проверенной сборке V2 `cursor.previous` отдаёт пустую страницу; обход останавливается на первой пустой странице, поэтому фактический потолок «всей сессии» — 200 сообщений (осознанно, с ограничением 10 страниц).
 - **Изоляция между серверами держится на ручных сбросах.** Эпоха соединения и очистка стора выполняются подпиской на `useConnections`; любой новый стор с кэшем обязан повторить паттерн.
-- **Крупные экраны**: `app/(tabs)/index.tsx` — 1546 строк, `app/session/[id].tsx` — 1922. Логика вынесена в `src/lib` (`transcript-rows`, `part-runs`, `message-navigation`, `tool-summary`), но обработчики по-прежнему живут в экранах.
+- **Крупные экраны**: `app/(tabs)/index.tsx` — 1546 строк, `app/session/[id].tsx` — 2071. Логика вынесена в `src/lib` (`transcript-rows`, `part-runs`, `message-navigation`, `scroll-follow`, `tool-summary`), но обработчики по-прежнему живут в экранах.
 - **Навигатор зависит от раскладки ячеек.** Позиция считается по кадрам, которые приходят только для смонтированных строк; если строка ещё не разложена, `visible()` берёт ближайшую измеренную, а неизвестная позиция трактуется как самое новое сообщение. Это осознанный компромисс: `onViewableItemsChanged` не срабатывает до первого скролла, а `onLayout` на самой строке даёт `y = 0` относительно ячейки.
+- **Прокрутка опирается на поведение платформы, а не на измерение.** На Android `followScrollOffset()` отдаёт заведомо завышенный offset и полагается на то, что `android.widget.ScrollView` обрежет его до реального низа (проверено по исходникам RN 0.88.1: `ReactScrollViewManager.scrollTo` → `ReactScrollView.scrollTo`/`smoothScrollTo`, оба клампят). Если платформа перестанет обрезать или список окажется вложенным, `FOLLOW_TO_END` начнёт уводить читателя за контент — тогда нужно вернуться к измеренной арифметике.
 - **Нативные правки вне JS**: клавиатура зависит от `installImeReporter()` (вносится плагином) и обязана совпадать с `src/lib/use-keyboard-height.ts`; рассинхронизация не ловится typecheck. С SDK 58 то же самое касается `usesCleartextTraffic`: без него приложение не достучится до `http://127.0.0.1`.
 
 ### 6) Evidence
 
 - `src/lib/sdk.ts`, `src/lib/sdk-v1.ts`, `src/lib/api-detect.ts`, `src/lib/v2-compat.ts`, `src/lib/sse.ts`
 - `src/lib/session-stats.ts`, `src/lib/tool-view.ts`, `src/lib/tool-duration.ts`, `src/lib/tool-summary.ts`, `src/lib/message-page.ts`
-- `src/lib/transcript-rows.ts`, `src/lib/part-runs.ts`, `src/lib/message-navigation.ts`, `src/lib/nav-panel.ts`, `src/lib/markdown-keys.ts`, `src/lib/disconnect-reason.ts`
+- `src/lib/transcript-rows.ts`, `src/lib/part-runs.ts`, `src/lib/message-navigation.ts`, `src/lib/scroll-follow.ts`, `src/lib/nav-panel.ts`, `src/lib/markdown-keys.ts`, `src/lib/disconnect-reason.ts`
 - `src/components/chat/ActivitySpoiler.tsx`, `src/components/markdown/MarkdownImage.tsx`
 - `src/lib/keep-alive.ts`, `plugins/native/keepalive/KeepAliveService.kt`, `plugins/native/keepalive/NotifyModule.kt`
 - `src/lib/notifications.ts`, `src/lib/subagent-status.ts`

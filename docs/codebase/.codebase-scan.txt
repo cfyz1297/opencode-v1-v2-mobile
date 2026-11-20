@@ -154,7 +154,9 @@ src/components/chat/index.ts
 src/components/chat/message-bubble-error.test.ts
 src/components/chat/message-navigation-layout.regression.test.ts
 src/components/chat/model-picker-shared.tsx
+src/components/chat/plain-transcript.regression.test.ts
 src/components/chat/session-banners-theme.test.ts
+src/components/chat/text-selection-scroll.regression.test.ts
 src/components/markdown
 src/components/markdown/CodeBlock.tsx
 src/components/markdown/Markdown.tsx
@@ -198,21 +200,19 @@ src/lib/disconnect-reason.ts
 src/lib/file-roots.test.ts
 src/lib/file-roots.ts
 src/lib/headers.test.ts
-src/lib/headers.ts
-src/lib/history-storage.ts
 
 === STACK DETECTION (manifest files) ===
 
 --- package-lock.json ---
 {
   "name": "@opencode-ai/mobile",
-  "version": "0.3.32",
+  "version": "0.3.21",
   "lockfileVersion": 3,
   "requires": true,
   "packages": {
     "": {
       "name": "@opencode-ai/mobile",
-      "version": "0.3.32",
+      "version": "0.3.21",
       "dependencies": {
         "@expo/vector-icons": "^15.0.3",
         "@gorhom/bottom-sheet": "^5.2.14",
@@ -289,7 +289,7 @@ src/lib/history-storage.ts
 --- package.json ---
 {
   "name": "@opencode-ai/mobile",
-  "version": "0.3.32",
+  "version": "0.3.22",
   "private": true,
   "main": "expo-router/entry",
   "scripts": {
@@ -369,58 +369,58 @@ No .env.example or .env.template found. Identify required environment variables 
 src/components/chat/MessageBubble.tsx:42: // TODO: Replace with streamdown-rn once React 19 types PR lands - it has
 
 === GIT RECENT COMMITS (last 20) ===
+396b640 docs: record the 0.3.22 release
+1b5acf4 chore(release): 0.3.22 (87)
+cf19165 fix(session): land follow on the native content end and re-anchor on resize
+ab13591 test(session): bound the panel assertions to their handler bodies
+24c7d04 fix(session): settle follow only when the fling is over
+32ac53a fix(session): follow the stream to the measured content end
+6eb1ecf fix(session): decide following at the end of a gesture
+d29ff45 fix(session): reopen a reloaded transcript at the newest message
+11e67ca fix(session): make the transcript a plain list
+eef878c fix(session): keep the transcript still when text is selected
+3e6ee7e docs(agents): security gate перед APK и пушем [skip ci]
+d960722 docs(codebase): refresh the map for 0.3.21
+eae7677 docs: record the 0.3.21 release
+6e5a88f chore(release): 0.3.21
 78f6f9b fix(session): measure the cell, whose layout is the content position
 b48a0e7 fix(session): measure the position instead of waiting for viewability
 6be6a5d test(smoke): use a thin PNG so the image does not push the answer off screen
 008394c test(smoke): serve a real PNG and put it in the fixture transcript
 c758ff1 fix(markdown): bound image size fetch and stop using the slugger for keys
 2999c90 fix(session): the viewability handler was a stale closure
-eea06a8 test(smoke): step in whichever direction is enabled, read with one dump
-d9418cd test(smoke): six questions in the fixture, not four
-316acee feat(session): navigate the user's own messages, with wider buttons
-aaaa191 fix(session): a jump sets the position it holds
-86caea1 fix(session): hold the jumped-to message as current
-418bcde test(smoke): screenshot after the tap, not before it
-dfc286a test(smoke): tap Latest from a dump taken right before the touch
-d8871f3 fix(session): cancel a queued jump retry when the user navigates again
-66d816d fix(session): jump by index so one tap lands on the neighbouring message
-7f24daf fix(session): the list reports the current message to the navigator
-213d690 fix(v2): keep the tool's own clock from history
-72670c4 fix(chat): the run total was hidden by a falsy zero start
-6e1333d fix(session): make the navigator scroll, and summarize the tools it hides
-2b94c6b test(smoke): scroll the history list back to the clear button
 
 === HIGH-CHURN FILES (last 90 days, top 20) ===
-  63 package.json
-  62 app.json
-  61 android/app/build.gradle
+  65 package.json
+  64 app.json
+  63 android/app/build.gradle
+  54 app/session/[id].tsx
   50 scripts/cua-roadmap-smoke.mjs
-  47 app/session/[id].tsx
-  46 HANDOFF.md
-  38 README.md
+  49 HANDOFF.md
+  40 README.md
+  28 package-lock.json
   28 src/lib/i18n/en.json
   28 src/lib/i18n/ru.json
   28 src/lib/i18n/zh-Hans.json
   28 .github/workflows/build.yml
-  27 package-lock.json
+  22 README.ru.md
   20 src/lib/sdk.ts
   20 src/stores/events.ts
-  20 README.ru.md
+  17 src/components/chat/message-navigation-layout.regression.test.ts
   17 src/stores/sessions.ts
   14 src/lib/v2-compat.ts
   13 src/lib/v2-compat.test.ts
   13 src/components/chat/MessageBubble.tsx
-  13 src/lib/session-run-resync.test.ts
 
 === MONOREPO SIGNALS ===
 No monorepo signals detected.
 
 === CODE METRICS ===
-Total files scanned: 399
-Total lines of code: 46187
+Total files scanned: 401
+Total lines of code: 46606
 
 Files by language:
-  TypeScript: 205
+  TypeScript: 207
   Other: 133
   TypeScript/React: 46
   Kotlin: 12
@@ -428,13 +428,13 @@ Files by language:
 
 Top 10 largest files:
 package-lock.json: 299.2KB
-app/session/[id].tsx: 77.3KB
-README.ru.md: 71.2KB
-HANDOFF.md: 64.6KB
+app/session/[id].tsx: 86.0KB
+README.ru.md: 84.8KB
+HANDOFF.md: 74.0KB
 app/(tabs)/index.tsx: 52.1KB
+README.md: 51.5KB
 assets/icon-appstore.png: 51.1KB
 android/gradle/wrapper/gradle-wrapper.jar: 45.1KB
-README.md: 43.9KB
 src/lib/i18n/ru.json: 39.8KB
 src/stores/events.ts: 39.6KB
 

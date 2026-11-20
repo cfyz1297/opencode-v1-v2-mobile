@@ -2,7 +2,7 @@
 
 Проект: форк `cfyz1297/opencode-v1-v2-mobile` (до 0.3.0 назывался `opencode-mobile`) — Expo/React Native клиент к self-hosted `opencode serve`, работающий с **обоими** поколениями API: V1 (opencode 1.18.x) и V2 (opencode 2.x). Публикуется только как APK через GitHub Releases (`README.md`, `HANDOFF.md`).
 
-Актуально на 2026-11-18, версия **0.3.21**, versionCode **86** (релизный коммит `6e5a88f`).
+Актуально на 2026-11-20, версия **0.3.22**, versionCode **87** (релизный коммит `1b5acf4`).
 
 ## Обязательные разделы
 
@@ -10,13 +10,13 @@
 
 | Область | Значение | Evidence |
 |---------|----------|----------|
-| Основной язык | TypeScript / TSX: 199 `.ts` (включая 113 тестовых) + 46 `.tsx` по скану; Kotlin — 7 файлов нативного слоя в `android/` (копии тех же 5 в `plugins/native/keepalive/`) | `docs/codebase/.codebase-scan.txt` (CODE METRICS), `android/app/src/main/java/cc/agentlabs/opencode/` |
+| Основной язык | TypeScript / TSX: 207 `.ts` (включая 115 тестовых) + 46 `.tsx` по скану; Kotlin — 7 файлов нативного слоя в `android/` (копии тех же 5 в `plugins/native/keepalive/`) | `docs/codebase/.codebase-scan.txt` (CODE METRICS), `android/app/src/main/java/cc/agentlabs/opencode/` |
 | Runtime приложения | React Native **0.88.1** на Hermes, новая архитектура (`newArchEnabled=true`, `hermesEnabled=true`), **Expo SDK 58**, React 19.3.0, React Compiler включён (`experiments.reactCompiler`) | `package.json`, `android/gradle.properties`, `app.json` |
 | Runtime тестов / CI | Node.js 24+ (нативное type-stripping для `.test.ts`); job `test` в CI на Node 24, job `build` — Node 20 | `.github/workflows/build.yml`, `scripts/run-tests.mjs` |
 | Пакетный менеджер | npm; lockfile v3; `legacy-peer-deps=true` | `package-lock.json`, `.npmrc`, `.github/workflows/build.yml` |
 | Модульная система / сборка | Metro + `expo-router/entry` (JS), затем `expo prebuild` → Gradle `assembleRelease` (Android) | `package.json` (`main`), `metro.config.js`, `.github/workflows/build.yml` |
-| Версия приложения | **0.3.21, versionCode 86** | `package.json`, `app.json`, `android/app/build.gradle` |
-| Тесты | **833 теста, 0 падений**; покрытие **98.23 % строк / 86.97 % ветвей / 96.51 % функций**; `npm run typecheck` — чисто | локальный прогон 2026-11-18 |
+| Версия приложения | **0.3.22, versionCode 87** | `package.json`, `app.json`, `android/app/build.gradle` |
+| Тесты | **849 тестов, 0 падений**; покрытие **98.32 % строк / 87.02 % ветвей / 96.75 % функций**; `npm run typecheck` — чисто | локальный прогон 2026-11-20 |
 
 ### 2) Продакшн-фреймворки и зависимости
 
@@ -69,13 +69,13 @@ npm start                           # Expo dev server
 npm run android                     # dev-сборка (expo run:android)
 npx expo prebuild --platform android --no-install
 cd android && ./gradlew assembleRelease   # релизный APK
-npm test                            # 833 теста через scripts/run-tests.mjs
+npm test                            # 849 тестов через scripts/run-tests.mjs
 npm run test:coverage               # те же тесты + пороги 80 %
 npm run typecheck                   # tsc --noEmit
 npm run check:versions              # паритет версий в трёх файлах
 ```
 
-Версия живёт в трёх местах: `package.json`, `app.json` (`version` + `android.versionCode`) и `android/app/build.gradle`. Литералов версии в workflow больше нет — шаг проверки APK читает ожидаемые значения из `app.json` (`EXPECTED_VERSION_CODE=$(node -p "require('./app.json').expo.android.versionCode")`). Релиз: тег `vX.Y.Z` → GitHub Release с `opencode-mobile-v2.apk` и `SHA256SUMS.txt`; сам релиз публикуется вручную (job публикации в workflow отсутствует).
+Версия живёт в трёх местах: `package.json`, `app.json` (`version` + `android.versionCode`) и `android/app/build.gradle`. Литералов версии в workflow больше нет — шаг проверки APK читает ожидаемые значения из `app.json` (`EXPECTED_VERSION_CODE=$(node -p "require('./app.json').expo.android.versionCode")`). Четвёртое место — `version` в корне `package-lock.json`: `check:versions` его не сверяет, поэтому после релиза там остаётся прошлый номер (на 0.3.22 — `0.3.21`). На сборку это не влияет, но это единственная несверяемая копия номера. Релиз: тег `vX.Y.Z` → GitHub Release с `opencode-mobile-v2.apk` и `SHA256SUMS.txt`; сам релиз публикуется вручную (job публикации в workflow отсутствует).
 
 ### 5) Окружение и конфигурация
 

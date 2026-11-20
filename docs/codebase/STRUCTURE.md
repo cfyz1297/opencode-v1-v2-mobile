@@ -1,6 +1,6 @@
 # Структура кодовой базы
 
-Актуально на 2026-11-18, версия 0.3.21 / 86 (релизный коммит `6e5a88f`).
+Актуально на 2026-11-20, версия 0.3.22 / 87 (релизный коммит `1b5acf4`).
 
 ## Обязательные разделы
 
@@ -9,7 +9,7 @@
 | Путь | Назначение | Evidence |
 |------|------------|----------|
 | `app/` | Маршруты Expo Router (файл = экран, 15 файлов): `(tabs)/` — sessions/connections/settings, `session/[id]`, `connection/*` (add, edit, tunnel), `providers/*` (index, connect, custom), `models`, `history`, `demo` | `app/_layout.tsx`, `find app -name '*.tsx'` |
-| `src/lib/` | Чистая логика + два транспорта + адаптер V2→V1 + фоновое удержание, статусы сабагентов, склейка ленты и навигатор; рядом с каждым модулем `*.test.ts` (113 тестовых файлов в `src/`, 77 модулей верхнего уровня) | `src/lib/sdk.ts`, `src/lib/sdk-v1.ts`, `src/lib/v2-compat.ts` |
+| `src/lib/` | Чистая логика + два транспорта + адаптер V2→V1 + фоновое удержание, статусы сабагентов, склейка ленты и навигатор; рядом с каждым модулем `*.test.ts` (115 тестовых файлов в `src/`, 77 модулей верхнего уровня) | `src/lib/sdk.ts`, `src/lib/sdk-v1.ts`, `src/lib/v2-compat.ts` |
 | `src/stores/` | Zustand-сторы: `sessions`, `connections`, `events` (SSE + фоновый опрос), `catalog`, `settings`, `auth`, `model-visibility`, `model-favorites` | `src/stores/*.ts` |
 | `src/components/` | UI: `chat/` (пузыри, инструменты, `ActivitySpoiler`, промпты, `SubagentBar`, `SubagentRow`, `ContextRing`, `SessionInfo`), `markdown/` (`Markdown`, `MarkdownImage`, `CodeBlock`), `AuthGate`, `ErrorBoundary`, `TabletSessions`, `UpdateBanner` | `src/components/` |
 | `src/types/` | Локальные `.d.ts` для неполных типов сторонних пакетов | `src/types/` |
@@ -19,7 +19,7 @@
 | `android/` | **Вывод `expo prebuild`** (перегенерируется целиком): Gradle-проект, подпись, Kotlin-модули keep-alive/Notify, ресурсы иконок | `plugins/with-native-customizations.js:1-2` |
 | `plugins/` | Источник истины для нативных правок: `with-native-customizations.js` (подпись, IME-репортер, `usesCleartextTraffic`, keep-alive, иконки), `with-tablet-config-changes.js`, `native/keepalive/*.kt`, `native/res/drawable/*.xml` | `plugins/` |
 | `scripts/` | `run-tests.mjs`, `run-tests.test.mjs`, `check-version-parity.mjs`, `cua-roadmap-smoke.mjs` | `scripts/` |
-| `docs/` | 12 отчётов `security-review-*.md` (0.2.21, 0.3.2, 0.3.8–0.3.15, 0.3.17, server-api), проверки (connection-status, model-visibility, run-resync), upstream review + `docs/codebase/` (эта карта) | `docs/*.md` |
+| `docs/` | 18 отчётов: 12 `security-review-*.md` (0.2.21, 0.3.2, 0.3.8–0.3.15, 0.3.17, server-api), 3 проверки (connection-status, model-visibility, run-resync), 3 upstream review (2026-11-04/16/18) + `docs/codebase/` (эта карта) | `docs/*.md` |
 | `llms.txt` | Машиночитаемая сводка проекта для ИИ-краулеров | `llms.txt` |
 | `.github/workflows/` | Два активных workflow: `Build Android APK`, `Security scan` | `.github/workflows/*.yml` |
 | `.agents/`, `.hallmark/` | `retro.md` — уроки прошлых задач; `.hallmark/salt` — служебный файл внешнего инструмента (одна hex-строка, назначение [TODO]) | `.agents/retro.md`, `.hallmark/salt` |
@@ -49,7 +49,7 @@
 
 ### 4) Правила именования и организации
 
-- `src/lib`: **kebab-case** + домен (`api-detect.ts`, `session-stats.ts`, `tool-duration.ts`, `subagent-status.ts`, `transcript-rows.ts`, `message-navigation.ts`), тест рядом: `<name>.test.ts`; регрессии — `<name>.regression.test.ts` (11 файлов: `composer-taps`, `session-info`, `variant-picker-keyboard`, `dialog-back-gesture`, `tool-call-card`, `session-header`, `update-banner`, `markdown-inline-code`, `wide-content-scroll`, `message-navigation-layout`, `subagent-resume`).
+- `src/lib`: **kebab-case** + домен (`api-detect.ts`, `session-stats.ts`, `tool-duration.ts`, `subagent-status.ts`, `transcript-rows.ts`, `message-navigation.ts`, `scroll-follow.ts`), тест рядом: `<name>.test.ts`; регрессии — `<name>.regression.test.ts` (13 файлов: `composer-taps`, `session-info`, `variant-picker-keyboard`, `dialog-back-gesture`, `tool-call-card`, `session-header`, `update-banner`, `markdown-inline-code`, `wide-content-scroll`, `message-navigation-layout`, `subagent-resume`, `plain-transcript`, `text-selection-scroll`).
 - Компоненты: **PascalCase** `.tsx`; маршруты — по сегментам URL.
 - Сторы: `src/stores/<домен>.ts`, экспорт `useXxx` (`useSessions`, `useConnections`, `useEvents`, `useCatalog`, `useSettings`, `useAuth`, `useModelVisibility`, `useModelFavorites`).
 - Баррели: `src/components/chat/index.ts` (20 реэкспортов) и `src/components/markdown/index.tsx`; остальное — прямыми путями.
@@ -60,7 +60,7 @@
   - сессии и сообщения: `session-list.ts`, `session-grouping.ts`, `session-selection.ts`, `session-load-reconcile.ts`, `session-status-reconcile.ts`, `session-id.ts` (валидация id из deep link), `message-merge.ts`, `message-run.ts`, `message-page.ts`, `transcript-rows.ts` (склейка подряд идущих сообщений ассистента в одну строку ленты, цели навигатора — сообщения пользователя), `part-batch.ts`, `part-order.ts`, `part-runs.ts` (отрезок между ответами → спойлер, делегирование остаётся снаружи), `prompt-from-parts.ts`, `revert-filter.ts`, `pending-questions.ts`, `question-answers.ts`, `answered-questions.ts`;
   - сабагенты: `subagent-status.ts` (статус ребёнка, волны, порядок, счётчики);
   - живучесть: `run-watchdog.ts`, `stream-watchdog.ts`, `connection-health.ts`, `keep-alive.ts` (мост к foreground-сервису + headless-задаче);
-  - UI-логика: `adaptive-layout.ts`, `keyboard-inset.ts`, `use-keyboard-height.ts`, `scroll-config.ts`, `scroll-follow.ts`, `message-navigation.ts` (позиция и шаг по разложенным ячейкам), `nav-panel.ts` (`NAV_PANEL_IDLE_MS`), `model-selection.ts`, `model-picker-filter.ts`, `model-visibility.ts`, `session-stats.ts`, `tool-view.ts`, `tool-duration.ts` (`formatDurationMs`), `tool-summary.ts` (имена инструментов + сумма времени), `providers-ui.ts`, `status-labels.ts`, `tablet-session-nav.ts`, `notify-format.ts`, `notifications.ts`;
+  - UI-логика: `adaptive-layout.ts`, `keyboard-inset.ts`, `use-keyboard-height.ts`, `scroll-config.ts`, `scroll-follow.ts` (лента: `isNearBottom`, `endScrollOffset`, `followScrollOffset` + `FOLLOW_TO_END`, `MAINTAIN_VISIBLE_CONTENT_POSITION` для вставки старых страниц), `message-navigation.ts` (позиция и шаг по разложенным ячейкам), `nav-panel.ts` (`NAV_PANEL_IDLE_MS`), `model-selection.ts`, `model-picker-filter.ts`, `model-visibility.ts`, `session-stats.ts`, `tool-view.ts`, `tool-duration.ts` (`formatDurationMs`), `tool-summary.ts` (имена инструментов + сумма времени), `providers-ui.ts`, `status-labels.ts`, `tablet-session-nav.ts`, `notify-format.ts`, `notifications.ts`;
   - хранилище/безопасность: `offline-history.ts`, `history-storage.ts`, `connection-security.ts`, `scrub.ts`, `logbuffer.ts`, `stored-json.ts`, `settings-merge.ts` (прямая совместимость настроек уведомлений);
   - внешнее/утилиты: `update-check.ts`, `update-check-policy.ts`, `diagnostics.ts`, `diagnostics-classify.ts`, `custom-provider.ts`, `tunnel.ts`, `speech.ts`, `speech-errors.ts`, `speech-locale.ts`, `links.ts`, `file-roots.ts`, `path-utils.ts`, `quick-connect-url.ts`, `http.ts`, `demo-script.ts`, `markdown-keys.ts` (ключи React без слага), `disconnect-reason.ts`, `types.ts`.
 
