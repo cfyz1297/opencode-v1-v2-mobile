@@ -252,8 +252,9 @@
 1. Поднять версию в трёх местах: `package.json`, `app.json` (`expo.version` + `expo.android.versionCode`), `android/app/build.gradle` (`versionName` + `versionCode`). Литералы в `.github/workflows/build.yml` не нужны: CI читает ожидаемые значения из `app.json`. При смене keystore обновить `EXPECTED_CERT` в том же шаге проверки.
 2. `npm run check:versions` — версии в трёх файлах должны совпасть.
 3. Слить в `main`, поставить тег `vX.Y.Z`, дождаться зелёного CI на теге.
-4. Опубликовать GitHub Release вручную с текстом изменений в описании и приложить `app-release.apk` под именем `opencode-mobile-v2.apk` (+ `SHA256SUMS.txt`): workflow Release не создаёт, а `releases/latest/download/opencode-mobile-v2.apk` используется встроенной проверкой обновлений. **Описание релиза — на двух языках: сначала английский, потом русский** (разделы `English` / `Русский`). **SHA256 APK писать в самом тексте описания** (в обоих разделах), а не только в `SHA256SUMS.txt`.
-5. Обновить `README.md` (английский, основной) и `README.ru.md` (русский), затем этот файл.
+4. Опубликовать GitHub Release вручную с текстом изменений в описании: workflow Release не создаёт, а `releases/latest/download/opencode-mobile-v2.apk` используется встроенной проверкой обновлений. **Описание релиза — на двух языках: сначала английский, потом русский** (разделы `English` / `Русский`). **SHA256 APK писать в самом тексте описания** (в обоих разделах), а не только в `SHA256SUMS.txt`.
+5. Приложить APK не с телефона, а из CI: запустить `Build Android APK` на `main` с `reuse_apk_run_id=<id тегового прогона>` и `release_tag=vX.Y.Z`. Шаг сверяет, что application sources совпадают с тегом, скачивает тот самый подписанный APK, проверяет пакет/версию/подпись, переименовывает его в `opencode-mobile-v2.apk`, пишет `SHA256SUMS.txt` и прикладывает оба файла. Заливка 98 МБ с мобильной сети рвётся (`connection reset by peer`) — с раннера это одна минута.
+6. Обновить `README.md` (английский, основной) и `README.ru.md` (русский), затем этот файл.
 
 ## Правила окружения этого форка
 

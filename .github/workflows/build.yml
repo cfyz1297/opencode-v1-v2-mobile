@@ -7,6 +7,10 @@ on:
         description: 'Optional successful build run to reuse; application sources must match exactly'
         required: false
         default: ''
+      release_tag:
+        description: 'Existing release tag to attach the verified APK to (for example v0.3.23)'
+        required: false
+        default: ''
   push:
     branches: [main]
     tags: ["v*"]
@@ -41,10 +45,19 @@ jobs:
   build:
     needs: test
     runs-on: ubuntu-latest
+    # Attaching release assets needs write access; the reuse path reads another
+    # run's metadata and artifact, which is its own scope. An explicit block
+    # sets every scope it does not list to none.
+    permissions:
+      contents: write
+      actions: read
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
+          # The job token can write releases, and npm ci runs lifecycle scripts
+          # from third-party packages: keep it out of .git/config.
+          persist-credentials: false
 
       - uses: actions/setup-node@v6
         with:
@@ -193,6 +206,47 @@ jobs:
           name: app-release
           path: android/app/build/outputs/apk/release/app-release.apk
           retention-days: 3
+
+      # Release assets are attached here, not from a phone: a 98 MB upload over
+      # a mobile connection resets, and the artifact of this run is already the
+      # verified APK. The release itself stays manual — this step only fills in
+      # an existing release, never creates one.
+      #
+      # No `always()` on purpose: without a status function a step already
+      # requires every previous step to have succeeded, so an APK that failed
+      # the signature/version check (a debug-signed build, a cancelled run) can
+      # never overwrite a published asset.
+      - name: Attach the verified APK to the release
+        if: startsWith(github.ref, 'refs/tags/') || inputs.release_tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          APK=android/app/build/outputs/apk/release/app-release.apk
+          # -f alone does not say the file is a release build: the version inside
+          # it must match the tag being filled in, or --clobber would replace an
+          # old release with a newer build from main.
+          EXPECTED_TAG="v$(node -p "require('./app.json').expo.version")"
+          if [ "$RELEASE_TAG" != "$EXPECTED_TAG" ]; then
+            echo "Tag $RELEASE_TAG does not match the built $EXPECTED_TAG"; exit 1
+          fi
+          # Only "release not found" is harmless. Any other failure (permissions,
+          # network) must fail the job instead of reporting a clean no-op.
+          if ! OUT=$(gh release view "$RELEASE_TAG" 2>&1); then
+            if echo "$OUT" | grep -q "release not found"; then
+              echo "No release for $RELEASE_TAG yet; the APK stays in the workflow artifact."
+              exit 0
+            fi
+            echo "$OUT"; exit 1
+          fi
+          cp "$APK" opencode-mobile-v2.apk
+          sha256sum opencode-mobile-v2.apk > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+          if ! gh release view "$RELEASE_TAG" --json body --jq .body | grep -q "$(cut -d' ' -f1 SHA256SUMS.txt)"; then
+            echo "::warning::the release body does not list $(cut -d' ' -f1 SHA256SUMS.txt); update it"
+          fi
+          gh release upload "$RELEASE_TAG" opencode-mobile-v2.apk SHA256SUMS.txt --clobber
 
   roadmap-smoke:
     name: Android roadmap CUA smoke
