@@ -55,12 +55,18 @@ versions. Not published to Google Play or F-Droid.
 - `HANDOFF.md` — engineering state, what shipped and what is left
 - `docs/` — upstream review and security review
 
-Verification: `npm test` (746 tests, node built-in runner), `npm run typecheck`,
-`npm run check:versions`, `npm run test:coverage` (about 98% of lines).
+Verification: `npm test` (880 tests, node built-in runner), `npm run typecheck`,
+`npm run check:versions` (also checks the lockfile), `npm run test:coverage`
+(about 98% of lines).
+
+The Android server build is https://github.com/cfyz1297/opencode-termux: OpenCode
+2 compiled for Bionic, so `opencode serve` runs inside Termux with no glibc and
+no proot. That loopback setup is the intended one.
 
 ## Optional
 
 - Full README: https://github.com/cfyz1297/opencode-v1-v2-mobile#readme
+- Changelog: CHANGELOG.md
 - Differences from upstream: README, section "How the fork differs from upstream"
 - Security review: docs/security-review-server-api.md
 - Upstream review (all issues and PRs, what was ported and why):
