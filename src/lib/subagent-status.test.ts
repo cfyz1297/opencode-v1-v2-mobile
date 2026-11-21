@@ -65,6 +65,28 @@ test("the bar lists every delegated subagent in call order", () => {
   assert.equal(refs[1].title, "task 2")
 })
 
+test("a resumed child session is a new row, not a duplicate of the old call", () => {
+  // The screenshot bug: this turn resumed a session an earlier turn had spawned
+  // (D). Deduplicating on the child id alone dropped D's call and left the
+  // hour-old row in its place, so "Сейчас" showed only C.
+  const refs = collectSubagents([
+    turn("user", []),
+    turn("assistant", [part("ses-shared", 1)]),
+    turn("user", []),
+    turn("assistant", [part("ses-c", 2), part("ses-shared", 3)]),
+  ])
+  assert.deepEqual(
+    refs.map((r) => [r.sessionID, r.wave, r.title]),
+    [
+      ["ses-shared", 1, "task 1"],
+      ["ses-c", 2, "task 2"],
+      ["ses-shared", 2, "task 3"],
+    ],
+  )
+  // Both calls of the current turn are in the "current" list.
+  assert.deepEqual(visibleSubagents(refs, done).map((r) => r.sessionID), ["ses-c", "ses-shared"])
+})
+
 test("a running subagent is never buried under finished ones", () => {
   const refs = collectSubagents([
     { parts: [part("c1", 1), part("c2", 2), part("c3", 3)] },

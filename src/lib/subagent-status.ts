@@ -111,7 +111,11 @@ export function collectSubagents(
       if (tool !== "subagent" && tool !== "task") continue
       const child = part.state?.metadata?.sessionID
       if (typeof child !== "string" || child.length === 0) continue
-      if (out.some((ref) => ref.sessionID === child)) continue
+      // Deduplicate within the turn, not across the transcript: a resumed
+      // session (the same child id called again in a later turn) is a new call
+      // and needs its own row, while a replayed part of the same turn is a
+      // duplicate.
+      if (out.some((ref) => ref.sessionID === child && ref.wave === wave)) continue
       out.push({
         sessionID: child,
         parentID: part.sessionID,

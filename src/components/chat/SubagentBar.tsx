@@ -119,7 +119,7 @@ export function SubagentBar({ refs, isDark }: Props) {
         >
           {shown.map((ref) => (
             <SubagentRow
-              key={ref.sessionID}
+              key={`${ref.wave}:${ref.sessionID}`}
               sessionID={ref.sessionID}
               parentID={ref.parentID}
               agent={ref.agent}
