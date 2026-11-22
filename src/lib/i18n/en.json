@@ -93,6 +93,11 @@
     }
   },
   "session": {
+    "attach": {
+      "title": "Attach",
+      "photo": "Photo from gallery",
+      "file": "Choose file"
+    },
     "titleFallback": "Session",
     "toolbar": {
       "auto": "Auto"
@@ -146,6 +151,9 @@
       "rejectFailedMessage": "Could not send your response. Please try again.",
       "imageFailedTitle": "Image not attached",
       "imageFailedMessage": "One or more images could not be processed. Please try a different photo.",
+      "fileTooLargeTitle": "File too large",
+      "fileFailedTitle": "File not attached",
+      "fileFailedMessage": "Some files were not attached. Please try another file.",
       "speechErrorTitle": "Voice input failed",
       "speechErrorMessage": "Could not use voice input. Check your microphone permission and try again.",
       "abortFailedTitle": "Could not stop the run",
@@ -386,6 +394,11 @@
     "unlockButton": "Unlock"
   },
   "chat": {
+    "link": {
+      "openFailedTitle": "Can't open this link",
+      "copy": "Copy link",
+      "hint": "Opens in a new window"
+    },
     "commands": {
       "new": {
         "title": "New Session",
@@ -454,7 +467,8 @@
       "copied": "Copied",
       "tokens": "tokens",
       "revertHere": "Reset to this point",
-      "failed": "Run failed"
+      "failed": "Run failed",
+      "file": "Attached file"
     },
     "variantPicker": {
       "title": "Reasoning Effort",

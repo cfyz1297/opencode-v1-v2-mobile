@@ -189,6 +189,7 @@ function harness() {
     "../lib/answered-questions": { recordAnswered: (list: unknown) => list },
     "../lib/disconnect-reason": { disconnectReasonText: (reason: unknown) => String(reason) },
     "../lib/keep-alive": { setKeepAlive: () => {} },
+    "../lib/file-attachment": { promptFileUrl: (f: { mime: string; uri: string }) => f.uri },
     "../lib/logbuffer": {
       log: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} },
     },

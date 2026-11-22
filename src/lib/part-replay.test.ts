@@ -47,6 +47,7 @@ function harness() {
     },
     "../lib/history-storage": { offlineHistory: { remove: async () => {} } },
     "../lib/keep-alive": { setKeepAlive: () => {} },
+    "../lib/file-attachment": { promptFileUrl: (f: { mime: string; uri: string }) => f.uri },
   }
   vm.runInNewContext(code, {
     exports,

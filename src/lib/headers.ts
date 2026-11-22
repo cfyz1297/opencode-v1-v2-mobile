@@ -20,6 +20,12 @@ function toBase64Utf8(str: string): string {
   return btoa(unescape(encodeURIComponent(str)))
 }
 
+// RFC 7617 Basic credentials. Shared with the connection probe, which builds
+// its headers outside a session request and used to call btoa directly.
+export function basicAuthHeader(auth: { username: string; password: string }): string {
+  return `Basic ${toBase64Utf8(`${auth.username}:${auth.password}`)}`
+}
+
 export function buildRequestHeaders(config: HeaderConfig): Record<string, string> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -43,8 +49,7 @@ export function buildRequestHeaders(config: HeaderConfig): Record<string, string
   }
 
   if (config.auth) {
-    const credentials = toBase64Utf8(`${config.auth.username}:${config.auth.password}`)
-    headers["Authorization"] = `Basic ${credentials}`
+    headers["Authorization"] = basicAuthHeader(config.auth)
   }
 
   return headers

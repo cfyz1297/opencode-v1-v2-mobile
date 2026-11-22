@@ -35,11 +35,12 @@ function component() {
     "expo-clipboard": { setStringAsync: async () => {} },
     "react-i18next": { useTranslation: () => ({ t: (key: string) => key }) },
     "@expo/vector-icons": { Ionicons: "Ionicons" },
-    "../markdown": { Markdown: "Markdown" },
+    "../markdown": { Markdown: "Markdown", LinkifiedText: "LinkifiedText" },
     "./ActivitySpoiler": { ActivitySpoiler: "ActivitySpoiler" },
     "./ToolCallCard": { ToolCallCard: "ToolCallCard" },
     "./CompactionCard": { CompactionCard: "CompactionCard" },
     "../../lib/part-runs": { groupParts: () => [] },
+    "../../lib/file-attachment": { isImageMime: (mime?: string) => !!mime && mime.startsWith("image/") },
   }
   const output = ts.transpileModule(
     readFileSync(fileURLToPath(new URL("./MessageBubble.tsx", import.meta.url).href), "utf8"),

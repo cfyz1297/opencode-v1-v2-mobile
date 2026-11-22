@@ -30,7 +30,10 @@ import { collectSubagents } from "../../src/lib/subagent-status"
 import { useTranslation } from "react-i18next"
 import * as ImagePicker from "expo-image-picker"
 import * as ImageManipulator from "expo-image-manipulator"
+import * as DocumentPicker from "expo-document-picker"
+import { File as FsFile } from "expo-file-system"
 import * as Clipboard from "expo-clipboard"
+import { base64Bytes, fileTooLarge } from "../../src/lib/file-attachment"
 import type BottomSheet from "@gorhom/bottom-sheet"
 import {
   MessageBubble,
@@ -41,7 +44,7 @@ import {
   SlashPopover,
   ModelPicker,
   VariantPicker,
-  ImageAttachments,
+  Attachments,
   SessionInfo,
   ContextRing,
   type SlashCommand,
@@ -787,6 +790,83 @@ export default function SessionScreen() {
       pickingRef.current = false
     }
   }, [t])
+
+  // --- Any file, not only photos ---
+  // The photo picker offers images only; the native opencode client attaches
+  // whatever the system file manager returns. expo-document-picker copies the
+  // pick into the app cache, and the bytes are read as base64 here: the server
+  // cannot read the phone's filesystem, so the content travels in the prompt.
+  const pickFile = useCallback(async () => {
+    if (pickingRef.current) return
+    pickingRef.current = true
+    try {
+      Keyboard.dismiss()
+      const result = await DocumentPicker.getDocumentAsync({
+        type: "*/*",
+        multiple: true,
+        copyToCacheDirectory: true,
+      })
+      if (result.canceled) return
+      const items: Attachment[] = []
+      const problems: string[] = []
+      // The batch shares one budget, and it must count what is already attached:
+      // picking twice is the same pile of base64 in state either way.
+      let attachedBytes = attachments.reduce((sum, a) => sum + (a.base64 ? base64Bytes(a.base64) : 0), 0)
+      for (const asset of result.assets) {
+        try {
+          const file = new FsFile(asset.uri)
+          // The whole file is base64-encoded into the request body; a mistaken
+          // huge pick would freeze the app before the server ever sees it.
+          // File.size is read from the file itself: some providers report
+          // 0 or -1 for "unknown" in asset.size.
+          if (fileTooLarge(file.size, attachedBytes)) {
+            problems.push(`${asset.name}: ${t("session.alerts.fileTooLargeTitle")}`)
+            continue
+          }
+          const base64 = await file.base64()
+          attachedBytes += base64Bytes(base64)
+          items.push({
+            uri: asset.uri,
+            mime: asset.mimeType || "application/octet-stream",
+            filename: asset.name,
+            base64,
+          })
+        } catch (err) {
+          problems.push(`${asset.name}: ${err instanceof Error ? err.message : String(err)}`)
+        }
+      }
+      if (items.length) setAttachments((prev) => [...prev, ...items])
+      if (problems.length) {
+        // One alert, not two: a second Alert.alert replaces the first on
+        // Android, so a mixed result (one too large, one unreadable) showed
+        // only the last problem. Release builds also drop console output, and
+        // the diagnostics log is what a report carries.
+        log.error("FilePicker", "not attached:", problems.join("; "))
+        Alert.alert(t("session.alerts.fileFailedTitle"), `${t("session.alerts.fileFailedMessage")}\n\n${problems.join("\n")}`)
+      }
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err)
+      log.error("FilePicker", reason)
+      Alert.alert(t("session.alerts.fileFailedTitle"), `${t("session.alerts.fileFailedMessage")}\n\n${reason}`)
+    } finally {
+      pickingRef.current = false
+    }
+  }, [attachments, t])
+
+  // One button, two kinds of attachment: the gallery picker for images (it
+  // compresses them to JPEG) or the system file manager for everything else.
+  const openAttachMenu = useCallback(() => {
+    Alert.alert(
+      t("session.attach.title"),
+      undefined,
+      [
+        { text: t("session.attach.photo"), onPress: () => void pickFromLibrary() },
+        { text: t("session.attach.file"), onPress: () => void pickFile() },
+        { text: t("common.cancel"), style: "cancel" },
+      ],
+      { cancelable: true },
+    )
+  }, [t, pickFromLibrary, pickFile])
 
   const pickFromCamera = useCallback(async () => {
     const perm = await ImagePicker.requestCameraPermissionsAsync()
@@ -1729,7 +1809,7 @@ export default function SessionScreen() {
         </View>
 
         {/* Attachment preview */}
-        <ImageAttachments attachments={attachments} isDark={isDark} onRemove={removeAttachment} />
+        <Attachments attachments={attachments} isDark={isDark} onRemove={removeAttachment} />
 
         {/* Input */}
         <View
@@ -1745,8 +1825,8 @@ export default function SessionScreen() {
           ]}
         >
           <View style={s.inputRow}>
-            {/* Attach button */}
-            <TouchableOpacity style={s.attachBtn} onPress={pickFromLibrary} onLongPress={pickFromCamera} testID="attach-button">
+            {/* Attach button: tap offers photo or file, long-press the camera */}
+            <TouchableOpacity style={s.attachBtn} onPress={openAttachMenu} onLongPress={pickFromCamera} testID="attach-button">
               <Ionicons name="add-circle-outline" size={26} color={isDark ? "#888888" : "#666666"} />
             </TouchableOpacity>
 

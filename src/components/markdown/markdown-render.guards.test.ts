@@ -62,3 +62,41 @@ test("the installed library still needs both overrides", () => {
     "MDImage's effect still has no dependency array — keep the override",
   )
 })
+
+// Links in chat were inert on Android (upstream #284): the library's link()
+// renders a selectable Text whose press is swallowed by the surrounding list
+// row, a URL in backticks is a codespan with no press at all, and plain user
+// messages have no markdown pass to begin with. The contract is pinned here
+// because node:test has no React Native renderer.
+test("the renderer owns link presses and no press is behind canOpenURL", () => {
+  assert.match(markdown, /  link\(/, "the renderer must override link()")
+  const start = markdown.indexOf("  link(")
+  const override = markdown.slice(start, markdown.indexOf("  strong(", start))
+  assert.match(override, /onPress=/, "the press must be ours")
+  assert.match(override, /openLink\(/, "the press goes through the shared opener")
+  assert.doesNotMatch(override, /selectable/, "selectable Text in a FlatList row swallows the press on Android")
+
+  // canOpenURL is filtered by the manifest's <queries> on Android 11+, and the
+  // Expo template declares only https — every http URL would refuse to open.
+  const opener = readFileSync(new URL("./open-link.ts", import.meta.url), "utf8")
+  assert.doesNotMatch(opener.replace(/\/\/.*$/gm, ""), /canOpenURL\(/, "an activity start is not visibility-filtered; the guard only broke http")
+  assert.match(opener, /openURL\([^)]*\)\.catch\(/, "a failed open must offer Copy, not fail silently")
+})
+
+test("a link is never wrapped in selectable text, which would swallow the tap", () => {
+  // Bold/italic/strikethrough/headings wrap their children in plainText; a
+  // link inside them is a nested onPress that selectable text never delivers.
+  assert.match(markdown, /selectable=\{!hasLink\(children\)\}/, "plainText must opt out of selection when it wraps a link")
+})
+
+test("URLs are linkified in plain text, backticks and user messages", () => {
+  assert.match(markdown, /splitTextWithUrls/, "text() must linkify bare URLs autolink missed")
+  assert.match(markdown, /extractSingleUrl/, "a codespan that is one URL must render as a link")
+  assert.match(markdown, /new CustomRenderer\(theme\.text, theme\.link\)/, "the link style comes from the theme")
+  const bubble = readFileSync(new URL("../chat/MessageBubble.tsx", import.meta.url), "utf8")
+  assert.match(bubble, /<LinkifiedText/, "user text has no markdown pass; it must be linkified explicitly")
+  assert.match(bubble, /from "\.\.\/markdown"/, "through the shared markdown exports")
+  // Our own link nodes get the paragraph's metrics too, or a linked word in a
+  // heading renders at body size (the header comment's rule).
+  assert.match(markdown, /this\.link\(segment\.text, segment\.url, \[this\.base, styles, this\.linkStyle\]\)/)
+})

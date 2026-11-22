@@ -55,6 +55,7 @@ function harness(pageSize: number, previous: ReturnType<typeof history>) {
     "../lib/message-page": { keepLoadedHistory, messageLimitForTurns, trimToTurns, countTurns: () => 0, isWholeSession: () => false },
     "../lib/history-storage": { offlineHistory: { remove: async () => {} } },
     "../lib/keep-alive": { setKeepAlive: () => {} },
+    "../lib/file-attachment": { promptFileUrl: (f: { mime: string; uri: string }) => f.uri },
   }
   vm.runInNewContext(code, {
     exports,

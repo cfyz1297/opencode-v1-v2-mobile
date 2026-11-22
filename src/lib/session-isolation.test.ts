@@ -30,6 +30,7 @@ function harness() {
     },
     '../lib/history-storage': { offlineHistory: { remove: async (id: string) => { removed.push(id) } } },
     "../lib/keep-alive": { setKeepAlive: () => {} },
+    "../lib/file-attachment": { promptFileUrl: (f: { mime: string; uri: string }) => f.uri },
   }
   vm.runInNewContext(code, { exports, require: (name: string) => { assert.ok(name in deps, name); return deps[name] }, console, setTimeout, clearTimeout })
   return { store: exports.useSessions, pending, removed, change: () => connections.setState({ activeConnection: { id: 'b', url: 'https://b.example' } }) }

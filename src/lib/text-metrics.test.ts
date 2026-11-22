@@ -46,5 +46,6 @@ test("every markdown Text is laid out with the paragraph's metrics", () => {
   const source = read("src/components/markdown/Markdown.tsx")
   assert.match(source, /style=\{\[this\.base, styles\]\}/)
   const use = source.match(/new CustomRenderer\(([^)]*)\)/)
-  assert.equal(use?.[1], "theme.text")
+  // The second argument is the theme's link style for linkified text/codespans.
+  assert.equal(use?.[1], "theme.text, theme.link")
 })

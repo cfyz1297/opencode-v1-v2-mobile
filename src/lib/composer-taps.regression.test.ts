@@ -65,3 +65,36 @@ test("reading the clipboard cannot fail silently", () => {
   assert.match(paste, /catch \(err\)/)
   assert.match(paste, /Alert\.alert\(t\("session\.alerts\.imageFailedTitle"\)/)
 })
+
+// The attach button opened the photo picker directly, so a .txt/.json/.pdf/.zip
+// could not be sent at all — the native opencode client accepts any file.
+test("the attach button offers photos and any file", () => {
+  const menu = block("const openAttachMenu = useCallback(", "}, [t, pickFromLibrary, pickFile])")
+  assert.match(menu, /t\("session\.attach\.photo"\)/)
+  assert.match(menu, /t\("session\.attach\.file"\)/)
+  assert.match(menu, /Alert\.alert/)
+  // The photo path must stay exactly what it was.
+  assert.match(menu, /pickFromLibrary/)
+  assert.match(src, /onPress=\{openAttachMenu\}/)
+})
+
+test("a picked file reaches the prompt as bytes, never as a cache path", () => {
+  const pick = block("const pickFile = useCallback(", "}, [attachments, t])")
+  assert.match(pick, /DocumentPicker\.getDocumentAsync/)
+  // The server cannot read the phone's filesystem: the bytes travel as base64
+  // in the prompt, so an unread file is an attachment that would never arrive.
+  assert.match(pick, /\.base64\(\)/)
+  assert.match(pick, /base64,/)
+  assert.match(pick, /catch \(err\)/)
+  assert.match(pick, /Alert\.alert\(t\("session\.alerts\.fileFailedTitle"\)/)
+  // Same reasoning as the photo picker: release builds drop console output.
+  assert.match(pick, /log\.error\("FilePicker"/)
+  // A mistaken huge pick would freeze the app while base64-encoding it, and a
+  // second pick must not reset the batch budget.
+  assert.match(pick, /fileTooLarge\(file\.size, attachedBytes\)/)
+  assert.match(pick, /attachments\.reduce/)
+
+  // The one line the whole feature rests on: send uses base64 when present.
+  const sessions = readFileSync(path.join(root, "src/stores/sessions.ts"), "utf8")
+  assert.match(sessions, /promptFileUrl\(f\)/, "the prompt must build the data URL from the bytes")
+})

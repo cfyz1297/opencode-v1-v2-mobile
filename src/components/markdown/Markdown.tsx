@@ -12,7 +12,11 @@ import {
 import { useMarkdown, Renderer } from "react-native-marked"
 import { CodeBlock } from "./CodeBlock"
 import { MarkdownImage } from "./MarkdownImage"
+import { openLink } from "./open-link"
+import { LINK_COLOR } from "./link-color"
 import { createMarkdownKeys } from "../../lib/markdown-keys"
+import { extractSingleUrl, splitTextWithUrls } from "../../lib/linkify"
+import i18n from "../../lib/i18n/config"
 
 // react-native-marked's base Renderer hardcodes `selectable` on every plain
 // text node it produces (text/strong/em/del/heading/codespan). That was removed
@@ -20,7 +24,19 @@ import { createMarkdownKeys } from "../../lib/markdown-keys"
 // touch wrapper wins the long-press, so `selectable` text inside it could never
 // be selected — the flag was dead weight and only fed the accessibility tree.
 // Assistant bubbles are a plain View now (see MessageBubble), so selection works
-// again and the flag is back on every text node.
+// again and the flag is back on every text node — except a node that wraps a
+// link: selectable text handles the touch itself and the nested link's press
+// never fires, so such a node opts out (bold/italic/heading contain links).
+// True when any child (at any depth) is one of this renderer's link nodes.
+// They are the only nodes here with role "link", and a selectable ancestor
+// would swallow their press on Android.
+function hasLink(children: string | ReactNode[]): boolean {
+  if (typeof children === "string") return false
+  return children
+    .flat(Infinity)
+    .some((child) => typeof child === "object" && child !== null && (child as { props?: { accessibilityRole?: string } }).props?.accessibilityRole === "link")
+}
+
 export class CustomRenderer extends Renderer {
   // Every Text node carries the paragraph's own font metrics, including the
   // wrapper the parser builds around a paragraph's inline runs
@@ -28,7 +44,10 @@ export class CustomRenderer extends Renderer {
   // Without them that wrapper is laid out at the platform default font while
   // its children use fontSize 15, so the wrapper's metrics decide the box the
   // runs are painted into.
-  constructor(private readonly base: TextStyle) {
+  constructor(
+    private readonly base: TextStyle,
+    private readonly linkStyle?: TextStyle,
+  ) {
     super()
   }
 
@@ -46,7 +65,7 @@ export class CustomRenderer extends Renderer {
 
   private plainText(children: string | ReactNode[], styles?: StyleProp<TextStyle>): ReactNode {
     return (
-      <Text key={this.getKey()} style={[this.base, styles]} selectable>
+      <Text key={this.getKey()} style={[this.base, styles]} selectable={!hasLink(children)}>
         {children}
       </Text>
     )
@@ -61,7 +80,37 @@ export class CustomRenderer extends Renderer {
   }
 
   text(text: string | ReactNode[], styles?: TextStyle): ReactNode {
-    return this.plainText(text, styles)
+    // A bare URL GFM autolink missed (no scheme, trailing punctuation) arrives
+    // here as a raw string: split it into link nodes. The parser also calls
+    // text() with an already-rendered array (the paragraph wrapper) — its link
+    // tokens are already link nodes, so pass that through untouched.
+    if (typeof text !== "string") return this.plainText(text, styles)
+    const segments = splitTextWithUrls(text)
+    if (!segments.some((segment) => segment.url)) return this.plainText(text, styles)
+    return segments.map((segment) =>
+      segment.url
+        ? this.link(segment.text, segment.url, [this.base, styles, this.linkStyle])
+        : this.plainText(segment.text, styles),
+    )
+  }
+
+  // Own link handling instead of the library default (upstream #284). The
+  // default is a `selectable` Text; selectable text inside a FlatList row
+  // swallows the press on Android (RN#46999, see the header comment), so a
+  // link was highlighted but never opened. Presses go through openLink, which
+  // offers Copy when nothing can open the URL.
+  link(children: string | ReactNode[], href: string, styles?: StyleProp<TextStyle>, _title?: string): ReactNode {
+    return (
+      <Text
+        key={this.getKey()}
+        style={styles}
+        accessibilityRole="link"
+        accessibilityHint={i18n.t("chat.link.hint")}
+        onPress={() => openLink(href)}
+      >
+        {children}
+      </Text>
+    )
   }
 
   strong(children: string | ReactNode[], styles?: TextStyle): ReactNode {
@@ -81,6 +130,11 @@ export class CustomRenderer extends Renderer {
   }
 
   codespan(text: string, styles?: TextStyle): ReactNode {
+    // A URL in backticks lexes as a codespan, not a link — agents write them
+    // constantly. A span that IS one URL renders as a link; anything else keeps
+    // the code styling and stays inert, and fenced blocks (code()) are untouched.
+    const url = extractSingleUrl(text)
+    if (url) return this.link(text, url, [this.base, styles, { fontStyle: "normal", fontWeight: "normal" }, this.linkStyle])
     return this.plainText(text, [styles, { fontStyle: "normal", fontWeight: "normal" }])
   }
 
@@ -108,7 +162,7 @@ const lightTheme = {
   h1: { fontSize: 22, fontWeight: "700" as const, color: "#0a0a0a", marginBottom: 8, marginTop: 12 },
   h2: { fontSize: 19, fontWeight: "600" as const, color: "#0a0a0a", marginBottom: 6, marginTop: 10 },
   h3: { fontSize: 16, fontWeight: "600" as const, color: "#0a0a0a", marginBottom: 4, marginTop: 8 },
-  link: { color: "#8b5cf6" },
+  link: { color: LINK_COLOR.light },
   blockquote: {
     backgroundColor: "transparent",
     borderLeftWidth: 3,
@@ -159,7 +213,7 @@ const darkTheme = {
   h1: { ...lightTheme.h1, color: "#ffffff" },
   h2: { ...lightTheme.h2, color: "#ffffff" },
   h3: { ...lightTheme.h3, color: "#ffffff" },
-  link: { color: "#a78bfa" },
+  link: { color: LINK_COLOR.dark },
   blockquote: {
     ...lightTheme.blockquote,
     borderLeftColor: "#4a4a5a",
@@ -193,7 +247,7 @@ export function Markdown({ children }: Props) {
   // the renderer to `children` resets the slugger per parse, so keys are
   // deterministic (and stable) for a given value, while re-renders with an
   // unchanged value stay memoized instead of creating a new renderer.
-  const renderer = useMemo(() => new CustomRenderer(theme.text), [children, theme])
+  const renderer = useMemo(() => new CustomRenderer(theme.text, theme.link), [children, theme])
 
   // react-native-marked's default <RNMarkdown> export renders blocks inside a
   // FlatList. Chat messages are rendered inside app/session/[id].tsx's own

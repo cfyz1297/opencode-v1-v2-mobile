@@ -18,6 +18,13 @@ test("the transcript does not scroll to a selectable text that takes focus", () 
 })
 
 test("long-press selection stays available on assistant text", () => {
-  assert.match(markdownSource, /selectable>/, "markdown text nodes must stay selectable")
-  assert.match(bubbleSource, /isUser && text\.length > 0[\s\S]{0,120}selectable/, "user text stays selectable")
+  assert.match(markdownSource, /selectable=\{!hasLink\(children\)\}/, "markdown text nodes stay selectable unless they wrap a link")
+  // User text keeps selection too — LinkifiedText drops it only for text that
+  // actually contains a URL, where selectable would swallow the tap.
+  assert.match(bubbleSource, /<LinkifiedText[\s\S]{0,120}selectable /, "user text stays selectable when it has no link")
+  assert.match(
+    readFileSync(new URL("../markdown/LinkifiedText.tsx", import.meta.url), "utf8"),
+    /segments\.some\(\(segment\) => segment\.url\)/,
+    "the link branch decides selection",
+  )
 })

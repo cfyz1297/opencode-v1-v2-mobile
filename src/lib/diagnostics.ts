@@ -8,6 +8,7 @@ import appJson from "../../app.json"
 import { log, formatLogLines } from "./logbuffer"
 import { type Classification, type ProbeAttempt, type ParsedUrl, parseUrl, classify, chooseHealthProbe } from "./diagnostics-classify"
 import type { ServerApi } from "./api-detect"
+import { basicAuthHeader } from "./headers"
 import { scrubString, scrubUrl } from "./scrub"
 
 export type { Classification, ProbeAttempt } from "./diagnostics-classify"
@@ -81,7 +82,7 @@ export async function probeConnection(url: string, auth?: { username: string; pa
   log.info("diag", "probe start", scrubUrl(url), "parsed", JSON.stringify(parsed))
 
   const headers: Record<string, string> = {}
-  if (auth) headers["Authorization"] = `Basic ${btoa(`${auth.username}:${auth.password}`)}`
+  if (auth) headers["Authorization"] = basicAuthHeader(auth)
 
   let health: ProbeAttempt
   let root: ProbeAttempt

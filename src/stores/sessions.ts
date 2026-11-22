@@ -10,6 +10,7 @@ import { shouldApplyPartUpdate } from "../lib/part-order"
 import { countTurns, isWholeSession, keepLoadedHistory, messageLimitForTurns, trimToTurns } from "../lib/message-page"
 import { offlineHistory } from '../lib/history-storage'
 import { setKeepAlive } from "../lib/keep-alive"
+import { promptFileUrl } from "../lib/file-attachment"
 
 // Helper to convert API response to our internal format
 function parseMessages(response: MessageWithParts[]): { messages: Message[]; parts: Record<string, Part[]> } {
@@ -445,7 +446,10 @@ export const useSessions = create<SessionsState>((set, get) => ({
             messageID: userMessage.id,
             type: "file",
             mime: f.mime,
-            url: f.uri,
+            // The message is re-editable before the server list replaces this
+            // copy; a cache path there would be re-sent as a path the server
+            // cannot open.
+            url: promptFileUrl(f),
             filename: f.filename,
           })
         }
@@ -465,8 +469,7 @@ export const useSessions = create<SessionsState>((set, get) => ({
       }
       if (files) {
         for (const f of files) {
-          const url = f.base64 ? `data:${f.mime};base64,${f.base64}` : f.uri
-          promptParts.push({ type: "file", mime: f.mime, url, filename: f.filename })
+          promptParts.push({ type: "file", mime: f.mime, url: promptFileUrl(f), filename: f.filename })
         }
       }
 

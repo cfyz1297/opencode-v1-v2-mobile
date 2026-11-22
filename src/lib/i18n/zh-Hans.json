@@ -93,6 +93,11 @@
     }
   },
   "session": {
+    "attach": {
+      "title": "添加附件",
+      "photo": "从相册选择照片",
+      "file": "选择文件"
+    },
     "titleFallback": "会话",
     "toolbar": {
       "auto": "自动"
@@ -146,6 +151,9 @@
       "rejectFailedMessage": "无法发送您的回复。请重试。",
       "imageFailedTitle": "图片未添加",
       "imageFailedMessage": "一张或多张图片无法处理。请尝试其他照片。",
+      "fileTooLargeTitle": "文件过大",
+      "fileFailedTitle": "文件未添加",
+      "fileFailedMessage": "部分文件未添加。请尝试其他文件。",
       "speechErrorTitle": "语音输入失败",
       "speechErrorMessage": "无法使用语音输入。请检查麦克风权限后重试。",
       "abortFailedTitle": "无法停止运行",
@@ -386,6 +394,11 @@
     "unlockButton": "解锁"
   },
   "chat": {
+    "link": {
+      "openFailedTitle": "无法打开此链接",
+      "copy": "复制链接",
+      "hint": "在新窗口中打开"
+    },
     "commands": {
       "new": {
         "title": "新建会话",
@@ -454,7 +467,8 @@
       "copied": "已复制",
       "tokens": "tokens",
       "revertHere": "重置到此消息",
-      "failed": "运行失败"
+      "failed": "运行失败",
+      "file": "附件文件"
     },
     "variantPicker": {
       "title": "推理强度",

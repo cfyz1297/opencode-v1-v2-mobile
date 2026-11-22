@@ -1,6 +1,7 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
-import { buildRequestHeaders } from "./headers.ts"
+import { readFileSync } from "node:fs"
+import { basicAuthHeader, buildRequestHeaders } from "./headers.ts"
 
 // These headers authenticate every request and tell the server which project
 // directory to operate in. A bug here breaks connections or silently targets the
@@ -92,4 +93,17 @@ test("non-ASCII password does not throw and round-trips back to the credentials"
   const b64 = h["Authorization"].replace("Basic ", "")
   const decoded = decodeURIComponent(escape(atob(b64)))
   assert.equal(decoded, `${auth.username}:${auth.password}`)
+})
+
+// The connection probe builds its own request headers (it is not a session
+// request), so it had its own copy of the Basic-header line — with raw btoa.
+// A non-ASCII password then threw RangeError inside the failure path, before
+// the screen cleared its spinner: the user saw a hung "connecting" forever
+// and no diagnostic report (upstream #304).
+test("basicAuthHeader is UTF-8-safe and the probe uses it, never raw btoa", () => {
+  assert.equal(basicAuthHeader({ username: "имя", password: "пароль" }), `Basic ${Buffer.from("имя:пароль", "utf8").toString("base64")}`)
+
+  const diagnostics = readFileSync(new URL("./diagnostics.ts", import.meta.url), "utf8")
+  assert.match(diagnostics, /basicAuthHeader/, "the probe must reuse the shared helper")
+  assert.doesNotMatch(diagnostics, /\bbtoa\(/, "raw btoa throws RangeError on non-ASCII credentials")
 })

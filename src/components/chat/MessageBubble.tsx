@@ -3,19 +3,16 @@ import { View, Text, Image, StyleSheet, ScrollView, TouchableOpacity, Dimensions
 import { Ionicons } from "@expo/vector-icons"
 import * as Clipboard from "expo-clipboard"
 import { useTranslation } from "react-i18next"
-import { Markdown } from "../markdown"
+import { Markdown, LinkifiedText } from "../markdown"
 import { ActivitySpoiler } from "./ActivitySpoiler"
 import { ToolCallCard } from "./ToolCallCard"
 import { CompactionCard } from "./CompactionCard"
 import { groupParts } from "../../lib/part-runs"
+import { isImageMime } from "../../lib/file-attachment"
 import type { RunTotals } from "../../lib/message-run"
 import type { Message, Part } from "../../lib/sdk"
 
 const SCREEN_WIDTH = Dimensions.get("window").width
-
-function isImageMime(mime?: string): boolean {
-  return !!mime && mime.startsWith("image/")
-}
 
 interface Props {
   message: Message
@@ -57,7 +54,9 @@ export const MessageBubble = memo(
     const [copied, setCopied] = useState(false)
 
     const textParts = parts.filter((p) => p.type === "text")
-    const fileParts = parts.filter((p) => p.type === "file" && isImageMime(p.mime))
+    // Every file part, not only images: a text/JSON/PDF attachment sent from
+    // the composer must appear in the transcript too.
+    const fileParts = parts.filter((p) => p.type === "file")
     const text = textParts.map((p) => p.text).join("\n") || ""
     // Assistant steps render as a timeline in the order the model produced
     // them (see groupParts); user messages stay a single text block.
@@ -124,11 +123,24 @@ export const MessageBubble = memo(
           >
             {fileParts.map((fp) => (
               <View key={fp.id} style={s.imageWrap}>
-                <Image source={{ uri: fp.url }} style={s.attachedImage} resizeMode="cover" />
-                {fp.filename && (
-                  <Text style={[s.imageLabel, isDark && s.imageLabelDark]} numberOfLines={1}>
-                    {fp.filename}
-                  </Text>
+                {isImageMime(fp.mime) ? (
+                  <>
+                    <Image source={{ uri: fp.url }} style={s.attachedImage} resizeMode="cover" />
+                    {fp.filename && (
+                      <Text style={[s.imageLabel, isDark && s.imageLabelDark]} numberOfLines={1}>
+                        {fp.filename}
+                      </Text>
+                    )}
+                  </>
+                ) : (
+                  // A non-image attachment has no preview; a document chip
+                  // still shows that the file was sent.
+                  <View style={[s.fileChip, isDark && s.fileChipDark]}>
+                    <Ionicons name="document-text-outline" size={18} color={isDark ? "#a78bfa" : "#6d28d9"} />
+                    <Text style={[s.fileChipText, isDark && s.fileChipTextDark]} numberOfLines={1}>
+                      {fp.filename || t("chat.message.file")}
+                    </Text>
+                  </View>
                 )}
               </View>
             ))}
@@ -170,11 +182,12 @@ export const MessageBubble = memo(
           </View>
         )}
 
-        {/* User text */}
+        {/* User text. Bare URLs have no markdown pass here, so they are
+            linkified explicitly — same open/copy treatment as assistant text.
+            LinkifiedText drops selection only when the text holds a link:
+            on Android selectable swallows the link's tap (RN#46999). */}
         {isUser && text.length > 0 && (
-          <Text style={[s.messageText, isDark && s.textWhite]} selectable>
-            {text}
-          </Text>
+          <LinkifiedText text={text} style={[s.messageText, isDark && s.textWhite]} selectable isDark={isDark} />
         )}
 
         {/* Per-message actions — desktop parity: copy + "reset to this point".
@@ -329,4 +342,18 @@ const s = StyleSheet.create({
   },
   imageLabel: { fontSize: 10, color: "#666666", marginTop: 2, maxWidth: 200 },
   imageLabelDark: { color: "#888888" },
+  // Non-image attachment: document chip instead of a thumbnail.
+  fileChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    maxWidth: Math.min(200, SCREEN_WIDTH * 0.5),
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: "#f5f3ff",
+  },
+  fileChipDark: { backgroundColor: "#241b3a" },
+  fileChipText: { fontSize: 12, color: "#6d28d9", flexShrink: 1 },
+  fileChipTextDark: { color: "#c4b5fd" },
 })
