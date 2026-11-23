@@ -68,14 +68,34 @@ test("reading the clipboard cannot fail silently", () => {
 
 // The attach button opened the photo picker directly, so a .txt/.json/.pdf/.zip
 // could not be sent at all — the native opencode client accepts any file.
-test("the attach button offers photos and any file", () => {
-  const menu = block("const openAttachMenu = useCallback(", "}, [t, pickFromLibrary, pickFile])")
-  assert.match(menu, /t\("session\.attach\.photo"\)/)
-  assert.match(menu, /t\("session\.attach\.file"\)/)
-  assert.match(menu, /Alert\.alert/)
-  // The photo path must stay exactly what it was.
-  assert.match(menu, /pickFromLibrary/)
+test("the attach button opens a sheet with camera, photo and files", () => {
+  const menu = block("const openAttachMenu = useCallback(", "}, [])")
+  assert.match(menu, /attachSheetRef\.current\?\.snapToIndex\(0\)/, "the menu is our own sheet, opened at its compact detent")
   assert.match(src, /onPress=\{openAttachMenu\}/)
+  // The sheet itself, and every source wired to a real picker.
+  const sheet = readFileSync(path.join(root, "src/components/chat/AttachMenuSheet.tsx"), "utf8")
+  assert.match(sheet, /t\("session\.attach\.camera"\)/)
+  assert.match(sheet, /t\("session\.attach\.photo"\)/)
+  assert.match(sheet, /t\("session\.attach\.file"\)/)
+  assert.match(sheet, /bottom-sheet/, "it reuses the app's sheet component, not a new one")
+  // An Alert cannot carry icons and renders in the system style; the reported
+  // problem was that the menu looked foreign next to the rest of the app.
+  assert.doesNotMatch(menu, /Alert\.alert/)
+  // The sheet closes before a picker opens, or the picker lands behind it.
+  assert.match(sheet, /sheetRef\.current\?\.close\(\)\s*\n\s*openPicker\(\)/)
+  // Wired, not merely defined: the screen must render the sheet and point each
+  // row at its own picker. Swapping two of them kept every test green before.
+  assert.match(src, /<AttachMenuSheet/)
+  assert.match(src, /onCamera=\{\(\) => void pickFromCamera\(\)\}/)
+  assert.match(src, /onPhoto=\{\(\) => void pickFromLibrary\(\)\}/)
+  assert.match(src, /onFile=\{\(\) => void pickFile\(\)\}/)
+  // Same trap as the model and effort pickers: the IME is up in the composer,
+  // and a sheet opened behind it looks like a dead button.
+  assert.match(menu, /Keyboard\.dismiss\(\)/, "the menu must dismiss the keyboard first")
+  // The Alert it replaced was cancelable, so Back dismissed it. A sheet is a
+  // plain view: without this, Back leaves the session with the menu still up.
+  assert.match(sheet, /hardwareBackPress/)
+  assert.match(sheet, /sheetRef\.current\?\.close\(\)\s*\n\s*return true/)
 })
 
 test("a picked file reaches the prompt as bytes, never as a cache path", () => {

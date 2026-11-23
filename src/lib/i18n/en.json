@@ -94,9 +94,9 @@
   },
   "session": {
     "attach": {
-      "title": "Attach",
-      "photo": "Photo from gallery",
-      "file": "Choose file"
+      "photo": "Photo",
+      "file": "Files",
+      "camera": "Camera"
     },
     "titleFallback": "Session",
     "toolbar": {

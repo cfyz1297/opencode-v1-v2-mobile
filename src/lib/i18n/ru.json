@@ -94,9 +94,9 @@
   },
   "session": {
     "attach": {
-      "title": "Прикрепить",
-      "photo": "Фото из галереи",
-      "file": "Выбрать файл"
+      "photo": "Фото",
+      "file": "Файлы",
+      "camera": "Камера"
     },
     "titleFallback": "Сессия",
     "toolbar": {

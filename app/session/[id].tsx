@@ -44,6 +44,7 @@ import {
   SlashPopover,
   ModelPicker,
   VariantPicker,
+  AttachMenuSheet,
   Attachments,
   SessionInfo,
   ContextRing,
@@ -147,6 +148,7 @@ export default function SessionScreen() {
   const flatListRef = useRef<FlatList>(null)
   const modelSheetRef = useRef<BottomSheet>(null)
   const variantSheetRef = useRef<BottomSheet>(null)
+  const attachSheetRef = useRef<BottomSheet>(null)
 
   // Both the chip and the /model command open this sheet. An empty catalog
   // means the one load() at connect time failed (or never ran on this
@@ -863,22 +865,20 @@ export default function SessionScreen() {
     }
   }, [attachments, t])
 
-  // One button, two kinds of attachment: the gallery picker for images (it
-  // compresses them to JPEG) or the system file manager for everything else.
+  // One button, three sources: camera, gallery (it compresses to JPEG) and the
+  // system file manager for everything else. The menu is a sheet, not an Alert:
+  // an Alert can only show text buttons and takes the system's look, not ours.
   const openAttachMenu = useCallback(() => {
-    Alert.alert(
-      t("session.attach.title"),
-      undefined,
-      [
-        { text: t("session.attach.photo"), onPress: () => void pickFromLibrary() },
-        { text: t("session.attach.file"), onPress: () => void pickFile() },
-        { text: t("common.cancel"), style: "cancel" },
-      ],
-      { cancelable: true },
-    )
-  }, [t, pickFromLibrary, pickFile])
+    // Same reason as the model and effort pickers: the button sits in the
+    // composer, so the IME is almost always up, and gorhom only reacts to
+    // keyboard changes after mount — the menu would open behind it.
+    Keyboard.dismiss()
+    // snapToIndex(0), not expand(): expand() targets the LAST snap point, and
+    // three rows do not need the tall detent.
+    attachSheetRef.current?.snapToIndex(0)
+  }, [])
 
-  const pickFromCamera = useCallback(async () => {
+  const openCamera = useCallback(async () => {
     const perm = await ImagePicker.requestCameraPermissionsAsync()
     if (!perm.granted) {
       Alert.alert(t("session.alerts.cameraPermissionTitle"), t("session.alerts.cameraPermissionMessage"))
@@ -906,6 +906,19 @@ export default function SessionScreen() {
       Alert.alert(t("session.alerts.imageFailedTitle"), t("session.alerts.imageFailedMessage"))
     }
   }, [t])
+
+  const pickFromCamera = useCallback(async () => {
+    // Same guard as the gallery and file pickers: the menu row stays pressable
+    // while the sheet slides away, and a second tap would launch the camera
+    // activity twice.
+    if (pickingRef.current) return
+    pickingRef.current = true
+    try {
+      await openCamera()
+    } finally {
+      pickingRef.current = false
+    }
+  }, [openCamera])
 
   const pasteFromClipboard = useCallback(async () => {
     try {
@@ -1835,7 +1848,7 @@ export default function SessionScreen() {
           ]}
         >
           <View style={s.inputRow}>
-            {/* Attach button: tap offers photo or file, long-press the camera */}
+            {/* Attach button: tap opens the menu (camera, gallery, files); long-press goes straight to the camera */}
             <TouchableOpacity style={s.attachBtn} onPress={openAttachMenu} onLongPress={pickFromCamera} testID="attach-button">
               <Ionicons name="add-circle-outline" size={26} color={isDark ? "#888888" : "#666666"} />
             </TouchableOpacity>
@@ -1913,6 +1926,15 @@ export default function SessionScreen() {
         selected={variant}
         isDark={isDark}
         onSelect={setVariant}
+      />
+
+      {/* Attach menu: camera, gallery or any file */}
+      <AttachMenuSheet
+        sheetRef={attachSheetRef}
+        isDark={isDark}
+        onCamera={() => void pickFromCamera()}
+        onPhoto={() => void pickFromLibrary()}
+        onFile={() => void pickFile()}
       />
       </View>
     </>

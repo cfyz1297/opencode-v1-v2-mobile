@@ -94,9 +94,9 @@
   },
   "session": {
     "attach": {
-      "title": "添加附件",
-      "photo": "从相册选择照片",
-      "file": "选择文件"
+      "photo": "照片",
+      "file": "文件",
+      "camera": "相机"
     },
     "titleFallback": "会话",
     "toolbar": {
