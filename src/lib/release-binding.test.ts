@@ -60,7 +60,7 @@ case "$1" in
   fetch) ${options.fetchFails ? "exit 128" : "exit 0"} ;;
   rev-parse)
     case "$2" in
-      'v0.3.24^{commit}'|'release/v3^{commit}') echo "${sha}" ;;
+      'v0.3.24^{commit}'|'release/v3^{commit}'|'v9.9.9^{commit}') echo "${sha}" ;;
       *) echo "fake git: unexpected rev-parse argument '$2'" >&2; exit 128 ;;
     esac ;;
   *) echo "fake git: unexpected command '$1'" >&2; exit 1 ;;
@@ -170,9 +170,12 @@ test("the tag is fetched before it is trusted", { skip: skipOnWindows }, () => {
   assert.ok(resolve > fetch, "and fetch it before resolving the commit")
 })
 
-test("an unavailable tag fails closed", { skip: skipOnWindows }, () => {
+test("a tag that is not on the remote fails closed, not on the rev-parse", { skip: skipOnWindows }, () => {
+  // The fake accepts v9.9.9's peeled form on purpose: if the fetch guard were
+  // replaced with `|| true`, the script would read a stale local ref and pass.
   const result = run({ RELEASE_TAG: "v9.9.9", BUILT_COMMIT: TAG_SHA }, { fetchFails: true })
   assert.notEqual(result.status, 0)
+  assert.match(result.stdout, /not on the remote/, "the fetch must be what refuses, not the rev-parse after it")
 })
 
 test("the guard cannot be skipped, failed-open or reordered", () => {
@@ -197,6 +200,17 @@ test("the guard cannot be skipped, failed-open or reordered", () => {
   const guarded = workflow.slice(bind, upload + 400)
   assert.doesNotMatch(guarded, /continue-on-error:/, "neither step may be allowed to fail")
   assert.doesNotMatch(guarded, /if:\s*(false|always\(\))/, "neither step may be skipped or forced")
+})
+
+test("the bind step's whole body is exactly the call", () => {
+  const step = workflow.slice(workflow.indexOf("- name: Bind the APK to the tag's commit"))
+  const body = step.slice(step.indexOf("run: |") + "run: |".length).split("\n\n")[0]
+  const lines = body.split("\n").map((line) => line.trim()).filter(Boolean)
+  assert.deepEqual(lines, [
+    "set -euo pipefail",
+    `export EXPECTED_TAG="v$(node -p "require('./app.json').expo.version")"`,
+    "bash scripts/bind-release.sh",
+  ], "no wrapper, no early exit, no inline copy of the logic")
 })
 
 test("the workflow calls this script and records the commit before building", () => {
