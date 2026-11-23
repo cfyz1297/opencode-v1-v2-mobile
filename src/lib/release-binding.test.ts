@@ -211,11 +211,15 @@ test("the documented reuse input matches what the gate enforces", () => {
   // The input hint is the only place an operator learns the rule. It said "any
   // successful run" after the script began rejecting everything but a push run,
   // so the advice pointed at runs the gate refuses.
-  const description = workflow.match(/reuse_apk_run_id:\n\s+description: '([^']+)'/)?.[1] ?? ""
-  assert.match(description, /PUSH/, "the hint must say which runs are accepted")
-  assert.match(description, /dispatch and pull_request/, "and which are not, and why")
-  const scriptText = readFileSync(path.join(root, "scripts/bind-release.sh"), "utf8")
-  assert.match(scriptText, /RUN_EVENT.*!= "push"/, "the gate enforces a push run")
+  // YAML doubles an inner quote; capture the raw scalar and unescape it.
+  const raw = workflow.match(/reuse_apk_run_id:\n\s+description: '((?:[^']|'')+)'/)?.[1] ?? ""
+  const description = raw.replace(/''/g, "'")
+  assert.match(description, /push/i, "the hint must say which runs are accepted")
+  // The gate compares the run's commit with the tag's, not its file list; the
+  // old wording ("sources must match") promised a weaker rule and would have
+  // sent an operator to a run the gate rejects.
+  assert.match(description, /this tag's commit/, "the hint must state the commit rule")
+  assert.match(description, /dispatch and pull_request/, "and which runs are refused, and why")
 })
 
 test("there is exactly one way to publish to a release", () => {

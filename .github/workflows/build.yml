@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       reuse_apk_run_id:
-        description: 'Optional successful PUSH build run to reuse; application sources must match exactly (dispatch and pull_request runs are rejected: their APK is not a build of their own commit)'
+        description: 'Optional successful PUSH build run to reuse; it must be built from this tag''s commit (dispatch and pull_request runs are rejected: their APK is not a build of their own commit)'
         required: false
         default: ''
       release_tag:
