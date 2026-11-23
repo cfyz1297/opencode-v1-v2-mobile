@@ -38,7 +38,14 @@ const OTHER_SHA = "2222222222222222222222222222222222222222"
 // every argument with TAG_SHA made the suite blind to the original defect:
 // `git rev-parse HEAD` instead of `git rev-parse "$RELEASE_TAG^{commit}"` passed
 // every test, and would let a branch build be published as the tag's.
-function sandbox(options: { tagSha?: string; fetchFails?: boolean; ghSha?: string; ghFails?: boolean; runEvent?: string }) {
+function sandbox(options: {
+  tagSha?: string
+  fetchFails?: boolean
+  ghSha?: string
+  ghFails?: boolean
+  ghShaFails?: boolean
+  runEvent?: string
+}) {
   const dir = mkdtempSync(path.join(tmpdir(), "bind-release-"))
   const write = (name: string, body: string) => {
     const file = path.join(dir, name)
@@ -64,6 +71,7 @@ esac`,
       ? "echo 'api error' >&2; exit 1"
       : `case "$*" in
   *".event"*) echo "${options.runEvent ?? "push"}" ;;
+  *".head_sha"*) ${options.ghShaFails ? "echo 'api error' >&2; exit 1" : `echo "${options.ghSha ?? sha}"`} ;;
   *) echo "${options.ghSha ?? sha}" ;;
 esac`,
   )
@@ -103,9 +111,13 @@ test("a reused run is judged by its own commit, not by this checkout", { skip: s
 
   const bad = run({ RELEASE_TAG: "v0.3.24", REUSED_RUN: "42" }, { ghSha: OTHER_SHA })
   assert.equal(bad.status, 1)
-  // A failing API call must not be read as a match.
+  // A failing API call must not be read as a match — on either request. The
+  // `.event` read comes first, so a failure there hid the same defect on the
+  // `.head_sha` read that actually decides.
   const apiDown = run({ RELEASE_TAG: "v0.3.24", REUSED_RUN: "42" }, { ghFails: true })
   assert.notEqual(apiDown.status, 0)
+  const shaDown = run({ RELEASE_TAG: "v0.3.24", REUSED_RUN: "42" }, { ghShaFails: true })
+  assert.notEqual(shaDown.status, 0, "an unreadable head_sha must not pass as a match")
 })
 
 test("a reused run must be a push build, not another reuse", { skip: skipOnWindows }, () => {
@@ -159,6 +171,13 @@ test("the guard cannot be skipped, failed-open or reordered", () => {
   const bind = workflow.indexOf("- name: Bind the APK to the tag's commit")
   const upload = workflow.indexOf("- name: Attach the verified APK to the release")
   assert.ok(bind > 0 && upload > bind, "the bind must run before the upload")
+
+  const tagExpression = /RELEASE_TAG: \$\{\{ inputs\.release_tag \|\| github\.ref_name \}\}/g
+  assert.equal(
+    (workflow.match(tagExpression) ?? []).length,
+    2,
+    "the bind and the upload must derive the same tag",
+  )
 
   const guarded = workflow.slice(bind, upload + 400)
   assert.doesNotMatch(guarded, /continue-on-error:/, "neither step may be allowed to fail")
