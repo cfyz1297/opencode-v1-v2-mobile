@@ -81,8 +81,16 @@ esac`,
 
 type Sandbox = Parameters<typeof sandbox>[0] | undefined
 
-function run(env: Record<string, string>, options: Sandbox = undefined) {
-  const dir = sandbox(options ?? {})
+// One step's text: from its `- name:` to the next one. Used wherever an
+// assertion must be about a single step rather than a slice of the file.
+function stepBlock(name: string): string {
+  const start = workflow.indexOf(`- name: ${name}`)
+  assert.ok(start > 0, `step "${name}" must exist`)
+  const next = workflow.indexOf("\n      - ", start)
+  return workflow.slice(start, next > 0 ? next : undefined)
+}
+
+function run(env: Record<string, string>, options: Sandbox = undefined) {  const dir = sandbox(options ?? {})
   const result = spawnSync("bash", [script], {
     encoding: "utf8",
     env: {
@@ -182,9 +190,14 @@ test("the guard cannot be skipped, failed-open or reordered", () => {
   // The script proves the comparison. These pins prove the step that runs it
   // still runs: a skipped step, a tolerated failure or a later position all
   // publish the APK without the comparison ever executing.
-  const CONDITION = /^\s+if: startsWith\(github\.ref, 'refs\/tags\/'\) \|\| inputs\.release_tag != ''\s*$/gm
-  const conditions = workflow.match(CONDITION) ?? []
-  assert.equal(conditions.length, 2, "the bind and the upload share one condition, and nothing else on the line")
+  const CONDITION = /^\s+if: startsWith\(github\.ref, 'refs\/tags\/'\) \|\| inputs\.release_tag != ''\s*$/m
+  // Per step: a file-wide count let `if: false` on the bind be covered by the
+  // same condition on an unrelated step, and a covered skip is still a skip.
+  for (const name of ["Bind the APK to the tag's commit", "Attach the verified APK to the release"]) {
+    const block = stepBlock(name)
+    assert.match(block, CONDITION, `${name} carries the release condition`)
+    assert.equal((block.match(/^\s+if:/gm) ?? []).length, 1, `${name} has exactly one condition`)
+  }
 
   const bind = workflow.indexOf("- name: Bind the APK to the tag's commit")
   const upload = workflow.indexOf("- name: Attach the verified APK to the release")
@@ -197,7 +210,10 @@ test("the guard cannot be skipped, failed-open or reordered", () => {
     "the bind and the upload must derive the same tag",
   )
 
-  const guarded = workflow.slice(bind, upload + 400)
+  // The whole job, not a fixed window: `upload + 400` ended before the publish
+  // step's own body ended, so a step appended after it was never inspected.
+  const jobEnd = workflow.indexOf("\n  roadmap-smoke:")
+  const guarded = workflow.slice(bind, jobEnd > 0 ? jobEnd : undefined)
   assert.doesNotMatch(guarded, /continue-on-error:/, "neither step may be allowed to fail")
   // Any status function removes the implicit success(); the anchored condition
   // above already rules it out, this names the intent.
@@ -271,7 +287,10 @@ test("there is exactly one way to publish to a release", () => {
   // or an `assets` POST through the API would publish without passing the bind.
   // Any client: `gh release upload`, `gh release create`, or a REST call to the
   // assets endpoint. A `curl` POST used to be invisible here.
-  const publishes = workflow.match(/^[^\n]*(?:\/releases\/[^\n]*\/assets|gh release (?:upload|create|edit))\S*/gm) ?? []
+  // Third-party release actions are publishers too: `softprops/action-gh-release`
+  // uploads without any `gh` line to count.
+  const publishes =
+    workflow.match(/^[^\n]*(?:\/releases\/[^\n]*\/assets|gh release (?:upload|create|edit)|action-gh-release)\S*/gm) ?? []
   assert.equal(publishes.length, 1, `one publish path, found: ${publishes.join(", ")}`)
 })
 
@@ -284,5 +303,5 @@ test("no step can move HEAD between recording the commit and the bind", () => {
   const to = workflow.indexOf("- name: Bind the APK to the tag's commit")
   assert.ok(from > 0, "the record step must exist")
   const between = workflow.slice(from, to)
-  assert.doesNotMatch(between, /git\s+(checkout|switch|reset)/, "the build and the bind must see the same tree")
+  assert.doesNotMatch(between, /git\b[^\n]*\b(?:checkout|switch|reset)\b/, "the build and the bind must see the same tree")
 })
