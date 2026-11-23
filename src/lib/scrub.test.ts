@@ -1,5 +1,6 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
+import { readFileSync } from "node:fs"
 import { scrubUrl, scrubString, scrubObject, redactHostAndUrls } from "./scrub.ts"
 
 // scrubUrl ----------------------------------------------------------------
@@ -187,4 +188,17 @@ test("scrubString: a bare app-sandbox path is dropped but the reason stays", () 
 // A URL that merely contains the /data/ segment must not be mangled.
 test("scrubString: an http URL containing /data/ is left to the URL rule", () => {
   assert.equal(scrubString("GET https://example.com/data/data/thing failed"), "GET https://example.com/data/data/thing failed")
+})
+
+// The worth case scrubString could not cover: its URL dispatch splits on
+// whitespace, so a password holding a space left a fragment with no '@' and
+// survived. formatReport now scrubs the Target URL line itself; scrubUrl must
+// handle the whole string, spaces included.
+test("scrubUrl: a userinfo containing a space is still one authority", () => {
+  assert.equal(scrubUrl("http://alice:correct horse@host:4096"), "http://<redacted>@host:4096")
+})
+
+test("formatReport scrubs the Target URL line itself, not via scrubString", () => {
+  const source = readFileSync(new URL("./diagnostics.ts", import.meta.url), "utf8")
+  assert.match(source, /Target URL:\s+\$\{scrubUrl\(report\.url\)\}/, "the raw report.url must never be printed")
 })

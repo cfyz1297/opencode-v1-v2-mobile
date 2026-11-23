@@ -151,7 +151,10 @@ export function formatReport(report: DiagnosticReport): string {
   lines.push(`Result:      ${report.classification.toUpperCase()}`)
   lines.push(`Summary:     ${report.summary}`)
   lines.push("")
-  lines.push(`Target URL:  ${report.url}`)
+  // scrubbed here, not left to scrubString's dispatch: that one splits on
+  // whitespace, so a userinfo containing a space would pass through as a
+  // fragment without '@' and keep the password.
+  lines.push(`Target URL:  ${scrubUrl(report.url)}`)
   lines.push(`  scheme=${report.scheme} host=${report.host} port=${report.port} hostname=${report.isHostname}`)
   if (report.serverApi) lines.push(`Server API:  ${report.serverApi}`)
   lines.push("")
