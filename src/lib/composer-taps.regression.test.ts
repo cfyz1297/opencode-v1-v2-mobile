@@ -87,12 +87,20 @@ test("the attach button opens a sheet with camera, photo and files", () => {
   // slides away for the ~250 ms before onChange reports the close.
   // The guard is only a guard if the flag is set before the work and cleared
   // afterwards: without the set it is dead, without the clear the flag sticks
-  // on and every picker stops working after the first camera use.
+  // on and every picker stops working after the first camera use. Each line
+  // must be a real statement (a commented-out copy is the likeliest debugging
+  // step) and the set must precede the awaited work.
   const camera = block("const pickFromCamera = useCallback(", "}, [openCamera])")
+  assert.match(camera, /^[ \t]*if \(pickingRef\.current\) return[ \t]*$/m, "camera checks the flag first")
   assert.match(
     camera,
-    /if \(pickingRef\.current\) return[\s\S]*pickingRef\.current = true[\s\S]*finally[\s\S]*pickingRef\.current = false/,
-    "camera guard sets and clears its flag around the work",
+    /^[ \t]*pickingRef\.current = true[ \t]*$[\s\S]*await openCamera\(\)/m,
+    "camera sets the flag before the work",
+  )
+  assert.match(
+    camera,
+    /^[ \t]*\} finally \{[ \t]*$[\s\S]*^[ \t]*pickingRef\.current = false[ \t]*$/m,
+    "camera clears the flag in finally",
   )
   // Wired, not merely defined: the screen must render the sheet and point each
   // row at its own picker. Swapping two of them kept every test green before.
@@ -106,13 +114,15 @@ test("the attach button opens a sheet with camera, photo and files", () => {
   // in a comment, or a helper defined above and called after the open, left
   // the sheet behind the keyboard with the loose check green.
   assert.match(menu, /^[ \t]*Keyboard\.dismiss\(\)[ \t]*$[\s\S]*snapToIndex\(0\)/m, "the keyboard goes first")
-  // Each row must keep its own key, label and handler together. A chained
-  // regex proved order and formatting instead of wiring: reordering the rows
-  // failed while swapping two labels stayed green. `[^}]*` stays inside one row.
+  // Each row must keep its label and its handler together. A chained regex
+  // proved order and formatting instead of wiring: reordering the rows failed
+  // while swapping two labels stayed green. The `key` is deliberately not
+  // matched — it only feeds React's key and a testID nobody reads, so renaming
+  // it changes no behavior. `[^}]*` stays inside one row.
   const rows: Array<[string, RegExp]> = [
-    ["camera", /key: "camera"[^}]*label: t\("session\.attach\.camera"\)[^}]*onPress: pick\(onCamera\)/],
-    ["photo", /key: "photo"[^}]*label: t\("session\.attach\.photo"\)[^}]*onPress: pick\(onPhoto\)/],
-    ["file", /key: "file"[^}]*label: t\("session\.attach\.file"\)[^}]*onPress: pick\(onFile\)/],
+    ["camera", /label: t\("session\.attach\.camera"\)[^}]*onPress: pick\(onCamera\)/],
+    ["photo", /label: t\("session\.attach\.photo"\)[^}]*onPress: pick\(onPhoto\)/],
+    ["file", /label: t\("session\.attach\.file"\)[^}]*onPress: pick\(onFile\)/],
   ]
   for (const [source, pattern] of rows) {
     assert.match(sheet, pattern, `the ${source} row keeps its label and its own picker`)
