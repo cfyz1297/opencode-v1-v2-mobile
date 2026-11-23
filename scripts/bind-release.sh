@@ -35,6 +35,15 @@ git fetch --force --quiet origin "+refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG
 TAG_SHA=$(git rev-parse "$RELEASE_TAG^{commit}")
 
 if [[ -n "$REUSED_RUN" ]]; then
+  # Only a push run builds the commit it reports: a dispatch may carry an APK
+  # from an earlier run, and a pull_request run checks out a merge commit that is
+  # not head_sha. Without this, a chain of two dispatches could publish an APK
+  # whose commit was never compared with the tag.
+  RUN_EVENT=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$REUSED_RUN" --jq .event)
+  if [[ "$RUN_EVENT" != "push" ]]; then
+    echo "::error::run $REUSED_RUN is a '$RUN_EVENT' run, not a push build; its APK is not a build of its own commit"
+    exit 1
+  fi
   BUILT_SHA=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$REUSED_RUN" --jq .head_sha)
   WHAT="reused APK from run $REUSED_RUN"
 else

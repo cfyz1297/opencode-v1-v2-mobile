@@ -205,14 +205,6 @@ jobs:
           test "$CURRENT_CERT" = "$EXPECTED_CERT"
           echo 'Package/version verified; signing certificate matches the published app.'
 
-      - name: Upload APK artifact
-        if: always() && steps.bind.outcome != 'failure'
-        uses: actions/upload-artifact@v7
-        with:
-          name: app-release
-          path: android/app/build/outputs/apk/release/app-release.apk
-          retention-days: 3
-
       # Release assets are attached here, not from a phone: a 98 MB upload over
       # a mobile connection resets, and the artifact of this run is already the
       # verified APK. The release itself stays manual — this step only fills in
@@ -236,6 +228,17 @@ jobs:
         run: |
           export EXPECTED_TAG="v$(node -p "require('./app.json').expo.version")"
           bash scripts/bind-release.sh
+
+      # After the bind on purpose: placed above it, `steps.bind.outcome` does not
+      # exist yet, the comparison reads as '' != 'failure', and the rejected APK
+      # is published anyway. Without an `if:` the implicit success() gives what
+      # is wanted: skipped bind (a branch run) uploads, a failed one does not.
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: app-release
+          path: android/app/build/outputs/apk/release/app-release.apk
+          retention-days: 3
 
       - name: Attach the verified APK to the release
         if: startsWith(github.ref, 'refs/tags/') || inputs.release_tag != ''

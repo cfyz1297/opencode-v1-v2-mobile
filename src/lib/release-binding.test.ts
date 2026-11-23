@@ -38,7 +38,7 @@ const OTHER_SHA = "2222222222222222222222222222222222222222"
 // every argument with TAG_SHA made the suite blind to the original defect:
 // `git rev-parse HEAD` instead of `git rev-parse "$RELEASE_TAG^{commit}"` passed
 // every test, and would let a branch build be published as the tag's.
-function sandbox(options: { tagSha?: string; fetchFails?: boolean; ghSha?: string; ghFails?: boolean }) {
+function sandbox(options: { tagSha?: string; fetchFails?: boolean; ghSha?: string; ghFails?: boolean; runEvent?: string }) {
   const dir = mkdtempSync(path.join(tmpdir(), "bind-release-"))
   const write = (name: string, body: string) => {
     const file = path.join(dir, name)
@@ -60,7 +60,12 @@ esac`,
   )
   write(
     "gh",
-    options.ghFails ? "echo 'api error' >&2; exit 1" : `echo "${options.ghSha ?? sha}"`,
+    options.ghFails
+      ? "echo 'api error' >&2; exit 1"
+      : `case "$*" in
+  *".event"*) echo "${options.runEvent ?? "push"}" ;;
+  *) echo "${options.ghSha ?? sha}" ;;
+esac`,
   )
   return dir
 }
@@ -101,6 +106,18 @@ test("a reused run is judged by its own commit, not by this checkout", { skip: s
   // A failing API call must not be read as a match.
   const apiDown = run({ RELEASE_TAG: "v0.3.24", REUSED_RUN: "42" }, { ghFails: true })
   assert.notEqual(apiDown.status, 0)
+})
+
+test("a reused run must be a push build, not another reuse", { skip: skipOnWindows }, () => {
+  // A dispatch can carry an APK from an earlier run, so its head_sha says
+  // nothing about that APK. Chaining two dispatches would publish a build whose
+  // commit was never compared with the tag.
+  const chained = run({ RELEASE_TAG: "v0.3.24", REUSED_RUN: "42" }, { runEvent: "workflow_dispatch" })
+  assert.equal(chained.status, 1)
+  assert.match(chained.stdout, /not a push build/)
+
+  const push = run({ RELEASE_TAG: "v0.3.24", REUSED_RUN: "42" }, { runEvent: "push" })
+  assert.equal(push.status, 0, push.stderr)
 })
 
 test("a tag whose name disagrees with the built version is refused", { skip: skipOnWindows }, () => {
@@ -158,15 +175,17 @@ test("the workflow calls this script and records the commit before building", ()
 })
 
 test("a failed bind does not still hand out the rejected APK as an artifact", () => {
-  // The workflow artifact is the second way an APK leaves the runner. With
-  // `if: always()` alone, a release run that the bind refused still produced a
-  // downloadable, production-signed APK under the same version.
-  assert.match(
-    workflow,
-    /if: always\(\) && steps\.bind\.outcome != 'failure'/,
-    "the artifact must not be published after the bind failed",
-  )
-  assert.match(workflow, /^\s+id: bind\s*$/m, "the bind step must expose its outcome")
+  // The artifact is the second way an APK leaves the runner. It stood ABOVE the
+  // bind, so `steps.bind.outcome` did not exist yet, the comparison read as
+  // '' != 'failure', and the rejected APK was uploaded anyway.
+  const artifact = workflow.indexOf("- name: Upload APK artifact")
+  const bind = workflow.indexOf("- name: Bind the APK to the tag's commit")
+  assert.ok(artifact > 0 && bind > 0)
+  assert.ok(artifact > bind, "the artifact step must come after the bind it depends on")
+  // Without an `if:` the step runs on success only, which is what is wanted: a
+  // skipped bind (branch run) still uploads, a failed one does not.
+  const block = workflow.slice(artifact, workflow.indexOf("- name:", artifact + 10))
+  assert.doesNotMatch(block, /^\s*if:/m, "an explicit condition here was the bug: it evaluated before the bind")
 })
 
 test("there is exactly one way to publish to a release", () => {
