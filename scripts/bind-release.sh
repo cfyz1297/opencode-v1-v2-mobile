@@ -31,7 +31,10 @@ if [[ -n "$EXPECTED_TAG" && "$RELEASE_TAG" != "$EXPECTED_TAG" ]]; then
   exit 1
 fi
 
-git fetch --force --quiet origin "+refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
+if ! git fetch --force --quiet origin "+refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"; then
+  echo "::error::tag $RELEASE_TAG is not on the remote; refusing to publish against a local-only tag"
+  exit 1
+fi
 TAG_SHA=$(git rev-parse "$RELEASE_TAG^{commit}")
 
 if [[ -n "$REUSED_RUN" ]]; then

@@ -55,7 +55,8 @@ function sandbox(options: {
   const sha = options.tagSha ?? TAG_SHA
   write(
     "git",
-    `case "$1" in
+    `echo "$1 $2" >> "${dir}/calls.log"
+case "$1" in
   fetch) ${options.fetchFails ? "exit 128" : "exit 0"} ;;
   rev-parse)
     case "$2" in
@@ -82,7 +83,7 @@ type Sandbox = Parameters<typeof sandbox>[0] | undefined
 
 function run(env: Record<string, string>, options: Sandbox = undefined) {
   const dir = sandbox(options ?? {})
-  return spawnSync("bash", [script], {
+  const result = spawnSync("bash", [script], {
     encoding: "utf8",
     env: {
       ...(process.env as Record<string, string>),
@@ -91,6 +92,7 @@ function run(env: Record<string, string>, options: Sandbox = undefined) {
       ...env,
     } as unknown as NodeJS.ProcessEnv,
   })
+  return Object.assign(result, { calls: () => readFileSync(path.join(dir, "calls.log"), "utf8") })
 }
 
 test("a fresh build of the tag's commit is allowed", { skip: skipOnWindows }, () => {
@@ -153,6 +155,19 @@ test("a missing record of the built commit fails closed", { skip: skipOnWindows 
   const result = run({ RELEASE_TAG: "v0.3.24" })
   assert.notEqual(result.status, 0)
   assert.match(result.stderr, /BUILT_COMMIT is required/)
+})
+
+test("the tag is fetched before it is trusted", { skip: skipOnWindows }, () => {
+  // A local ref is not evidence: it may be stale or never exist on the remote.
+  // Replacing the fetch with `true` used to keep every test green, because the
+  // fake answered rev-parse for any known tag.
+  const result = run({ RELEASE_TAG: "v0.3.24", BUILT_COMMIT: TAG_SHA })
+  assert.equal(result.status, 0, result.stderr)
+  const calls = result.calls().trim().split("\n")
+  const fetch = calls.findIndex((line) => line.startsWith("fetch "))
+  const resolve = calls.findIndex((line) => line.startsWith("rev-parse "))
+  assert.ok(fetch >= 0, "the script must fetch the tag")
+  assert.ok(resolve > fetch, "and fetch it before resolving the commit")
 })
 
 test("an unavailable tag fails closed", { skip: skipOnWindows }, () => {
