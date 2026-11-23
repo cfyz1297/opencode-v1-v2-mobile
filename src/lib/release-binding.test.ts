@@ -27,13 +27,20 @@ function bindStep(): string {
   return workflow.slice(start, end)
 }
 
-test("the bind step is a live step, not a disabled one", () => {
-  const step = bindStep()
-  assert.doesNotMatch(step, /^\s*#/m, "a commented-out step proves nothing")
-  assert.doesNotMatch(step, /^\s*continue-on-error:/m, "a step allowed to fail does not gate the upload")
-  // `if:` is legitimate here (the step must be skipped on a branch build), so
-  // only a condition that can never hold is rejected.
-  assert.doesNotMatch(step, /^\s*if:\s*false\s*$/m, "if: false disables the guard")
+// The exact condition, on both steps. Being liberal here is what failed before:
+// `if: false`, `if: false # unstick`, `if: ${{ false }}` and a narrowed
+// `if: inputs.release_tag != ''` all left the guard skipped while the upload
+// still ran, and `always()` on the upload did the same when the guard failed.
+// The condition is part of the control, so the test pins it verbatim.
+const REAL_IF = /^\s*if: startsWith\(github\.ref, 'refs\/tags\/'\) \|\| inputs\.release_tag != ''\s*$/m
+
+test("the bind and the upload run on exactly the same condition", () => {
+  const bind = bindStep()
+  assert.match(bind, REAL_IF, "the bind step must run wherever the upload runs")
+  const upload = workflow.slice(workflow.indexOf(UPLOAD))
+  assert.match(upload, REAL_IF, "the upload step must not widen its condition past the guard")
+  assert.doesNotMatch(bind, /^\s*continue-on-error:/m, "a step allowed to fail does not gate the upload")
+  assert.doesNotMatch(upload, /^\s*continue-on-error:/m, "nor does an upload allowed to fail")
 })
 
 test("the uploaded APK is bound to the tag's commit, not only to its version", () => {
