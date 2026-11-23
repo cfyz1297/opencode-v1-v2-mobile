@@ -113,6 +113,12 @@ jobs:
             echo "Signing: debug keystore (keystore secret not set)"
           fi
 
+      # Captured before the build and before any later step, so a checkout
+      # between the build and the release bind cannot make HEAD match the tag
+      # while the APK on disk is a branch build.
+      - name: Record the commit being built
+        run: echo "BUILT_COMMIT=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
       - name: Build APK
         if: inputs.reuse_apk_run_id == ''
         working-directory: android
@@ -226,22 +232,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
           REUSED_RUN: ${{ inputs.reuse_apk_run_id }}
-        run: |
-          set -euo pipefail
-          git fetch --force --quiet origin "+refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
-          TAG_SHA=$(git rev-parse "$RELEASE_TAG^{commit}")
-          if [[ -n "$REUSED_RUN" ]]; then
-            BUILT_SHA=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$REUSED_RUN" --jq .head_sha)
-            WHAT="reused APK from run $REUSED_RUN"
-          else
-            BUILT_SHA=$(git rev-parse HEAD)
-            WHAT="APK built in this run"
-          fi
-          if [[ "$BUILT_SHA" != "$TAG_SHA" ]]; then
-            echo "::error::$WHAT was built from $BUILT_SHA, but $RELEASE_TAG is $TAG_SHA"
-            exit 1
-          fi
-          echo "$WHAT matches $RELEASE_TAG ($TAG_SHA)."
+        run: bash scripts/bind-release.sh
 
       - name: Attach the verified APK to the release
         if: startsWith(github.ref, 'refs/tags/') || inputs.release_tag != ''
@@ -256,7 +247,8 @@ jobs:
           # old release with a newer build from main.
           EXPECTED_TAG="v$(node -p "require('./app.json').expo.version")"
           if [ "$RELEASE_TAG" != "$EXPECTED_TAG" ]; then
-            echo "Tag $RELEASE_TAG does not match the built $EXPECTED_TAG"; exit 1
+            echo "::error::Tag $RELEASE_TAG does not match the built $EXPECTED_TAG"
+            exit 1
           fi
           # Only "release not found" is harmless. Any other failure (permissions,
           # network) must fail the job instead of reporting a clean no-op.

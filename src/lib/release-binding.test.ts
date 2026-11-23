@@ -1,107 +1,126 @@
-// Guards the release upload path. The APK is handed to people, so the asset on
-// a tag must be built from that tag's commit — not from a branch that happens
-// to carry the same version string. Regression source: a workflow_dispatch on
-// any branch could attach a production-signed build to an existing release,
-// and the only check was `v(app.json version) == release_tag`, which a branch
-// satisfies trivially. That is a supply-chain defect, not a cosmetic one: the
-// signature and the version both look right.
+// The release bind is guarded by BEHAVIOUR, not by text.
 //
-// The step is inspected as a block, not as loose lines in the file: the first
-// version of this test stayed green when the step was given `if: false`,
-// `continue-on-error: true`, an `exit 0`, or was commented out — the "disable
-// it once to unstick a release" move.
+// An earlier version of this test matched strings in build.yml, and five review
+// rounds each found a form it could not see: `if false; then … fi` wrapped
+// around the body, a `git checkout` that moved HEAD to the tag while the APK
+// stayed a branch build, a second publish step, `BUILT_SHA=$TAG_SHA`. All of
+// them left the suite green. The guard now lives in scripts/bind-release.sh and
+// this test runs it against fake `git` and `gh`, so the assertion is its exit
+// code — something a text match cannot fake.
+//
+// The structural pins below stay, but only for what they can honestly prove:
+// the workflow must call the script, must capture the commit before it can be
+// moved, and must have exactly one publish call.
 import { test } from "node:test"
 import assert from "node:assert/strict"
-import { readFileSync } from "node:fs"
+import { execFileSync, spawnSync } from "node:child_process"
+import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import path from "node:path"
+import { fileURLToPath } from "node:url"
 
-const workflow = readFileSync(new URL("../../.github/workflows/build.yml", import.meta.url), "utf8")
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..")
+const workflow = readFileSync(path.join(root, ".github/workflows/build.yml"), "utf8")
+const script = path.join(root, "scripts/bind-release.sh")
 
-// shortcut: a text guard cannot prove the step's body is reachable — wrapping
-// the `run:` block in `if false; then … fi` keeps every pinned line and the
-// test green. Anyone who can edit build.yml already holds release authority, so
-// the guard is a tripwire against accident, not against an attacker; upgrade by
-// moving the body into scripts/bind-release.sh and exercising it with fake
-// git/gh if that authority boundary is ever shared.
+const TAG_SHA = "1111111111111111111111111111111111111111"
+const OTHER_SHA = "2222222222222222222222222222222222222222"
 
-const BIND = "- name: Bind the APK to the tag's commit"
-const UPLOAD = "- name: Attach the verified APK to the release"
-
-// One step, from its own `- name:` to the next one. Slicing to the end of the
-// file (or to a later step) let a decoy carry the pinned line while the real
-// step was disabled, and let an unrelated step's `continue-on-error` fail this
-// test.
-function step(name: string): string {
-  const steps = workflow.split(/\n(?= {6}- name: )/)
-  const found = steps.find((chunk) => chunk.trimStart().startsWith(`- name: ${name}`))
-  assert.ok(found, `step "${name}" must exist`)
-  const index = steps.indexOf(found)
-  assert.ok(index > 0, `step "${name}" must not be missing from the job`)
-  return found
-}
-
-function bindStep(): string {
-  const bind = step(BIND.replace("- name: ", ""))
-  const upload = step(UPLOAD.replace("- name: ", ""))
-  assert.ok(
-    workflow.indexOf(bind) < workflow.indexOf(upload),
-    "the bind step must run before the upload step",
-  )
-  return bind
-}
-
-// The exact condition, on both steps. Being liberal here is what failed before:
-// `if: false`, `if: false # unstick`, `if: ${{ false }}` and a narrowed
-// `if: inputs.release_tag != ''` all left the guard skipped while the upload
-// still ran, and `always()` on the upload did the same when the guard failed.
-// The condition is part of the control, so the test pins it verbatim.
-const REAL_IF = /^\s*if: startsWith\(github\.ref, 'refs\/tags\/'\) \|\| inputs\.release_tag != ''\s*$/m
-
-test("the bind and the upload run on exactly the same condition", () => {
-  const bind = bindStep()
-  assert.match(bind, REAL_IF, "the bind step must run wherever the upload runs")
-  const upload = step(UPLOAD.replace("- name: ", ""))
-  assert.match(upload, REAL_IF, "the upload step must not widen its condition past the guard")
-  // The version guard inside the upload is the second door: `exit 0` there lets
-  // an APK for 0.3.23 be clobbered onto the v0.3.24 release.
-  assert.match(upload, /does not match the built \$EXPECTED_TAG.*exit 1/, "a tag/version mismatch must abort")
-  assert.doesNotMatch(bind, /^\s*continue-on-error:/m, "a step allowed to fail does not gate the upload")
-  assert.doesNotMatch(upload, /^\s*continue-on-error:/m, "nor does an upload allowed to fail")
-})
-
-test("the uploaded APK is bound to the tag's commit, not only to its version", () => {
-  const step = bindStep()
-  assert.match(step, /git rev-parse "\$RELEASE_TAG\^\{commit\}"/, "the tag's commit must be resolved")
-  // Both ways an APK can get here: built in this run, or reused from an
-  // earlier one. Each must be compared with that commit.
-  assert.match(step, /BUILT_SHA=\$\(git rev-parse HEAD\)/, "a fresh build is identified by HEAD")
-  assert.match(step, /actions\/runs\/\$REUSED_RUN.*head_sha/, "a reused APK is identified by its own run's head_sha")
-  // Without this binding the reuse path silently falls back to HEAD, which
-  // proves nothing about the APK that was actually downloaded.
-  assert.match(step, /REUSED_RUN: \$\{\{ inputs\.reuse_apk_run_id \}\}/, "the reuse input must reach the step")
-  assert.match(step, /"\$BUILT_SHA" != "\$TAG_SHA"/, "the comparison must be made")
-  assert.match(step, /^\s*exit 1\s*$/m, "and a mismatch must abort the job, not continue to the upload")
-  // An `exit 0` earlier in the block would make the `exit 1` unreachable while
-  // every string above still matched — the "unstick it once" move again.
-  assert.doesNotMatch(step, /^\s*exit 0\s*$/m, "nothing may exit successfully before the upload")
-})
-
-test("there is exactly one upload step to reason about", () => {
-  // The guard above slices from the first upload step; a second one, with its
-  // own condition, would publish the asset without passing the bind.
-  const uploads = workflow.match(/gh release upload/g) ?? []
-  assert.equal(uploads.length, 1, "a second upload path would bypass the guard")
-})
-
-test("the reuse check covers every prebuild and install input", () => {
-  // plugins/ rewrites android/ during prebuild and .npmrc changes what npm ci
-  // installs, so two branches differing only there produce different APKs
-  // while the old list called them identical.
-  const diff = workflow.match(/git diff --exit-code "\$SOURCE_SHA" HEAD -- ([^\n]+)/)
-  assert.ok(diff, "the reuse path must diff the sources")
-  for (const path of ["app", "src", "android", "assets", "plugins", "app.json", "package-lock.json", ".npmrc", "metro.config.js", "tsconfig.json"]) {
-    assert.ok(
-      diff[1].split(/\s+/).includes(path),
-      `the reuse comparison must include ${path}: a difference there changes the built APK`,
-    )
+// A PATH with fake `git` and `gh` first: the script under test runs for real,
+// but never touches a repository, the network or the GitHub API.
+function sandbox(options: { tagSha?: string; fetchFails?: boolean; ghSha?: string; ghFails?: boolean }) {
+  const dir = mkdtempSync(path.join(tmpdir(), "bind-release-"))
+  const write = (name: string, body: string) => {
+    const file = path.join(dir, name)
+    writeFileSync(file, `#!/bin/sh\n${body}\n`)
+    chmodSync(file, 0o755)
   }
+  write(
+    "git",
+    `case "$1" in
+  fetch) ${options.fetchFails ? "exit 128" : "exit 0"} ;;
+  rev-parse) echo "${options.tagSha ?? TAG_SHA}" ;;
+  *) exit 1 ;;
+esac`,
+  )
+  write(
+    "gh",
+    options.ghFails ? "echo 'api error' >&2; exit 1" : `echo "${options.ghSha ?? TAG_SHA}"`,
+  )
+  return dir
+}
+
+function run(env: Record<string, string>, options = {}) {
+  const dir = sandbox(options)
+  return spawnSync("bash", [script], {
+    encoding: "utf8",
+    env: {
+      PATH: `${dir}:${process.env.PATH ?? ""}`,
+      GITHUB_REPOSITORY: "owner/repo",
+      NODE_ENV: "test",
+      ...env,
+    },
+  })
+}
+
+test("a fresh build of the tag's commit is allowed", () => {
+  const result = run({ RELEASE_TAG: "v0.3.24", BUILT_COMMIT: TAG_SHA })
+  assert.equal(result.status, 0, result.stderr)
+  assert.match(result.stdout, /matches v0\.3\.24/)
+})
+
+test("a build from another commit is refused", () => {
+  const result = run({ RELEASE_TAG: "v0.3.24", BUILT_COMMIT: OTHER_SHA })
+  assert.equal(result.status, 1, "a mismatch must fail the step, not warn")
+  assert.match(result.stdout, /was built from 2222.*but v0\.3\.24 is 1111/)
+})
+
+test("a reused run is judged by its own commit, not by this checkout", () => {
+  const ok = run({ RELEASE_TAG: "v0.3.24", REUSED_RUN: "42" }, { ghSha: TAG_SHA })
+  assert.equal(ok.status, 0, ok.stderr)
+
+  const bad = run({ RELEASE_TAG: "v0.3.24", REUSED_RUN: "42" }, { ghSha: OTHER_SHA })
+  assert.equal(bad.status, 1)
+  // A failing API call must not be read as a match.
+  const apiDown = run({ RELEASE_TAG: "v0.3.24", REUSED_RUN: "42" }, { ghFails: true })
+  assert.notEqual(apiDown.status, 0)
+})
+
+test("a missing record of the built commit fails closed", () => {
+  // This is the shape a `git checkout` before the bind would have created if
+  // the script read HEAD instead: the check must not silently pass.
+  const result = run({ RELEASE_TAG: "v0.3.24" })
+  assert.notEqual(result.status, 0)
+  assert.match(result.stderr, /BUILT_COMMIT is required/)
+})
+
+test("an unavailable tag fails closed", () => {
+  const result = run({ RELEASE_TAG: "v9.9.9", BUILT_COMMIT: TAG_SHA }, { fetchFails: true })
+  assert.notEqual(result.status, 0)
+})
+
+test("the workflow calls this script and records the commit before building", () => {
+  assert.match(workflow, /run: bash scripts\/bind-release\.sh/, "the step must run the tested script, not a copy of its logic")
+  const record = workflow.indexOf('echo "BUILT_COMMIT=$(git rev-parse HEAD)" >> "$GITHUB_ENV"')
+  const build = workflow.indexOf("- name: Build APK")
+  const bind = workflow.indexOf("- name: Bind the APK to the tag's commit")
+  assert.ok(record > 0, "the commit must be captured")
+  assert.ok(record < build && build < bind, "captured before the build, which is before the bind")
+})
+
+test("there is exactly one way to publish to a release", () => {
+  // Counting only `gh release upload` missed a second door: `gh release create`
+  // or an `assets` POST through the API would publish without passing the bind.
+  const publishes =
+    workflow.match(/gh (?:release (?:upload|create|edit)|api[^\n]*\/releases\/[^\n]*\/assets)/g) ?? []
+  assert.equal(publishes.length, 1, `one publish path, found: ${publishes.join(", ")}`)
+})
+
+test("no step can move HEAD between the build and the bind", () => {
+  // The script no longer reads HEAD, so this is defence in depth: a checkout
+  // here would be a sign someone re-introduced the old shape.
+  const from = workflow.indexOf("- name: Build APK")
+  const to = workflow.indexOf("- name: Bind the APK to the tag's commit")
+  const between = workflow.slice(from, to)
+  assert.doesNotMatch(between, /git\s+(checkout|switch|reset)/, "the build and the bind must see the same tree")
 })
