@@ -52,6 +52,16 @@ test("the uploaded APK is bound to the tag's commit, not only to its version", (
   assert.match(step, /actions\/runs\/\$REUSED_RUN.*head_sha/, "a reused APK is identified by its own run's head_sha")
   assert.match(step, /"\$BUILT_SHA" != "\$TAG_SHA"/, "the comparison must be made")
   assert.match(step, /^\s*exit 1\s*$/m, "and a mismatch must abort the job, not continue to the upload")
+  // An `exit 0` earlier in the block would make the `exit 1` unreachable while
+  // every string above still matched — the "unstick it once" move again.
+  assert.doesNotMatch(step, /^\s*exit 0\s*$/m, "nothing may exit successfully before the upload")
+})
+
+test("there is exactly one upload step to reason about", () => {
+  // The guard above slices from the first upload step; a second one, with its
+  // own condition, would publish the asset without passing the bind.
+  const uploads = workflow.match(/gh release upload/g) ?? []
+  assert.equal(uploads.length, 1, "a second upload path would bypass the guard")
 })
 
 test("the reuse check covers every prebuild and install input", () => {
@@ -60,7 +70,7 @@ test("the reuse check covers every prebuild and install input", () => {
   // while the old list called them identical.
   const diff = workflow.match(/git diff --exit-code "\$SOURCE_SHA" HEAD -- ([^\n]+)/)
   assert.ok(diff, "the reuse path must diff the sources")
-  for (const path of ["app", "src", "android", "assets", "plugins", "app.json", "package-lock.json", ".npmrc"]) {
+  for (const path of ["app", "src", "android", "assets", "plugins", "app.json", "package-lock.json", ".npmrc", "metro.config.js", "tsconfig.json"]) {
     assert.ok(
       diff[1].split(/\s+/).includes(path),
       `the reuse comparison must include ${path}: a difference there changes the built APK`,
