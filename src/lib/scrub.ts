@@ -5,14 +5,22 @@
 // can be safely sent or logged.
 export function scrubUrl(url: string): string {
   return url
-    .replace(/\/\/[^@/]+@/, "//<redacted>@")
+    // The whole userinfo, up to the LAST '@' of the authority: a password may
+    // itself contain '@' (me:p@ssw0rd@host) and the old first-'@' match left
+    // its tail readable in a shared report. Anchored to the scheme (or a
+    // protocol-relative '//'), so an '@' after a '//' in a path stays intact.
+    .replace(/(^[a-z][a-z0-9+.-]*:\/\/|^\/\/)[^/?#]*@/i, "$1<redacted>@")
     .replace(/([?&](?:token|access_token|api_key|key|password|pwd|auth)=)[^&#]*/gi, "$1<redacted>")
 }
 
 export function scrubString(s: string): string {
   // Catch any embedded URL inside a free-text string (error messages often
   // contain them, e.g. "fetch failed: https://user:pw@host/...").
-  return s.replace(/https?:\/\/\S+/g, (m) => scrubUrl(m))
+  // Local schemes carry the picked file's own name and the app's cache path;
+  // they used to pass through untouched into the report the user shares.
+  return s
+    .replace(/https?:\/\/\S+/g, (m) => scrubUrl(m))
+    .replace(/\b(?:file|content):\/\/[^\n]*/gi, "<redacted-local-uri>")
 }
 
 // Harder redaction for text that leaves the device (support inbox): drop

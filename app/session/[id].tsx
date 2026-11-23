@@ -841,7 +841,9 @@ export default function SessionScreen() {
         // Android, so a mixed result (one too large, one unreadable) showed
         // only the last problem. Release builds also drop console output, and
         // the diagnostics log is what a report carries.
-        log.error("FilePicker", "not attached:", problems.join("; "))
+        // The log carries the count, not the names: this buffer is embedded in
+        // the diagnostic report the user pastes into an issue.
+        log.error("FilePicker", `${problems.length} file(s) not attached`)
         Alert.alert(t("session.alerts.fileFailedTitle"), `${t("session.alerts.fileFailedMessage")}\n\n${problems.join("\n")}`)
       }
     } catch (err) {

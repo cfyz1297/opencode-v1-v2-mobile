@@ -2,6 +2,7 @@ import { useMemo, type ReactNode } from "react"
 import {
   View,
   Text,
+  Pressable,
   useColorScheme,
   Platform,
   type ImageStyle,
@@ -116,7 +117,6 @@ export class CustomRenderer extends Renderer {
   strong(children: string | ReactNode[], styles?: TextStyle): ReactNode {
     return this.plainText(children, styles)
   }
-
   em(children: string | ReactNode[], styles?: TextStyle): ReactNode {
     return this.plainText(children, styles)
   }
@@ -136,6 +136,24 @@ export class CustomRenderer extends Renderer {
     const url = extractSingleUrl(text)
     if (url) return this.link(text, url, [this.base, styles, { fontStyle: "normal", fontWeight: "normal" }, this.linkStyle])
     return this.plainText(text, [styles, { fontStyle: "normal", fontWeight: "normal" }])
+  }
+
+  // [![alt](img)](href) is parsed as a link whose child is an image, and the
+  // parser calls linkImage() for it — not link(). The base renderer wraps the
+  // image in its own TouchableHighlight with onLinkPress, i.e. a raw
+  // Linking.openURL that skips the scheme allowlist, so a single markdown line
+  // could still dispatch any intent. Keep the link, route it through openLink.
+  linkImage(href: string, uri: string, alt?: string, style?: ImageStyle, title?: string): ReactNode {
+    return (
+      <Pressable
+        key={this.getKey()}
+        accessibilityRole="link"
+        accessibilityHint={i18n.t("chat.link.hint")}
+        onPress={() => openLink(href)}
+      >
+        {this.image(uri, alt, style, title)}
+      </Pressable>
+    )
   }
 
   image(uri: string, alt?: string, style?: ImageStyle, title?: string): ReactNode {

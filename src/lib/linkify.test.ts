@@ -5,7 +5,7 @@
 // both consume them.
 import { test } from "node:test"
 import assert from "node:assert/strict"
-import { extractSingleUrl, splitTextWithUrls } from "./linkify.ts"
+import { extractSingleUrl, isAllowedLinkScheme, splitTextWithUrls } from "./linkify.ts"
 
 test("plain text stays one unlinked segment", () => {
   assert.deepEqual(splitTextWithUrls("npm run build"), [{ text: "npm run build" }])
@@ -59,4 +59,27 @@ test("a URL glued to a sentence is still the link, not the sentence", () => {
   const [link, after] = splitTextWithUrls("https://example.com:8080/path) then done")
   assert.equal(link.url, "https://example.com:8080/path")
   assert.equal(after.text, ") then done")
+})
+
+test("only web and contact schemes are dispatched to the OS", () => {
+  // A model-written markdown href can be any scheme; react-native-marked
+  // passes all of them through. These must fall back to Copy instead of
+  // launching an installed app's intent with attacker-chosen data.
+  for (const blocked of ["javascript:alert(1)", "data:text/html,<h1>x", "file:///etc/passwd", "content://x/y", "intent://evil#Intent;end", "opencode://session/1"]) {
+    assert.equal(isAllowedLinkScheme(blocked), false, `${blocked} must not be dispatched`)
+  }
+  for (const allowed of ["https://example.com", "http://127.0.0.1:4096", "mailto:a@b.c", "tel:+123", "HTTPS://Example.com"]) {
+    assert.equal(isAllowedLinkScheme(allowed), true, `${allowed} must open`)
+  }
+  // A scheme-less string is not a link and has nothing to dispatch.
+  assert.equal(isAllowedLinkScheme("example.com/x"), false)
+})
+
+test("a bare URL with an @ in the authority is not linkified", () => {
+  // www.evil.com@good.com shows one host and opens another, and the user never
+  // wrote it as a link — so it stays plain text.
+  assert.equal(splitTextWithUrls("look www.evil.com@good.com now").some((s) => s.url), false)
+  assert.equal(splitTextWithUrls("see https://evil.example@good.example").some((s) => s.url), false)
+  // An '@' in the path is ordinary and keeps working.
+  assert.equal(splitTextWithUrls("https://a.example/@octocat")[0].url, "https://a.example/@octocat")
 })

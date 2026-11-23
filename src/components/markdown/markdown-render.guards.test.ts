@@ -81,6 +81,22 @@ test("the renderer owns link presses and no press is behind canOpenURL", () => {
   const opener = readFileSync(new URL("./open-link.ts", import.meta.url), "utf8")
   assert.doesNotMatch(opener.replace(/\/\/.*$/gm, ""), /canOpenURL\(/, "an activity start is not visibility-filtered; the guard only broke http")
   assert.match(opener, /openURL\([^)]*\)\.catch\(/, "a failed open must offer Copy, not fail silently")
+  // A model-written markdown href can be any `scheme:`; react-native-marked
+  // passes all of them through, and RN's Android sink starts an activity for
+  // any of them. The allowlist is the only control, so its call is pinned.
+  assert.match(opener, /isAllowedLinkScheme\(url\)/, "every press must pass the scheme allowlist")
+})
+
+test("an image inside a link cannot bypass the scheme allowlist", () => {
+  // [![alt](img)](href) parses as a link whose child is an image, and the
+  // parser calls linkImage() — not link(). The library's own linkImage wraps
+  // the image in onLinkPress, a raw Linking.openURL that never sees the
+  // allowlist, so one markdown line would still launch any intent.
+  assert.match(markdown, /  linkImage\(/, "linkImage must be overridden")
+  const start = markdown.indexOf("  linkImage(")
+  const override = markdown.slice(start, markdown.indexOf("  image(", start))
+  assert.match(override, /openLink\(href\)/, "the image's press goes through the same opener")
+  assert.doesNotMatch(override, /onLinkPress/, "the library's raw openURL must not be used")
 })
 
 test("a link is never wrapped in selectable text, which would swallow the tap", () => {

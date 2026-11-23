@@ -11,6 +11,32 @@ test("scrubUrl: strips basic-auth credentials", () => {
   )
 })
 
+// A password may itself contain '@'; the old first-'@' match left the tail of
+// it readable in a report the user pastes into an issue. ('/' cannot appear in
+// userinfo — such a URL has no credentials, the text is already a path.)
+test("scrubUrl: strips the whole userinfo, not up to the first @", () => {
+  assert.equal(scrubUrl("https://me:p@ssw0rd@host.com/path"), "https://<redacted>@host.com/path")
+})
+
+test("scrubUrl: a token used as userinfo is removed too", () => {
+  assert.equal(scrubUrl("https://tok_secret@host:4096/api"), "https://<redacted>@host:4096/api")
+  assert.equal(scrubUrl("https://tok%40en@host:4096/api"), "https://<redacted>@host:4096/api")
+})
+
+test("scrubUrl: a // inside the path is not userinfo", () => {
+  assert.equal(scrubUrl("https://host.com/a//b@c"), "https://host.com/a//b@c")
+  assert.equal(scrubUrl("//user:pw@host/path"), "//<redacted>@host/path")
+})
+
+test("scrubString: local file URIs never reach a shared report", () => {
+  // The picked file's own name and the app cache path live in a file:// or
+  // content:// URI, which the report used to publish untouched.
+  assert.equal(scrubString("open file:///data/user/0/app/cache/x.png failed"), "open <redacted-local-uri>")
+  assert.equal(scrubString("InputStream for content://media/x was null."), "InputStream for <redacted-local-uri>")
+  // Case-insensitive, and an unencoded space does not leave the name behind.
+  assert.equal(scrubString("FILE:///cache/Screenshot 2026-11-23.png"), "<redacted-local-uri>")
+})
+
 test("scrubUrl: redacts ?token= query param", () => {
   assert.equal(
     scrubUrl("https://host.com/api?token=abc123"),
