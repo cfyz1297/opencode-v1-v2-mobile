@@ -207,6 +207,17 @@ test("a failed bind does not still hand out the rejected APK as an artifact", ()
   assert.doesNotMatch(block, /^\s*if:/m, "an explicit condition here was the bug: it evaluated before the bind")
 })
 
+test("the documented reuse input matches what the gate enforces", () => {
+  // The input hint is the only place an operator learns the rule. It said "any
+  // successful run" after the script began rejecting everything but a push run,
+  // so the advice pointed at runs the gate refuses.
+  const description = workflow.match(/reuse_apk_run_id:\n\s+description: '([^']+)'/)?.[1] ?? ""
+  assert.match(description, /PUSH/, "the hint must say which runs are accepted")
+  assert.match(description, /dispatch and pull_request/, "and which are not, and why")
+  const scriptText = readFileSync(path.join(root, "scripts/bind-release.sh"), "utf8")
+  assert.match(scriptText, /RUN_EVENT.*!= "push"/, "the gate enforces a push run")
+})
+
 test("there is exactly one way to publish to a release", () => {
   // Counting only `gh release upload` missed a second door: `gh release create`
   // or an `assets` POST through the API would publish without passing the bind.
