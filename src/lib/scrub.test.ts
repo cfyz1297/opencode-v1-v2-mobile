@@ -190,6 +190,16 @@ test("scrubString: an http URL containing /data/ is left to the URL rule", () =>
   assert.equal(scrubString("GET https://example.com/data/data/thing failed"), "GET https://example.com/data/data/thing failed")
 })
 
+// Java's File.toURI() prints file:/data/... with one slash, and a native error
+// can follow a colon or a comma — the anchor must accept those separators.
+test("scrubString: a path right after a colon or comma is still redacted", () => {
+  assert.equal(
+    scrubString("java.io.FileNotFoundException: file:/data/user/0/com.example/cache/x.jpg: open failed"),
+    "java.io.FileNotFoundException: file:<redacted-path>: open failed",
+  )
+  assert.equal(scrubString("open failed,/data/data/com.example/files/db.sqlite"), "open failed,<redacted-path>")
+})
+
 // The worth case scrubString could not cover: its URL dispatch splits on
 // whitespace, so a password holding a space left a fragment with no '@' and
 // survived. formatReport now scrubs the Target URL line itself; scrubUrl must

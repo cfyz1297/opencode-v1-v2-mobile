@@ -31,7 +31,7 @@ export function scrubString(s: string): string {
     // shortcut: stops at a space or colon, so a user-visible name with either
     // leaks its tail; today both pickers copy under a UUID name. Narrow this
     // when a path carrying a user's own filename reaches the log.
-    .replace(/(^|[\s'"=(])\/data\/(?:user\/\d+|data)\/[^\s:]*/g, "$1<redacted-path>")
+    .replace(/(^|[\s'"=(:,])\/data\/(?:user\/\d+|data)\/[^\s:]*/g, "$1<redacted-path>")
 }
 
 // Harder redaction for text that leaves the device (support inbox): drop

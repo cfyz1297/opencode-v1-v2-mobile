@@ -49,11 +49,17 @@ export interface ParsedUrl {
 // Hermes' built-in URL is incomplete (hostname/port often unreliable), so parse
 // with a regex instead of `new URL`.
 export function parseUrl(url: string): ParsedUrl {
-  const m = url.trim().match(/^(https?):\/\/([^/:?#]+)(?::(\d+))?/i)
+  // Take the whole authority, then drop the userinfo. The old host group
+  // excluded only /:?#, so a credential pasted as userinfo (https://token@host)
+  // was reported as the host and echoed into the diagnostic report.
+  const m = url.trim().match(/^(https?):\/\/([^/?#]+)/i)
   if (!m) return { valid: false, isHostname: false }
   const scheme = m[1].toLowerCase()
-  const host = m[2]
-  const port = m[3] || (scheme === "https" ? "443" : "80")
+  const authority = m[2].slice(m[2].lastIndexOf("@") + 1)
+  const hostPort = authority.match(/^([^:]+)(?::(\d+))?$/)
+  if (!hostPort) return { valid: false, isHostname: false }
+  const host = hostPort[1]
+  const port = hostPort[2] || (scheme === "https" ? "443" : "80")
   const isHostname = !/^\d{1,3}(\.\d{1,3}){3}$/.test(host)
   return { valid: true, scheme, host, port, isHostname }
 }
