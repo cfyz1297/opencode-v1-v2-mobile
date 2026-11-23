@@ -183,3 +183,8 @@ test("scrubString: a bare app-sandbox path is dropped but the reason stays", () 
   // Ordinary text is untouched.
   assert.equal(scrubString("npm run build"), "npm run build")
 })
+
+// A URL that merely contains the /data/ segment must not be mangled.
+test("scrubString: an http URL containing /data/ is left to the URL rule", () => {
+  assert.equal(scrubString("GET https://example.com/data/data/thing failed"), "GET https://example.com/data/data/thing failed")
+})

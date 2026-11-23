@@ -808,7 +808,11 @@ export default function SessionScreen() {
       })
       if (result.canceled) return
       const items: Attachment[] = []
+      // Two lists on purpose: `problems` names the file for the on-device
+      // alert, `reasons` reaches the log without it — that buffer is embedded
+      // in the report the user shares.
       const problems: string[] = []
+      const reasons: string[] = []
       // The batch shares one budget, and it must count what is already attached:
       // picking twice is the same pile of base64 in state either way.
       let attachedBytes = attachments.reduce((sum, a) => sum + (a.base64 ? base64Bytes(a.base64) : 0), 0)
@@ -821,6 +825,7 @@ export default function SessionScreen() {
           // 0 or -1 for "unknown" in asset.size.
           if (fileTooLarge(file.size, attachedBytes)) {
             problems.push(`${asset.name}: ${t("session.alerts.fileTooLargeTitle")}`)
+            reasons.push(t("session.alerts.fileTooLargeTitle"))
             continue
           }
           const base64 = await file.base64()
@@ -832,7 +837,9 @@ export default function SessionScreen() {
             base64,
           })
         } catch (err) {
-          problems.push(`${asset.name}: ${err instanceof Error ? err.message : String(err)}`)
+          const reason = err instanceof Error ? err.message : String(err)
+          problems.push(`${asset.name}: ${reason}`)
+          reasons.push(reason)
         }
       }
       if (items.length) setAttachments((prev) => [...prev, ...items])
@@ -841,9 +848,10 @@ export default function SessionScreen() {
         // Android, so a mixed result (one too large, one unreadable) showed
         // only the last problem. Release builds also drop console output, and
         // the diagnostics log is what a report carries.
-        // The log carries the count, not the names: this buffer is embedded in
-        // the diagnostic report the user pastes into an issue.
-        log.error("FilePicker", `${problems.length} file(s) not attached`)
+        // The log carries the reasons, not the names: this buffer is embedded
+        // in the diagnostic report the user pastes into an issue. Without the
+        // reason a report cannot tell "too large" from "unreadable".
+        log.error("FilePicker", `${reasons.length} file(s) not attached: ${reasons.join("; ")}`)
         Alert.alert(t("session.alerts.fileFailedTitle"), `${t("session.alerts.fileFailedMessage")}\n\n${problems.join("\n")}`)
       }
     } catch (err) {

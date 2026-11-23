@@ -89,10 +89,11 @@ test("a picked file reaches the prompt as bytes, never as a cache path", () => {
   assert.match(pick, /Alert\.alert\(t\("session\.alerts\.fileFailedTitle"\)/)
   // Same reasoning as the photo picker: release builds drop console output.
   assert.match(pick, /log\.error\("FilePicker"/)
-  // ...but the log carries a count, not the picked names: this buffer is
-  // embedded in the diagnostic report the user pastes into an issue.
-  assert.match(pick, /log\.error\("FilePicker", `\$\{problems\.length\}/)
-  assert.doesNotMatch(pick, /log\.error\("FilePicker", "not attached:", problems/, "file names must not enter the shared log")
+  // ...but the log carries reasons, not the picked names: this buffer is
+  // embedded in the diagnostic report the user pastes into an issue. Forbid
+  // the argument, not one wording — the names must never reach it in any form.
+  assert.doesNotMatch(pick, /log\.error\("FilePicker",[^\n]*problems\b/, "file names must not enter the shared log")
+  assert.match(pick, /log\.error\("FilePicker", `\$\{reasons\.length\}[^`]*\$\{reasons\.join/, "the reason stays diagnosable")
   // A mistaken huge pick would freeze the app while base64-encoding it, and a
   // second pick must not reset the batch budget.
   assert.match(pick, /fileTooLarge\(file\.size, attachedBytes\)/)

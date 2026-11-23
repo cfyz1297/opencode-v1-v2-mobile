@@ -25,8 +25,13 @@ export function scrubString(s: string): string {
     .replace(/\b(?:file|content):\/\/[^\n]*/gi, "<redacted-local-uri>")
     // Native errors name the app's own sandbox path without a scheme
     // ("... /data/user/0/<pkg>/cache/ImagePicker/x.jpg: open failed: EACCES").
-    // Drop the path, keep the reason: that keeps the report diagnosable.
-    .replace(/\/data\/(?:user\/\d+|data)\/[^\s:]*/g, "<redacted-path>")
+    // Drop the path, keep the reason: that keeps the report diagnosable. The
+    // leading character is matched so a URL that merely contains /data/ is not
+    // mangled.
+    // shortcut: stops at a space or colon, so a user-visible name with either
+    // leaks its tail; today both pickers copy under a UUID name. Narrow this
+    // when a path carrying a user's own filename reaches the log.
+    .replace(/(^|[\s'"=(])\/data\/(?:user\/\d+|data)\/[^\s:]*/g, "$1<redacted-path>")
 }
 
 // Harder redaction for text that leaves the device (support inbox): drop
