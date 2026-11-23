@@ -135,7 +135,7 @@ jobs:
           SOURCE_SHA=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$REUSE_RUN" --jq .head_sha)
           [[ "$SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]]
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$REUSE_RUN/jobs" --jq '.jobs[] | select(.name == "build") | .conclusion' | grep -qx success
-          git diff --exit-code "$SOURCE_SHA" HEAD -- app src android assets plugins package.json package-lock.json app.json metro.config.js tsconfig.json
+          git diff --exit-code "$SOURCE_SHA" HEAD -- app src android assets plugins package.json package-lock.json app.json metro.config.js tsconfig.json .npmrc
           echo "Reusing signed APK from $SOURCE_SHA: application sources are identical."
 
       - name: Download verified existing APK
@@ -228,7 +228,7 @@ jobs:
           REUSED_RUN: ${{ inputs.reuse_apk_run_id }}
         run: |
           set -euo pipefail
-          git fetch --tags --force --quiet origin "+refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
+          git fetch --force --quiet origin "+refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
           TAG_SHA=$(git rev-parse "$RELEASE_TAG^{commit}")
           if [[ -n "$REUSED_RUN" ]]; then
             BUILT_SHA=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$REUSED_RUN" --jq .head_sha)
