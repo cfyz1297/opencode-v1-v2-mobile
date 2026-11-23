@@ -2,11 +2,15 @@ import { test } from "node:test"
 import assert from "node:assert/strict"
 import { MAX_ATTACHMENT_BYTES, MAX_ATTACHMENT_TOTAL_BYTES, base64Bytes, fileTooLarge, isImageMime, promptFileUrl } from "./file-attachment.ts"
 
-test("only image mime types get a thumbnail", () => {
-  assert.equal(isImageMime("image/jpeg"), true)
-  assert.equal(isImageMime("IMAGE/PNG"), true)
-  assert.equal(isImageMime("application/pdf"), false)
-  assert.equal(isImageMime(undefined), false)
+test("only raster image types get a thumbnail", () => {
+  for (const mime of ["image/jpeg", "image/jpg", "image/png", "IMAGE/PNG", "image/gif", "image/webp", "image/bmp"]) {
+    assert.equal(isImageMime(mime), true, `${mime} renders in RN Image`)
+  }
+  // An SVG is an image mime but RN Image draws it as an empty box; it must fall
+  // through to the document tile instead of pretending to be a preview.
+  for (const mime of ["image/svg+xml", "application/pdf", "text/plain", undefined]) {
+    assert.equal(isImageMime(mime), false, `${mime} has no RN preview`)
+  }
 })
 
 test("the size cap rejects a file one byte over and keeps the limit itself", () => {

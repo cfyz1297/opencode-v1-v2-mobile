@@ -10,8 +10,13 @@ export const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024
 // of base64 in state and again in the request body.
 export const MAX_ATTACHMENT_TOTAL_BYTES = 20 * 1024 * 1024
 
+// React Native's Image renders the raster formats only; an SVG produced an
+// empty grey box in the composer and in the transcript while the file itself
+// was sent fine, so it belongs with the documents.
+const RASTER = /^image\/(jpeg|jpg|png|gif|webp|bmp)$/
+
 export function isImageMime(mime: string | undefined): boolean {
-  return !!mime && mime.toLowerCase().startsWith("image/")
+  return !!mime && RASTER.test(mime.toLowerCase())
 }
 
 // Some SAF providers report 0 or -1 for "unknown size" instead of null, and

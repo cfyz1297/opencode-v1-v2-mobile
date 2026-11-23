@@ -153,6 +153,9 @@ test("a picked file reaches the prompt as bytes, never as a cache path", () => {
   // A mistaken huge pick would freeze the app while base64-encoding it, and a
   // second pick must not reset the batch budget.
   assert.match(pick, /fileTooLarge\(file\.size, attachedBytes\)/)
+  // The budget must accumulate across the files of one pick: `=` instead of
+  // `+=` lets ten 9 MB documents through a 20 MB cap.
+  assert.match(pick, /attachedBytes \+= base64Bytes\(base64\)/)
   assert.match(pick, /attachments\.reduce/)
 
   // The one line the whole feature rests on: send uses base64 when present.

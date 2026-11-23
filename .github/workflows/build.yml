@@ -8,7 +8,7 @@ on:
         required: false
         default: ''
       release_tag:
-        description: 'Existing release tag to attach the verified APK to (for example v0.3.23)'
+        description: 'Existing release tag to attach the verified APK to (for example vX.Y.Z)'
         required: false
         default: ''
   push:
