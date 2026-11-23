@@ -212,3 +212,12 @@ test("formatReport scrubs the Target URL line itself, not via scrubString", () =
   const source = readFileSync(new URL("./diagnostics.ts", import.meta.url), "utf8")
   assert.match(source, /Target URL:\s+\$\{scrubUrl\(report\.url\)\}/, "the raw report.url must never be printed")
 })
+
+// Quick Connect has no parse gate, so a string with credentials that fails to
+// parse reaches the malformed-probe branch. Both the attempt target at build
+// time and the Probes line at print time must be scrubbed.
+test("a malformed URL's password never reaches the Probes line", () => {
+  const source = readFileSync(new URL("./diagnostics.ts", import.meta.url), "utf8")
+  assert.match(source, /target: scrubUrl\(url\)/, "the malformed attempt target must be scrubbed when built")
+  assert.match(source, /\$\{scrubUrl\(a\.target\)\}/, "every printed probe target must be scrubbed")
+})

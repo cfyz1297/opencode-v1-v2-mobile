@@ -38,6 +38,22 @@ test("flags an IPv4 host as not-a-hostname, and a DNS name as a hostname", () =>
   assert.equal(parseUrl("http://server.tailnet.ts.net:8080").isHostname, true)
 })
 
+// A bracketed IPv6 literal is a valid server address (tailnets hand them out),
+// and `host:` means the default port. Both used to pass and must keep passing;
+// the userinfo fix must not narrow them.
+test("IPv6 literals and an empty port stay valid", () => {
+  assert.deepEqual(parseUrl("http://[fd7a:115c:a1e0::1]:4096"), {
+    valid: true,
+    scheme: "http",
+    host: "[fd7a:115c:a1e0::1]",
+    port: "4096",
+    isHostname: false,
+  })
+  assert.equal(parseUrl("http://[::1]:4096").host, "[::1]")
+  assert.equal(parseUrl("http://host:").port, "80")
+  assert.equal(parseUrl("https://host:").port, "443")
+})
+
 // A credential pasted as userinfo used to become the host, so the report
 // printed it in host=, in the unreachable summary and in the probe-start log.
 test("userinfo is not part of the host", () => {

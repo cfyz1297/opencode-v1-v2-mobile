@@ -113,7 +113,11 @@ export async function probeConnection(url: string, auth?: { username: string; pa
     root = rootAttempt
     internet = internetAttempt
   } else {
-    const skipped: ProbeAttempt = { name: "health", target: url, ok: false, durationMs: 0, error: "skipped: malformed url" }
+    // Any URL printed in the report is scrubbed, including a malformed one:
+    // scrubString splits on whitespace, so a password containing a space would
+    // survive its dispatch. Quick Connect has no parse gate, so an
+    // unparseable string with credentials reaches this branch.
+    const skipped: ProbeAttempt = { name: "health", target: scrubUrl(url), ok: false, durationMs: 0, error: "skipped: malformed url" }
     health = skipped
     root = { ...skipped, name: "server-root" }
     internet = await timedFetch("internet", INTERNET_CHECK_URL)
@@ -161,7 +165,7 @@ export function formatReport(report: DiagnosticReport): string {
   lines.push("Probes:")
   for (const a of report.attempts) {
     const status = a.ok ? `OK ${a.status ?? ""}`.trim() : `FAIL ${a.error ?? ""}`.trim()
-    lines.push(`  - ${a.name.padEnd(12)} ${a.target}`)
+    lines.push(`  - ${a.name.padEnd(12)} ${scrubUrl(a.target)}`)
     lines.push(`      ${status} (${a.durationMs}ms)${a.errorCause ? ` cause=${a.errorCause}` : ""}`)
   }
   lines.push("")

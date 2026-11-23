@@ -56,11 +56,13 @@ export function parseUrl(url: string): ParsedUrl {
   if (!m) return { valid: false, isHostname: false }
   const scheme = m[1].toLowerCase()
   const authority = m[2].slice(m[2].lastIndexOf("@") + 1)
-  const hostPort = authority.match(/^([^:]+)(?::(\d+))?$/)
+  const hostPort = authority.match(/^(\[[^\]]+\]|[^:]+)(?::(\d*))?$/)
   if (!hostPort) return { valid: false, isHostname: false }
   const host = hostPort[1]
   const port = hostPort[2] || (scheme === "https" ? "443" : "80")
-  const isHostname = !/^\d{1,3}(\.\d{1,3}){3}$/.test(host)
+  // A bracketed IPv6 literal is an address, not a hostname: the MagicDNS hint
+  // must not fire for it.
+  const isHostname = !/^\[.*\]$/.test(host) && !/^\d{1,3}(\.\d{1,3}){3}$/.test(host)
   return { valid: true, scheme, host, port, isHostname }
 }
 
