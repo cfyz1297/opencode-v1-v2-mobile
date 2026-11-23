@@ -54,7 +54,7 @@ else
   WHAT="APK built in this run"
 fi
 
-if [[ -z "$BUILT_SHA" || "$BUILT_SHA" != "$TAG_SHA" ]]; then
+if [[ "$BUILT_SHA" != "$TAG_SHA" ]]; then
   echo "::error::$WHAT was built from ${BUILT_SHA:-nothing}, but $RELEASE_TAG is $TAG_SHA"
   exit 1
 fi

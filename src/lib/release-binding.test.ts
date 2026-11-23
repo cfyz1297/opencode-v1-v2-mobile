@@ -60,7 +60,7 @@ case "$1" in
   fetch) ${options.fetchFails ? "exit 128" : "exit 0"} ;;
   rev-parse)
     case "$2" in
-      'v0.3.24^{commit}'|'release/v3^{commit}'|'v9.9.9^{commit}') echo "${sha}" ;;
+      'v0.3.24^{commit}'|'v9.9.9^{commit}') echo "${sha}" ;;
       *) echo "fake git: unexpected rev-parse argument '$2'" >&2; exit 128 ;;
     esac ;;
   *) echo "fake git: unexpected command '$1'" >&2; exit 1 ;;
@@ -182,9 +182,9 @@ test("the guard cannot be skipped, failed-open or reordered", () => {
   // The script proves the comparison. These pins prove the step that runs it
   // still runs: a skipped step, a tolerated failure or a later position all
   // publish the APK without the comparison ever executing.
-  const CONDITION = /if: startsWith\(github\.ref, 'refs\/tags\/'\) \|\| inputs\.release_tag != ''/g
+  const CONDITION = /^\s+if: startsWith\(github\.ref, 'refs\/tags\/'\) \|\| inputs\.release_tag != ''\s*$/gm
   const conditions = workflow.match(CONDITION) ?? []
-  assert.equal(conditions.length, 2, "the bind and the upload share one condition")
+  assert.equal(conditions.length, 2, "the bind and the upload share one condition, and nothing else on the line")
 
   const bind = workflow.indexOf("- name: Bind the APK to the tag's commit")
   const upload = workflow.indexOf("- name: Attach the verified APK to the release")
@@ -199,13 +199,28 @@ test("the guard cannot be skipped, failed-open or reordered", () => {
 
   const guarded = workflow.slice(bind, upload + 400)
   assert.doesNotMatch(guarded, /continue-on-error:/, "neither step may be allowed to fail")
-  assert.doesNotMatch(guarded, /if:\s*(false|always\(\))/, "neither step may be skipped or forced")
+  // Any status function removes the implicit success(); the anchored condition
+  // above already rules it out, this names the intent.
+  assert.doesNotMatch(guarded, /always\(\)|failure\(\)|cancelled\(\)/, "no status function may bypass the implicit success()")
+})
+
+test("the bind step receives exactly the inputs its logic reads", () => {
+  const step = workflow.slice(workflow.indexOf("- name: Bind the APK to the tag's commit"))
+  const block = step.slice(step.indexOf("env:"), step.indexOf("run: |"))
+  const keys = [...block.matchAll(/^\s{10}([A-Z_]+):/gm)].map((m) => m[1])
+  // Dropping REUSED_RUN made the bind judge this checkout while the APK came
+  // from another run; adding BUILT_COMMIT here would override the value recorded
+  // before the build.
+  assert.deepEqual(keys, ["GH_TOKEN", "RELEASE_TAG", "REUSED_RUN"])
 })
 
 test("the bind step's whole body is exactly the call", () => {
   const step = workflow.slice(workflow.indexOf("- name: Bind the APK to the tag's commit"))
   const body = step.slice(step.indexOf("run: |") + "run: |".length).split("\n\n")[0]
-  const lines = body.split("\n").map((line) => line.trim()).filter(Boolean)
+  const lines = body
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith("#"))
   assert.deepEqual(lines, [
     "set -euo pipefail",
     `export EXPECTED_TAG="v$(node -p "require('./app.json').expo.version")"`,
@@ -254,8 +269,9 @@ test("the documented reuse input matches what the gate enforces", () => {
 test("there is exactly one way to publish to a release", () => {
   // Counting only `gh release upload` missed a second door: `gh release create`
   // or an `assets` POST through the API would publish without passing the bind.
-  const publishes =
-    workflow.match(/gh (?:release (?:upload|create|edit)|api[^\n]*\/releases\/[^\n]*\/assets)/g) ?? []
+  // Any client: `gh release upload`, `gh release create`, or a REST call to the
+  // assets endpoint. A `curl` POST used to be invisible here.
+  const publishes = workflow.match(/^[^\n]*(?:\/releases\/[^\n]*\/assets|gh release (?:upload|create|edit))\S*/gm) ?? []
   assert.equal(publishes.length, 1, `one publish path, found: ${publishes.join(", ")}`)
 })
 
