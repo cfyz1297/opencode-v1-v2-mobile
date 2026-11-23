@@ -30,6 +30,16 @@ export function base64Bytes(base64: string): number {
   return Math.floor((base64.length * 3) / 4)
 }
 
+// Size of an attachment already in the composer, for the batch budget. A
+// restored one (Edit on a sent message) carries only its data: URL, not a
+// separate base64 field, so counting the field alone priced it at zero and a
+// 15 MB restored PDF plus a 10 MB pick passed a 20 MB cap.
+export function attachmentBytes(file: { uri: string; base64?: string }): number {
+  if (file.base64 !== undefined) return base64Bytes(file.base64)
+  const comma = file.uri.startsWith("data:") ? file.uri.indexOf(",") : -1
+  return comma > 0 ? base64Bytes(file.uri.slice(comma + 1)) : 0
+}
+
 // What the prompt carries for one attachment. The server never sees the
 // phone's filesystem, so a picked file must travel as a data: URL — the uri of
 // a document-picker copy is a cache path and would reach the server as a path

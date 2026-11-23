@@ -16,15 +16,37 @@ import { readFileSync } from "node:fs"
 
 const workflow = readFileSync(new URL("../../.github/workflows/build.yml", import.meta.url), "utf8")
 
+// shortcut: a text guard cannot prove the step's body is reachable — wrapping
+// the `run:` block in `if false; then … fi` keeps every pinned line and the
+// test green. Anyone who can edit build.yml already holds release authority, so
+// the guard is a tripwire against accident, not against an attacker; upgrade by
+// moving the body into scripts/bind-release.sh and exercising it with fake
+// git/gh if that authority boundary is ever shared.
+
 const BIND = "- name: Bind the APK to the tag's commit"
 const UPLOAD = "- name: Attach the verified APK to the release"
 
+// One step, from its own `- name:` to the next one. Slicing to the end of the
+// file (or to a later step) let a decoy carry the pinned line while the real
+// step was disabled, and let an unrelated step's `continue-on-error` fail this
+// test.
+function step(name: string): string {
+  const steps = workflow.split(/\n(?= {6}- name: )/)
+  const found = steps.find((chunk) => chunk.trimStart().startsWith(`- name: ${name}`))
+  assert.ok(found, `step "${name}" must exist`)
+  const index = steps.indexOf(found)
+  assert.ok(index > 0, `step "${name}" must not be missing from the job`)
+  return found
+}
+
 function bindStep(): string {
-  const start = workflow.indexOf(BIND)
-  assert.ok(start > 0, "the bind step must exist")
-  const end = workflow.indexOf(UPLOAD, start)
-  assert.ok(end > start, "the bind step must run before the upload step")
-  return workflow.slice(start, end)
+  const bind = step(BIND.replace("- name: ", ""))
+  const upload = step(UPLOAD.replace("- name: ", ""))
+  assert.ok(
+    workflow.indexOf(bind) < workflow.indexOf(upload),
+    "the bind step must run before the upload step",
+  )
+  return bind
 }
 
 // The exact condition, on both steps. Being liberal here is what failed before:
@@ -37,8 +59,11 @@ const REAL_IF = /^\s*if: startsWith\(github\.ref, 'refs\/tags\/'\) \|\| inputs\.
 test("the bind and the upload run on exactly the same condition", () => {
   const bind = bindStep()
   assert.match(bind, REAL_IF, "the bind step must run wherever the upload runs")
-  const upload = workflow.slice(workflow.indexOf(UPLOAD))
+  const upload = step(UPLOAD.replace("- name: ", ""))
   assert.match(upload, REAL_IF, "the upload step must not widen its condition past the guard")
+  // The version guard inside the upload is the second door: `exit 0` there lets
+  // an APK for 0.3.23 be clobbered onto the v0.3.24 release.
+  assert.match(upload, /does not match the built \$EXPECTED_TAG.*exit 1/, "a tag/version mismatch must abort")
   assert.doesNotMatch(bind, /^\s*continue-on-error:/m, "a step allowed to fail does not gate the upload")
   assert.doesNotMatch(upload, /^\s*continue-on-error:/m, "nor does an upload allowed to fail")
 })
@@ -50,6 +75,9 @@ test("the uploaded APK is bound to the tag's commit, not only to its version", (
   // earlier one. Each must be compared with that commit.
   assert.match(step, /BUILT_SHA=\$\(git rev-parse HEAD\)/, "a fresh build is identified by HEAD")
   assert.match(step, /actions\/runs\/\$REUSED_RUN.*head_sha/, "a reused APK is identified by its own run's head_sha")
+  // Without this binding the reuse path silently falls back to HEAD, which
+  // proves nothing about the APK that was actually downloaded.
+  assert.match(step, /REUSED_RUN: \$\{\{ inputs\.reuse_apk_run_id \}\}/, "the reuse input must reach the step")
   assert.match(step, /"\$BUILT_SHA" != "\$TAG_SHA"/, "the comparison must be made")
   assert.match(step, /^\s*exit 1\s*$/m, "and a mismatch must abort the job, not continue to the upload")
   // An `exit 0` earlier in the block would make the `exit 1` unreachable while

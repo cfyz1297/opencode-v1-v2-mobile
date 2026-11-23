@@ -156,7 +156,7 @@ test("a picked file reaches the prompt as bytes, never as a cache path", () => {
   // The budget must accumulate across the files of one pick: `=` instead of
   // `+=` lets ten 9 MB documents through a 20 MB cap.
   assert.match(pick, /attachedBytes \+= base64Bytes\(base64\)/)
-  assert.match(pick, /attachments\.reduce/)
+  assert.match(pick, /attachmentBytes\(a\)/, "restored attachments count by their data: URL")
 
   // The one line the whole feature rests on: send uses base64 when present.
   const sessions = readFileSync(path.join(root, "src/stores/sessions.ts"), "utf8")

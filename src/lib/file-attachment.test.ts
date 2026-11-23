@@ -1,6 +1,6 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
-import { MAX_ATTACHMENT_BYTES, MAX_ATTACHMENT_TOTAL_BYTES, base64Bytes, fileTooLarge, isImageMime, promptFileUrl } from "./file-attachment.ts"
+import { MAX_ATTACHMENT_BYTES, MAX_ATTACHMENT_TOTAL_BYTES, attachmentBytes, base64Bytes, fileTooLarge, isImageMime, promptFileUrl } from "./file-attachment.ts"
 
 test("only raster image types get a thumbnail", () => {
   for (const mime of ["image/jpeg", "image/jpg", "image/png", "IMAGE/PNG", "image/gif", "image/webp", "image/bmp"]) {
@@ -53,4 +53,19 @@ test("base64 length converts back to bytes for the batch budget", () => {
   // Padding makes the estimate overshoot by a byte or two, which is the safe
   // direction for a budget.
   assert.ok(base64Bytes(Buffer.from("0123456789").toString("base64")) >= 10)
+})
+
+test("a restored attachment is priced by its data: URL, not at zero", () => {
+  const payload = Buffer.alloc(1024, 7).toString("base64")
+  // The Edit path restores {uri: "data:...;base64,..."} with no base64 field;
+  // counting only the field let a 15 MB restored file and a 10 MB pick through
+  // a 20 MB budget.
+  // base64Bytes deliberately overshoots by the padding bytes, which is the safe
+  // direction for a budget.
+  const estimate = base64Bytes(payload)
+  assert.ok(estimate >= 1024 && estimate < 1040, `got ${estimate}`)
+  assert.equal(attachmentBytes({ uri: `data:application/pdf;base64,${payload}` }), estimate)
+  assert.equal(attachmentBytes({ uri: "file:///cache/x", base64: payload }), estimate)
+  // A path with no bytes behind it contributes nothing.
+  assert.equal(attachmentBytes({ uri: "file:///cache/x" }), 0)
 })

@@ -33,7 +33,7 @@ import * as ImageManipulator from "expo-image-manipulator"
 import * as DocumentPicker from "expo-document-picker"
 import { File as FsFile } from "expo-file-system"
 import * as Clipboard from "expo-clipboard"
-import { base64Bytes, fileTooLarge } from "../../src/lib/file-attachment"
+import { attachmentBytes, base64Bytes, fileTooLarge } from "../../src/lib/file-attachment"
 import type BottomSheet from "@gorhom/bottom-sheet"
 import {
   MessageBubble,
@@ -817,7 +817,7 @@ export default function SessionScreen() {
       const reasons: string[] = []
       // The batch shares one budget, and it must count what is already attached:
       // picking twice is the same pile of base64 in state either way.
-      let attachedBytes = attachments.reduce((sum, a) => sum + (a.base64 ? base64Bytes(a.base64) : 0), 0)
+      let attachedBytes = attachments.reduce((sum, a) => sum + attachmentBytes(a), 0)
       for (const asset of result.assets) {
         try {
           const file = new FsFile(asset.uri)
