@@ -135,7 +135,7 @@ jobs:
           SOURCE_SHA=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$REUSE_RUN" --jq .head_sha)
           [[ "$SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]]
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$REUSE_RUN/jobs" --jq '.jobs[] | select(.name == "build") | .conclusion' | grep -qx success
-          git diff --exit-code "$SOURCE_SHA" HEAD -- app src android assets package.json package-lock.json app.json metro.config.js tsconfig.json
+          git diff --exit-code "$SOURCE_SHA" HEAD -- app src android assets plugins package.json package-lock.json app.json metro.config.js tsconfig.json
           echo "Reusing signed APK from $SOURCE_SHA: application sources are identical."
 
       - name: Download verified existing APK
@@ -216,6 +216,33 @@ jobs:
       # requires every previous step to have succeeded, so an APK that failed
       # the signature/version check (a debug-signed build, a cancelled run) can
       # never overwrite a published asset.
+      # The tag must point at the commit this APK was built from. Without this a
+      # workflow_dispatch from a branch could attach a production-signed build
+      # of some other source to an existing release: the version string in
+      # app.json matches, so the check above would pass it.
+      - name: Bind the APK to the tag's commit
+        if: startsWith(github.ref, 'refs/tags/') || inputs.release_tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
+          REUSED_RUN: ${{ inputs.reuse_apk_run_id }}
+        run: |
+          set -euo pipefail
+          git fetch --tags --force --quiet origin "+refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
+          TAG_SHA=$(git rev-parse "$RELEASE_TAG^{commit}")
+          if [[ -n "$REUSED_RUN" ]]; then
+            BUILT_SHA=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$REUSED_RUN" --jq .head_sha)
+            WHAT="reused APK from run $REUSED_RUN"
+          else
+            BUILT_SHA=$(git rev-parse HEAD)
+            WHAT="APK built in this run"
+          fi
+          if [[ "$BUILT_SHA" != "$TAG_SHA" ]]; then
+            echo "::error::$WHAT was built from $BUILT_SHA, but $RELEASE_TAG is $TAG_SHA"
+            exit 1
+          fi
+          echo "$WHAT matches $RELEASE_TAG ($TAG_SHA)."
+
       - name: Attach the verified APK to the release
         if: startsWith(github.ref, 'refs/tags/') || inputs.release_tag != ''
         env:
