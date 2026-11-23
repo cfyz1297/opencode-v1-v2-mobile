@@ -19,8 +19,14 @@ export function scrubString(s: string): string {
   // Local schemes carry the picked file's own name and the app's cache path;
   // they used to pass through untouched into the report the user shares.
   return s
-    .replace(/https?:\/\/\S+/g, (m) => scrubUrl(m))
+    // /i: parseUrl accepts a mixed-case scheme, so `HTTP://u:p@host` is a
+    // valid connection URL — a case-sensitive dispatch would publish it.
+    .replace(/https?:\/\/\S+/gi, (m) => scrubUrl(m))
     .replace(/\b(?:file|content):\/\/[^\n]*/gi, "<redacted-local-uri>")
+    // Native errors name the app's own sandbox path without a scheme
+    // ("... /data/user/0/<pkg>/cache/ImagePicker/x.jpg: open failed: EACCES").
+    // Drop the path, keep the reason: that keeps the report diagnosable.
+    .replace(/\/data\/(?:user\/\d+|data)\/[^\s:]*/g, "<redacted-path>")
 }
 
 // Harder redaction for text that leaves the device (support inbox): drop

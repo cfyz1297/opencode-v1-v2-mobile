@@ -162,3 +162,24 @@ test("redactHostAndUrls: blanks bare IPv4 addresses even when unknown", () => {
   assert.ok(!out.includes("10.0.0.1"))
   assert.ok(out.includes("<redacted-ip>"))
 })
+
+// parseUrl accepts a mixed-case scheme, so `HTTP://u:p@host` is a valid
+// connection URL and reaches the report. A case-sensitive dispatch left the
+// password in the Target URL line the user pastes into an issue.
+test("scrubString: an uppercase scheme still gets its userinfo stripped", () => {
+  assert.equal(scrubString("Target URL:  HTTP://u:p@host:4096"), "Target URL:  HTTP://<redacted>@host:4096")
+  assert.equal(scrubString("HTTPS://u:p@host"), "HTTPS://<redacted>@host")
+})
+
+// A native error names the app's own sandbox path without a scheme, so the
+// file:// rule above never saw it (ImageManipulator's FileNotFoundException).
+// The path goes, the reason stays: a report without a reason is a guessing game.
+test("scrubString: a bare app-sandbox path is dropped but the reason stays", () => {
+  assert.equal(
+    scrubString("java.io.FileNotFoundException: /data/user/0/com.example/cache/ImagePicker/9f3a.jpg: open failed: EACCES"),
+    "java.io.FileNotFoundException: <redacted-path>: open failed: EACCES",
+  )
+  assert.equal(scrubString("/data/data/com.example/files/db.sqlite locked"), "<redacted-path> locked")
+  // Ordinary text is untouched.
+  assert.equal(scrubString("npm run build"), "npm run build")
+})
