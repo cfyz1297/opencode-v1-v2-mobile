@@ -232,7 +232,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
           REUSED_RUN: ${{ inputs.reuse_apk_run_id }}
-        run: bash scripts/bind-release.sh
+        run: |
+          export EXPECTED_TAG="v$(node -p "require('./app.json').expo.version")"
+          bash scripts/bind-release.sh
 
       - name: Attach the verified APK to the release
         if: startsWith(github.ref, 'refs/tags/') || inputs.release_tag != ''

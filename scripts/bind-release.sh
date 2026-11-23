@@ -15,12 +15,21 @@
 # Inputs (environment):
 #   RELEASE_TAG       required, the tag about to receive the APK
 #   BUILT_COMMIT      required for a fresh build, the commit captured at checkout
+#   EXPECTED_TAG      optional, the tag the version in app.json implies (vX.Y.Z)
 #   REUSED_RUN        optional, a run whose artifact is being re-published
 #   GITHUB_REPOSITORY optional, owner/repo for the API call
 set -euo pipefail
 
 RELEASE_TAG=${RELEASE_TAG:?RELEASE_TAG is required}
 REUSED_RUN=${REUSED_RUN:-}
+
+# A tag whose name disagrees with the version inside the APK would put a
+# 0.3.23 build on the v0.3.24 release; the commit check below cannot see that.
+EXPECTED_TAG=${EXPECTED_TAG:-}
+if [[ -n "$EXPECTED_TAG" && "$RELEASE_TAG" != "$EXPECTED_TAG" ]]; then
+  echo "::error::Tag $RELEASE_TAG does not match the built $EXPECTED_TAG"
+  exit 1
+fi
 
 git fetch --force --quiet origin "+refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
 TAG_SHA=$(git rev-parse "$RELEASE_TAG^{commit}")

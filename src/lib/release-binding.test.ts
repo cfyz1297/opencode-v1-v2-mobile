@@ -86,6 +86,21 @@ test("a reused run is judged by its own commit, not by this checkout", () => {
   assert.notEqual(apiDown.status, 0)
 })
 
+test("a tag whose name disagrees with the built version is refused", () => {
+  // The commit check cannot see this: a tag can point at a commit whose
+  // app.json carries another version, and the APK would land on the wrong
+  // release. The workflow computes EXPECTED_TAG from app.json and exports it.
+  const wrong = run({ RELEASE_TAG: "v0.3.24", BUILT_COMMIT: TAG_SHA, EXPECTED_TAG: "v0.3.23" })
+  assert.equal(wrong.status, 1)
+  assert.match(wrong.stdout, /does not match the built v0\.3\.23/)
+
+  const right = run({ RELEASE_TAG: "v0.3.24", BUILT_COMMIT: TAG_SHA, EXPECTED_TAG: "v0.3.24" })
+  assert.equal(right.status, 0, right.stderr)
+
+  // The workflow must actually export it, or the check silently does nothing.
+  assert.match(workflow, /export EXPECTED_TAG=/, "the version guard must reach the script")
+})
+
 test("a missing record of the built commit fails closed", () => {
   // This is the shape a `git checkout` before the bind would have created if
   // the script read HEAD instead: the check must not silently pass.
@@ -100,7 +115,7 @@ test("an unavailable tag fails closed", () => {
 })
 
 test("the workflow calls this script and records the commit before building", () => {
-  assert.match(workflow, /run: bash scripts\/bind-release\.sh/, "the step must run the tested script, not a copy of its logic")
+  assert.match(workflow, /^\s*bash scripts\/bind-release\.sh\s*$/m, "the step must run the tested script, not a copy of its logic")
   const record = workflow.indexOf('echo "BUILT_COMMIT=$(git rev-parse HEAD)" >> "$GITHUB_ENV"')
   const build = workflow.indexOf("- name: Build APK")
   const bind = workflow.indexOf("- name: Bind the APK to the tag's commit")
