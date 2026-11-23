@@ -206,7 +206,7 @@ jobs:
           echo 'Package/version verified; signing certificate matches the published app.'
 
       - name: Upload APK artifact
-        if: always()
+        if: always() && steps.bind.outcome != 'failure'
         uses: actions/upload-artifact@v7
         with:
           name: app-release
@@ -227,6 +227,7 @@ jobs:
       # of some other source to an existing release: the version string in
       # app.json matches, so the check above would pass it.
       - name: Bind the APK to the tag's commit
+        id: bind
         if: startsWith(github.ref, 'refs/tags/') || inputs.release_tag != ''
         env:
           GH_TOKEN: ${{ github.token }}
@@ -244,14 +245,9 @@ jobs:
         run: |
           set -euo pipefail
           APK=android/app/build/outputs/apk/release/app-release.apk
-          # -f alone does not say the file is a release build: the version inside
-          # it must match the tag being filled in, or --clobber would replace an
-          # old release with a newer build from main.
-          EXPECTED_TAG="v$(node -p "require('./app.json').expo.version")"
-          if [ "$RELEASE_TAG" != "$EXPECTED_TAG" ]; then
-            echo "::error::Tag $RELEASE_TAG does not match the built $EXPECTED_TAG"
-            exit 1
-          fi
+          # The tag/version check lives in scripts/bind-release.sh, which runs
+          # before this step and is covered by tests. Repeating it here gave a
+          # second copy nobody exercised.
           # Only "release not found" is harmless. Any other failure (permissions,
           # network) must fail the job instead of reporting a clean no-op.
           if ! OUT=$(gh release view "$RELEASE_TAG" 2>&1); then

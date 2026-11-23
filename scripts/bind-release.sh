@@ -7,10 +7,10 @@
 # the guard while the test stayed green. A test can execute this file and check
 # its exit code, which is a guarantee a regex cannot give.
 #
-# The commit being built comes from BUILT_COMMIT, captured once right after
-# checkout. Deliberately not `git rev-parse HEAD` here: a checkout between the
-# build and this step would move HEAD to the tag while the APK on disk stayed a
-# branch build, and the guard would print a match.
+# The commit being built comes from BUILT_COMMIT, written to $GITHUB_ENV in the
+# step immediately before the build. Deliberately not `git rev-parse HEAD` here:
+# a checkout between the build and this step would move HEAD to the tag while
+# the APK on disk stayed a branch build, and the guard would print a match.
 #
 # Inputs (environment):
 #   RELEASE_TAG       required, the tag about to receive the APK
