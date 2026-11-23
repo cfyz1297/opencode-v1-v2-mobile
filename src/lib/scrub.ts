@@ -9,7 +9,12 @@ export function scrubUrl(url: string): string {
     // itself contain '@' (me:p@ssw0rd@host) and the old first-'@' match left
     // its tail readable in a shared report. Anchored to the scheme (or a
     // protocol-relative '//'), so an '@' after a '//' in a path stays intact.
-    .replace(/(^[a-z][a-z0-9+.-]*:\/\/|^\/\/)[^/?#]*@/i, "$1<redacted>@")
+    // It also may contain '?' or '#', so the run stops only at the path: those
+    // characters are legal in a typed password and both parseUrl and a bounded
+    // class would otherwise stop short of the '@'. The cost is a query value
+    // holding an '@' in a path-less URL losing its tail — in a diagnostic
+    // report that is the safe direction.
+    .replace(/(^[a-z][a-z0-9+.-]*:\/\/|^\/\/)[^/]*@/i, "$1<redacted>@")
     .replace(/([?&](?:token|access_token|api_key|key|password|pwd|auth)=)[^&#]*/gi, "$1<redacted>")
 }
 

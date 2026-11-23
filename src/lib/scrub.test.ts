@@ -221,3 +221,12 @@ test("a malformed URL's password never reaches the Probes line", () => {
   assert.match(source, /target: scrubUrl\(url\)/, "the malformed attempt target must be scrubbed when built")
   assert.match(source, /\$\{scrubUrl\(a\.target\)\}/, "every printed probe target must be scrubbed")
 })
+
+// A typed password may contain '?' or '#', and both parseUrl and a class
+// bounded by them stop short of the '@'. Quick Connect has no parse gate, so
+// such a string reached the report with the password intact.
+test("scrubUrl: '?' or '#' inside the userinfo does not stop the redaction", () => {
+  assert.equal(scrubUrl("https://opencode:S3cret#1@100.64.0.5:4096"), "https://<redacted>@100.64.0.5:4096")
+  assert.equal(scrubUrl("https://opencode:S3cret?1@host:4096"), "https://<redacted>@host:4096")
+  assert.equal(scrubUrl("https://user:pw@host"), "https://<redacted>@host")
+})
