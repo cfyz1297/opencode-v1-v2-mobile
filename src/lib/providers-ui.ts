@@ -184,9 +184,11 @@ function expandConnectedIds(ids: Iterable<string>): Set<string> {
   return out
 }
 
+/** Exact id only: the name shown must belong to the id the key is written to.
+ * A case variant falls back to the deep-link name so the screen never claims a
+ * catalog provider the server would not receive. */
 export function findPopularProvider(id: string): PopularProviderDef | undefined {
-  const needle = id.toLowerCase()
-  return POPULAR_PROVIDERS.find((p) => p.id.toLowerCase() === needle)
+  return POPULAR_PROVIDERS.find((p) => p.id === id)
 }
 
 export function connectHref(providerID: string, name?: string): string {

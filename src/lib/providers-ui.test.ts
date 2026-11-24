@@ -7,6 +7,7 @@ import {
   buildProvidersScreenModel,
   connectHref,
   connectionBadgeFor,
+  findPopularProvider,
   isFreeModel,
   type CatalogProvider,
 } from "./providers-ui.ts"
@@ -40,6 +41,13 @@ test("connectHref builds providers/connect query", () => {
 test("popular provider ids are unique", () => {
   const ids = POPULAR_PROVIDERS.map((p) => p.id)
   assert.equal(ids.length, new Set(ids).size)
+})
+
+test("findPopularProvider matches the exact id the key is written to", () => {
+  // A case variant must not borrow the catalog name: the write uses the exact id.
+  assert.equal(findPopularProvider("anthropic")?.id, "anthropic")
+  assert.equal(findPopularProvider("Anthropic"), undefined)
+  assert.equal(findPopularProvider("weird.example"), undefined)
 })
 
 test("buildProvidersScreenModel: empty connected keeps full popular list plus custom", () => {

@@ -29,15 +29,18 @@ export default function ConnectProviderScreen() {
   const params = useLocalSearchParams<{ id?: string; name?: string }>()
   const idCheck = validateConnectProviderId(typeof params.id === "string" ? params.id : "")
   const providerID = idCheck.ok ? idCheck.id : ""
-  const known = providerID ? findPopularProvider(providerID) : undefined
-  const displayName = resolveConnectDisplayName(
-    providerID || t("providers.connect.unknown"),
-    typeof params.name === "string" ? params.name : undefined,
-    known?.name,
-  )
 
   const client = useConnections((s) => s.client)
   const loadCatalog = useCatalog((s) => s.load)
+  const catalogProviders = useCatalog((s) => s.providers)
+
+  // Exact id only, so the name shown is the provider the key is written to.
+  const catalogName = providerID ? catalogProviders.find((p) => p.id === providerID)?.name : undefined
+  const displayName = resolveConnectDisplayName(
+    providerID || t("providers.connect.unknown"),
+    typeof params.name === "string" ? params.name : undefined,
+    catalogName || findPopularProvider(providerID)?.name,
+  )
 
   const [apiKey, setApiKey] = useState("")
   const [busy, setBusy] = useState(false)
@@ -95,6 +98,11 @@ export default function ConnectProviderScreen() {
         <Text style={[styles.lead, isDark && styles.metaDark]}>
           {t("providers.connect.lead", { name: displayName, id: providerID })}
         </Text>
+        {!idCheck.ok && (
+          <Text style={[styles.error, isDark && styles.errorDark]} testID="provider-connect-id-error">
+            {t(`providers.connect.errors.id_${idCheck.error}`)}
+          </Text>
+        )}
         <Text style={[styles.securityNote, isDark && styles.metaDark]}>{t("providers.connect.securityNote")}</Text>
 
         <Text style={[styles.label, isDark && styles.metaDark]}>{t("providers.connect.apiKeyLabel")}</Text>
@@ -140,6 +148,8 @@ const styles = StyleSheet.create({
   containerDark: { backgroundColor: "#0a0a0a" },
   content: { padding: 16, paddingBottom: 40, gap: 10 },
   lead: { fontSize: 14, color: "#444444", lineHeight: 20 },
+  error: { fontSize: 13, color: "#c62828", lineHeight: 18 },
+  errorDark: { color: "#ff8a80" },
   securityNote: { fontSize: 13, color: "#666666", lineHeight: 18, marginBottom: 8 },
   metaDark: { color: "#888888" },
   label: { fontSize: 13, fontWeight: "600", color: "#555555", marginTop: 4 },

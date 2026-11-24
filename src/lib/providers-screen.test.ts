@@ -112,6 +112,15 @@ test("tapping a connected provider opens the connect screen so its key can be re
   assert.deepEqual(routes, [connectHref("opencode-go", "OpenCode Go")])
 })
 
+test("every locale explains the replace-key action", () => {
+  // catalog-parity compares key sets only, so a typo in the reference locale
+  // would pass there and render the raw key here.
+  for (const locale of ["en", "ru", "zh-Hans"]) {
+    const catalog = JSON.parse(readFileSync(`${root}src/lib/i18n/${locale}.json`, "utf8"))
+    assert.ok(catalog.providers.connectedEditCta.trim(), `${locale}: providers.connectedEditCta`)
+  }
+})
+
 test("a catalog id outside POPULAR_PROVIDERS reaches a connect screen that accepts it", () => {
   const { tree, routes } = renderScreen()
   const row = findByTestID(tree, "provider-connected-wafer.ai")

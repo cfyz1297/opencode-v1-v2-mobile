@@ -12,3 +12,9 @@ test("connect screen does not import device secret stores", () => {
   assert.match(connectSrc, /connectApiKey/)
   assert.match(connectSrc, /setApiKey\(""\)/)
 })
+
+test("connect screen validates the deep-link id before it selects the provider", () => {
+  // Ties the screen to the validator: a case-normalising or lenient parser here
+  // would send the key to an id the screen never displayed.
+  assert.match(connectSrc, /validateConnectProviderId\(typeof params\.id/)
+})
