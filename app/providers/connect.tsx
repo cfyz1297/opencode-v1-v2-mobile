@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useMemo, useState } from "react"
 import {
   View,
   Text,
@@ -48,15 +48,14 @@ export default function ConnectProviderScreen() {
     ? resolveConnectDisplayName(providerID, catalogName || findPopularProvider(providerID)?.name)
     : t("providers.connect.unknown")
 
-  const [apiKey, setApiKey] = useState("")
+  // A second deep link retargets this screen in place, so the draft is bound to
+  // the id it was typed for: a retarget empties the field on the same render,
+  // with no effect window where the old key is still submittable.
+  const [draft, setDraft] = useState({ id: "", key: "" })
+  const apiKey = draft.id === providerID ? draft.key : ""
+  const setApiKey = (key: string) => setDraft({ id: providerID, key })
   const [busy, setBusy] = useState(false)
   const [secureVisible, setSecureVisible] = useState(false)
-
-  // A second deep link retargets this screen in place, so a key typed for one
-  // provider must not stay submittable for another.
-  useEffect(() => {
-    setApiKey("")
-  }, [providerID])
 
   const keyCheck = useMemo(() => validateApiKeyInput(apiKey), [apiKey])
 

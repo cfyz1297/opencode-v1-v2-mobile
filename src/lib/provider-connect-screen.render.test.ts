@@ -216,9 +216,11 @@ test("a second deep link cannot submit the key typed for the first provider", as
   ui.retarget({ id: "openai" })
   ui.render()
   assert.deepEqual(ui.titles(), ["OpenAI"], "screen retargeted to the new provider")
+  assert.equal(ui.find(ui.render(), "provider-connect-key").props.value, "", "field emptied on the same render")
 
   await ui.pressSubmit()
-  // The effect cleared the field, so the anthropic key is never written to openai.
+  // The draft belongs to the id it was typed for, so the anthropic key is
+  // never written to openai.
   assert.deepEqual(ui.written, [])
 })
 
