@@ -24,3 +24,9 @@ test("connect screen never labels the write with a deep-link name", () => {
   // /auth/wafer.ai receives the key.
   assert.equal(/params\.name/.test(connectSrc), false)
 })
+
+test("connect screen clears a typed key when the provider id changes", () => {
+  // A second opencode:// link retargets the focused route in place; the key
+  // typed for the first provider must not be submittable for the second.
+  assert.match(connectSrc, /useEffect\(\(\) => \{\s*setApiKey\(""\)\s*\}, \[providerID\]\)/)
+})

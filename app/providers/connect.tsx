@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import {
   View,
   Text,
@@ -51,6 +51,12 @@ export default function ConnectProviderScreen() {
   const [apiKey, setApiKey] = useState("")
   const [busy, setBusy] = useState(false)
   const [secureVisible, setSecureVisible] = useState(false)
+
+  // A second deep link retargets this screen in place, so a key typed for one
+  // provider must not stay submittable for another.
+  useEffect(() => {
+    setApiKey("")
+  }, [providerID])
 
   const keyCheck = useMemo(() => validateApiKeyInput(apiKey), [apiKey])
 
