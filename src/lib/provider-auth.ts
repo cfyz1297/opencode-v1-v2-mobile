@@ -43,13 +43,16 @@ export function validateApiKeyInput(raw: string): { ok: true; key: string } | { 
   return { ok: true, key }
 }
 
-/** Provider ids accepted by connect screen (matches OpenCode /connect style). */
-const CONNECT_PROVIDER_ID_RE = /^[a-z][a-z0-9_-]{1,63}$/
+/** Provider ids accepted by connect screen (matches OpenCode /connect style).
+ * Catalog ids may start with a digit or contain dots (`302ai`, `wafer.ai`), and
+ * case is meaningful: the server keys auth by the exact id. No slash, no leading
+ * dot/dash, 64 chars max; connectKeyAttempts also URI-encodes it. */
+const CONNECT_PROVIDER_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/
 
 export function validateConnectProviderId(
   raw: string,
 ): { ok: true; id: string } | { ok: false; error: "required" | "invalid" } {
-  const id = (raw || "").trim().toLowerCase()
+  const id = (raw || "").trim()
   if (!id) return { ok: false, error: "required" }
   if (!CONNECT_PROVIDER_ID_RE.test(id)) return { ok: false, error: "invalid" }
   return { ok: true, id }

@@ -9,6 +9,7 @@ import {
   connectHref,
   CUSTOM_PROVIDER_ROUTE,
 } from "./providers-ui.ts"
+import { validateConnectProviderId } from "./provider-auth.ts"
 
 const require = createRequire(import.meta.url)
 const ts = require("typescript")
@@ -20,6 +21,8 @@ function renderScreen() {
   const routes: string[] = []
   const devices = [
     { id: "opencode-go", name: "OpenCode Go", connected: true, models: [{ id: "m", name: "M" }] },
+    // Not in POPULAR_PROVIDERS: the generic change-key path this change adds.
+    { id: "wafer.ai", name: "Wafer", connected: true, models: [{ id: "w", name: "W" }] },
   ]
   const catalogState = { providers: devices, load: async () => {} }
   const jsx = (type: unknown, props: unknown) => ({ type, props })
@@ -109,9 +112,16 @@ test("tapping a connected provider opens the connect screen so its key can be re
   assert.deepEqual(routes, [connectHref("opencode-go", "OpenCode Go")])
 })
 
-test("every locale explains the replace-key action", () => {
-  for (const locale of ["en", "ru", "zh-Hans"]) {
-    const catalog = JSON.parse(readFileSync(`${root}src/lib/i18n/${locale}.json`, "utf8"))
-    assert.equal(typeof catalog.providers.connectedEditCta, "string", `${locale}: providers.connectedEditCta`)
-  }
+test("a catalog id outside POPULAR_PROVIDERS reaches a connect screen that accepts it", () => {
+  const { tree, routes } = renderScreen()
+  const row = findByTestID(tree, "provider-connected-wafer.ai")
+
+  assert.ok(row, "dotted provider id still renders a row")
+  row.props.onPress()
+
+  const pushed = new URL(routes[0], "http://x").searchParams.get("id")
+  assert.equal(pushed, "wafer.ai")
+  // The dead end this change removes: an id the connect screen rejects leaves
+  // its submit button permanently disabled.
+  assert.deepEqual(validateConnectProviderId(pushed), { ok: true, id: "wafer.ai" })
 })

@@ -53,7 +53,17 @@ test("validateConnectProviderId rejects empty and malformed ids", () => {
   assert.deepEqual(validateConnectProviderId(""), { ok: false, error: "required" })
   assert.deepEqual(validateConnectProviderId("Bad Id"), { ok: false, error: "invalid" })
   assert.deepEqual(validateConnectProviderId("anthropic"), { ok: true, id: "anthropic" })
-  assert.deepEqual(validateConnectProviderId(" GitHub-Copilot "), { ok: true, id: "github-copilot" })
+  assert.deepEqual(validateConnectProviderId(" GitHub-Copilot "), { ok: true, id: "GitHub-Copilot" })
+})
+
+test("validateConnectProviderId accepts real catalog ids the connect screen must edit", () => {
+  // 302ai and wafer.ai are live models.dev ids; a dot or leading digit must not
+  // dead-end the change-key screen.
+  assert.deepEqual(validateConnectProviderId("302ai"), { ok: true, id: "302ai" })
+  assert.deepEqual(validateConnectProviderId("wafer.ai"), { ok: true, id: "wafer.ai" })
+  assert.deepEqual(validateConnectProviderId("MyProvider"), { ok: true, id: "MyProvider" })
+  assert.equal(validateConnectProviderId("../etc/passwd").ok, false)
+  assert.equal(validateConnectProviderId("a/b").ok, false)
 })
 
 test("resolveConnectDisplayName prefers catalog over query name", () => {
