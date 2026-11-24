@@ -43,7 +43,7 @@ export default function ProvidersScreen() {
   }, [load])
 
   const openConnect = useCallback(
-    (row: PopularProviderRow) => {
+    (row: { id: string; name: string; isCustom?: boolean }) => {
       if (row.isCustom) {
         router.push(CUSTOM_PROVIDER_ROUTE)
         return
@@ -95,13 +95,15 @@ export default function ProvidersScreen() {
         ) : (
           <View style={[styles.card, isDark && styles.cardDark]}>
             {screen.connected.map((row, index) => (
-              <View
+              <TouchableOpacity
                 key={row.id}
                 style={[
                   styles.connectedRow,
                   isDark && styles.connectedRowDark,
                   index === screen.connected.length - 1 && styles.rowLast,
                 ]}
+                onPress={() => openConnect(row)}
+                accessibilityRole="button"
                 testID={`provider-connected-${row.id}`}
               >
                 <View style={styles.connectedMain}>
@@ -115,7 +117,10 @@ export default function ProvidersScreen() {
                     </Text>
                   </View>
                 </View>
-              </View>
+                <Text style={[styles.editCta, isDark && styles.editCtaDark]}>
+                  {t("providers.connectedEditCta")}
+                </Text>
+              </TouchableOpacity>
             ))}
           </View>
         )}
@@ -231,6 +236,9 @@ const styles = StyleSheet.create({
   emptyCardDark: { backgroundColor: "#1a1a1a" },
   emptyText: { fontSize: 14, color: "#666666", lineHeight: 20 },
   connectedRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
     paddingHorizontal: 14,
     paddingVertical: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
@@ -238,7 +246,9 @@ const styles = StyleSheet.create({
   },
   connectedRowDark: { borderBottomColor: "#2a2a2a" },
   rowLast: { borderBottomWidth: 0 },
-  connectedMain: { gap: 6 },
+  connectedMain: { flex: 1, gap: 6 },
+  editCta: { fontSize: 13, fontWeight: "600", color: "#0a0a0a" },
+  editCtaDark: { color: "#ffffff" },
   providerName: { fontSize: 16, fontWeight: "600", color: "#0a0a0a" },
   textDark: { color: "#ffffff" },
   metaDark: { color: "#888888" },

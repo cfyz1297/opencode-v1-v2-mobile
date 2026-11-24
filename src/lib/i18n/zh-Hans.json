@@ -580,6 +580,7 @@
     "subtitle": "可用 API 密钥将热门服务商直接连接到你的 OpenCode 服务器。密钥不会保存在应用中。",
     "connectedTitle": "已连接的服务商",
     "connectedEmpty": "还没有带模型的服务商。请在下方连接，然后下拉刷新。",
+    "connectedEditCta": "更改密钥",
     "popularTitle": "热门服务商",
     "popularEmpty": "没有匹配项。请换关键词搜索，或在上方添加自定义服务商。",
     "customTitle": "自定义服务商",

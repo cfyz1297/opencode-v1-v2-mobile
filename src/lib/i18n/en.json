@@ -580,6 +580,7 @@
     "subtitle": "Connect popular providers with an API key sent to your OpenCode server. Keys are not stored in the app.",
     "connectedTitle": "Connected providers",
     "connectedEmpty": "No providers with models yet. Connect a provider below, then pull to refresh.",
+    "connectedEditCta": "Change key",
     "popularTitle": "Popular providers",
     "popularEmpty": "No matching providers. Try another search or add a custom provider above.",
     "customTitle": "Custom provider",
