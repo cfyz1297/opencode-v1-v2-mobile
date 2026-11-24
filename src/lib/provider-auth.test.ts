@@ -1,6 +1,7 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
 import {
+  canonicalConnectProviderId,
   connectKeyAttempts,
   redactConnectBody,
   resolveConnectDisplayName,
@@ -64,6 +65,16 @@ test("validateConnectProviderId accepts real catalog ids the connect screen must
   assert.deepEqual(validateConnectProviderId("MyProvider"), { ok: true, id: "MyProvider" })
   assert.equal(validateConnectProviderId("../etc/passwd").ok, false)
   assert.equal(validateConnectProviderId("a/b").ok, false)
+})
+
+test("canonicalConnectProviderId keeps the catalog spelling of a case variant", () => {
+  const known = ["anthropic", "wafer.ai", "MyProvider"]
+  assert.equal(canonicalConnectProviderId("anthropic", known), "anthropic")
+  assert.equal(canonicalConnectProviderId("Anthropic", known), "anthropic")
+  assert.equal(canonicalConnectProviderId("ANTHROPIC", known), "anthropic")
+  assert.equal(canonicalConnectProviderId("MyProvider", known), "MyProvider")
+  assert.equal(canonicalConnectProviderId("Myprovider", known), "MyProvider")
+  assert.equal(canonicalConnectProviderId("acme", known), "acme")
 })
 
 test("resolveConnectDisplayName never takes the name from a deep link", () => {

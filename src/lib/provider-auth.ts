@@ -58,6 +58,14 @@ export function validateConnectProviderId(
   return { ok: true, id }
 }
 
+/** Keep the catalog's spelling of a case variant, so the key is written to the
+ * exact id the server uses. Unknown ids are returned unchanged. */
+export function canonicalConnectProviderId(id: string, knownIds: readonly string[]): string {
+  if (knownIds.includes(id)) return id
+  const lower = id.toLowerCase()
+  return knownIds.find((known) => known.toLowerCase() === lower) ?? id
+}
+
 /** Name shown on the connect screen. Only trusted sources are accepted: the
  * live catalog, then the built-in popular list, then the validated id itself.
  * A deep-link `?name=` is deliberately ignored — it could label a write to one

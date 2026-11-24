@@ -43,7 +43,7 @@ export default function ProvidersScreen() {
   }, [load])
 
   const openConnect = useCallback(
-    (row: { id: string; name: string; isCustom?: boolean }) => {
+    (row: { id: string; isCustom?: boolean }) => {
       if (row.isCustom) {
         router.push(CUSTOM_PROVIDER_ROUTE)
         return

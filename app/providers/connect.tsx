@@ -14,8 +14,9 @@ import { Stack, router, useLocalSearchParams } from "expo-router"
 import { useTranslation } from "react-i18next"
 import { useConnections } from "../../src/stores/connections"
 import { useCatalog } from "../../src/stores/catalog"
-import { findPopularProvider } from "../../src/lib/providers-ui"
+import { findPopularProvider, POPULAR_PROVIDERS } from "../../src/lib/providers-ui"
 import {
+  canonicalConnectProviderId,
   resolveConnectDisplayName,
   validateApiKeyInput,
   validateConnectProviderId,
@@ -28,13 +29,20 @@ export default function ConnectProviderScreen() {
   const { t } = useTranslation()
   const params = useLocalSearchParams<{ id?: string }>()
   const idCheck = validateConnectProviderId(typeof params.id === "string" ? params.id : "")
-  const providerID = idCheck.ok ? idCheck.id : ""
 
   const client = useConnections((s) => s.client)
   const loadCatalog = useCatalog((s) => s.load)
   const catalogProviders = useCatalog((s) => s.providers)
 
-  // Exact id only, so the name shown is the provider the key is written to.
+  // One id for both the label and the write: a case variant of a known id is
+  // canonicalised, so the key cannot land on a record the catalog never names.
+  const providerID = idCheck.ok
+    ? canonicalConnectProviderId(idCheck.id, [
+        ...catalogProviders.map((p) => p.id),
+        ...POPULAR_PROVIDERS.map((p) => p.id),
+      ])
+    : ""
+
   const catalogName = providerID ? catalogProviders.find((p) => p.id === providerID)?.name : undefined
   const displayName = providerID
     ? resolveConnectDisplayName(providerID, catalogName || findPopularProvider(providerID)?.name)

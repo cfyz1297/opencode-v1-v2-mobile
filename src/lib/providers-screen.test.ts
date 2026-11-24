@@ -113,8 +113,6 @@ test("tapping a connected provider opens the connect screen so its key can be re
 })
 
 test("every locale explains the replace-key action", () => {
-  // catalog-parity compares key sets only, so a typo in the reference locale
-  // would pass there and render the raw key here.
   for (const locale of ["en", "ru", "zh-Hans"]) {
     const catalog = JSON.parse(readFileSync(`${root}src/lib/i18n/${locale}.json`, "utf8"))
     assert.ok(catalog.providers.connectedEditCta.trim(), `${locale}: providers.connectedEditCta`)
