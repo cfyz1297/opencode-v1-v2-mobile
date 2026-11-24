@@ -66,8 +66,9 @@ test("validateConnectProviderId accepts real catalog ids the connect screen must
   assert.equal(validateConnectProviderId("a/b").ok, false)
 })
 
-test("resolveConnectDisplayName prefers catalog over query name", () => {
-  assert.equal(resolveConnectDisplayName("evil", "Anthropic", "Evil Co"), "Evil Co")
-  assert.equal(resolveConnectDisplayName("acme", "Acme LLM", undefined), "Acme LLM")
-  assert.equal(resolveConnectDisplayName("acme", undefined, undefined), "acme")
+test("resolveConnectDisplayName never takes the name from a deep link", () => {
+  assert.equal(resolveConnectDisplayName("evil", "Evil Co"), "Evil Co")
+  // A crafted ?name= could label a key write to one vendor as another.
+  assert.equal(resolveConnectDisplayName("wafer.ai", undefined), "wafer.ai")
+  assert.equal(resolveConnectDisplayName("wafer.ai", "  "), "wafer.ai")
 })

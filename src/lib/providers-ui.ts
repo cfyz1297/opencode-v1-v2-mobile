@@ -185,16 +185,15 @@ function expandConnectedIds(ids: Iterable<string>): Set<string> {
 }
 
 /** Exact id only: the name shown must belong to the id the key is written to.
- * A case variant falls back to the deep-link name so the screen never claims a
- * catalog provider the server would not receive. */
+ * A case variant is not a catalog match, so the screen shows the id instead. */
 export function findPopularProvider(id: string): PopularProviderDef | undefined {
   return POPULAR_PROVIDERS.find((p) => p.id === id)
 }
 
-export function connectHref(providerID: string, name?: string): string {
-  const q = new URLSearchParams({ id: providerID })
-  if (name) q.set("name", name)
-  return `${CONNECT_PROVIDER_ROUTE}?${q.toString()}`
+/** The screen resolves the name from the catalog and id, so no name is passed:
+ * a query string label could misname the provider the key is written to. */
+export function connectHref(providerID: string): string {
+  return `${CONNECT_PROVIDER_ROUTE}?${new URLSearchParams({ id: providerID }).toString()}`
 }
 
 export function buildProvidersScreenModel(

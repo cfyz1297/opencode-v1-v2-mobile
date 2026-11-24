@@ -26,7 +26,7 @@ export default function ConnectProviderScreen() {
   const colorScheme = useColorScheme()
   const isDark = colorScheme === "dark"
   const { t } = useTranslation()
-  const params = useLocalSearchParams<{ id?: string; name?: string }>()
+  const params = useLocalSearchParams<{ id?: string }>()
   const idCheck = validateConnectProviderId(typeof params.id === "string" ? params.id : "")
   const providerID = idCheck.ok ? idCheck.id : ""
 
@@ -36,11 +36,9 @@ export default function ConnectProviderScreen() {
 
   // Exact id only, so the name shown is the provider the key is written to.
   const catalogName = providerID ? catalogProviders.find((p) => p.id === providerID)?.name : undefined
-  const displayName = resolveConnectDisplayName(
-    providerID || t("providers.connect.unknown"),
-    typeof params.name === "string" ? params.name : undefined,
-    catalogName || findPopularProvider(providerID)?.name,
-  )
+  const displayName = providerID
+    ? resolveConnectDisplayName(providerID, catalogName || findPopularProvider(providerID)?.name)
+    : t("providers.connect.unknown")
 
   const [apiKey, setApiKey] = useState("")
   const [busy, setBusy] = useState(false)

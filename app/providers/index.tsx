@@ -48,7 +48,7 @@ export default function ProvidersScreen() {
         router.push(CUSTOM_PROVIDER_ROUTE)
         return
       }
-      router.push(connectHref(row.id, row.name))
+      router.push(connectHref(row.id))
     },
     [],
   )

@@ -35,7 +35,8 @@ test("catalog is a short popular list with OpenCode first", () => {
 })
 
 test("connectHref builds providers/connect query", () => {
-  assert.equal(connectHref("anthropic", "Anthropic"), "/providers/connect?id=anthropic&name=Anthropic")
+  assert.equal(connectHref("anthropic"), "/providers/connect?id=anthropic")
+  assert.equal(connectHref("wafer.ai"), "/providers/connect?id=wafer.ai")
 })
 
 test("popular provider ids are unique", () => {

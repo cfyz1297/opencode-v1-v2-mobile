@@ -58,16 +58,16 @@ export function validateConnectProviderId(
   return { ok: true, id }
 }
 
-/** Prefer catalog name over deep-link query to reduce phishing via ?name=. */
+/** Name shown on the connect screen. Only trusted sources are accepted: the
+ * live catalog, then the built-in popular list, then the validated id itself.
+ * A deep-link `?name=` is deliberately ignored — it could label a write to one
+ * provider as a different vendor. */
 export function resolveConnectDisplayName(
   providerID: string,
-  queryName: string | undefined,
   catalogName: string | undefined,
 ): string {
   const fromCatalog = (catalogName || "").trim()
   if (fromCatalog) return fromCatalog
-  const fromQuery = (queryName || "").trim()
-  if (fromQuery && fromQuery.length <= 80 && !/[\x00-\x1f\x7f]/.test(fromQuery)) return fromQuery
   return providerID
 }
 

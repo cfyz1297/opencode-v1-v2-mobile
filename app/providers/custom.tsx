@@ -73,7 +73,7 @@ export default function CustomProviderScreen() {
       Alert.alert(t("common.error"), t("providers.custom.invalidForm"))
       return
     }
-    router.push(connectHref(plan.providerID, plan.displayName))
+    router.push(connectHref(plan.providerID))
   }, [input, t])
 
   return (

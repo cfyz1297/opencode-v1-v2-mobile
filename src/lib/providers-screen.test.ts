@@ -109,7 +109,7 @@ test("tapping a connected provider opens the connect screen so its key can be re
   assert.ok(texts(row).includes("providers.connectedEditCta"), "row shows the replace-key action")
 
   row.props.onPress()
-  assert.deepEqual(routes, [connectHref("opencode-go", "OpenCode Go")])
+  assert.deepEqual(routes, [connectHref("opencode-go")])
 })
 
 test("every locale explains the replace-key action", () => {
