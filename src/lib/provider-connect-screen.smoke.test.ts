@@ -18,3 +18,9 @@ test("connect screen validates the deep-link id before it selects the provider",
   // would send the key to an id the screen never displayed.
   assert.match(connectSrc, /validateConnectProviderId\(typeof params\.id/)
 })
+
+test("connect screen never labels the write with a deep-link name", () => {
+  // The name must come from the id being written; ?name= could say OpenAI while
+  // /auth/wafer.ai receives the key.
+  assert.equal(/params\.name/.test(connectSrc), false)
+})
