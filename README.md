@@ -6,7 +6,7 @@
 
 A fork of [dzianisv/opencode-mobile](https://github.com/dzianisv/opencode-mobile), built with Expo/React Native. Distributed as an APK from GitHub Releases only — no app stores, no account, no backend of its own: the app talks straight to your server.
 
-Version **0.3.24 (89)**, installs over 0.3.23. Every build runs 924 automated tests plus an Android CUA smoke on an emulator.
+Version **0.3.25 (90)**, installs over 0.3.24. Every build runs 949 automated tests plus an Android CUA smoke on an emulator.
 
 | You want… | This repo |
 |---|---|
