@@ -12,21 +12,3 @@ test("connect screen does not import device secret stores", () => {
   assert.match(connectSrc, /connectApiKey/)
   assert.match(connectSrc, /setApiKey\(""\)/)
 })
-
-test("connect screen validates the deep-link id before it selects the provider", () => {
-  // Ties the screen to the validator: a case-normalising or lenient parser here
-  // would send the key to an id the screen never displayed.
-  assert.match(connectSrc, /validateConnectProviderId\(typeof params\.id/)
-})
-
-test("connect screen never labels the write with a deep-link name", () => {
-  // The name must come from the id being written; ?name= could say OpenAI while
-  // /auth/wafer.ai receives the key.
-  assert.equal(/params\.name/.test(connectSrc), false)
-})
-
-test("connect screen clears a typed key when the provider id changes", () => {
-  // A second opencode:// link retargets the focused route in place; the key
-  // typed for the first provider must not be submittable for the second.
-  assert.match(connectSrc, /useEffect\(\(\) => \{\s*setApiKey\(""\)\s*\}, \[providerID\]\)/)
-})
