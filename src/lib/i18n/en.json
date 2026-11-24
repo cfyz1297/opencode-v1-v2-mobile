@@ -598,7 +598,6 @@
     "connect": {
       "title": "Connect {{name}}",
       "unknown": "Provider",
-      "missingId": "Missing provider id.",
       "lead": "Send an API key for {{name}} ({{id}}) to your connected OpenCode server.",
       "securityNote": "The key is transmitted over your existing server connection and cleared from this screen after submit. It is never written to device storage by the app.",
       "apiKeyLabel": "API key",

@@ -598,7 +598,6 @@
     "connect": {
       "title": "连接 {{name}}",
       "unknown": "服务商",
-      "missingId": "缺少服务商 id。",
       "lead": "将 {{name}}（{{id}}）的 API 密钥发送到已连接的 OpenCode 服务器。",
       "securityNote": "密钥通过现有服务器连接传输，提交后从本屏幕清除。应用不会将其写入设备存储。",
       "apiKeyLabel": "API 密钥",

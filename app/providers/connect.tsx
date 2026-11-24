@@ -60,11 +60,8 @@ export default function ConnectProviderScreen() {
   const keyCheck = useMemo(() => validateApiKeyInput(apiKey), [apiKey])
 
   const onSubmit = useCallback(async () => {
-    if (!idCheck.ok || !providerID) {
-      Alert.alert(
-        t("common.error"),
-        t(idCheck.ok ? "providers.connect.missingId" : `providers.connect.errors.id_${idCheck.error}`),
-      )
+    if (!idCheck.ok) {
+      Alert.alert(t("common.error"), t(`providers.connect.errors.id_${idCheck.error}`))
       return
     }
     if (!client) {
@@ -106,9 +103,11 @@ export default function ConnectProviderScreen() {
         keyboardShouldPersistTaps="handled"
         testID="provider-connect-screen"
       >
-        <Text style={[styles.lead, isDark && styles.metaDark]}>
-          {t("providers.connect.lead", { name: displayName, id: providerID })}
-        </Text>
+        {idCheck.ok && (
+          <Text style={[styles.lead, isDark && styles.metaDark]}>
+            {t("providers.connect.lead", { name: displayName, id: providerID })}
+          </Text>
+        )}
         {!idCheck.ok && (
           <Text style={[styles.error, isDark && styles.errorDark]} testID="provider-connect-id-error">
             {t(`providers.connect.errors.id_${idCheck.error}`)}

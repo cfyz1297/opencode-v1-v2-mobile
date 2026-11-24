@@ -29,7 +29,6 @@ const compiled = ts.transpileModule(source, {
 function renderConnect(params: { id?: string; name?: string }, providers: Array<{ id: string; name: string }> = []) {
   let currentParams = params
   const state: unknown[] = []
-  const effectDeps: unknown[][] = []
   const written: Array<[string, string]> = []
   const alerts: string[] = []
   let titles: string[] = []
@@ -41,24 +40,16 @@ function renderConnect(params: { id?: string; name?: string }, providers: Array<
   const t = (key: string, opts?: Record<string, string>) => {
     if (key === "providers.connect.title" && opts) passTitles.push(opts.name)
     if (key === "providers.connect.lead" && opts) passLead.push(opts)
+    if (key === "providers.connect.success" && opts) alerts.push(`success:${opts.name}`)
     return key
   }
 
-  let hookIndex = 0
-  let queued: Array<() => void> = []
-
   const jsx = (type: unknown, props: unknown) => ({ type, props })
+  let hookIndex = 0
   const modules: Record<string, unknown> = {
     react: {
       useCallback: (fn: unknown) => fn,
       useMemo: (fn: () => unknown) => fn(),
-      useEffect: (fn: () => void, deps?: unknown[]) => {
-        const index = hookIndex++
-        const previous = effectDeps[index]
-        const changed = !previous || !deps || deps.length !== previous.length || deps.some((d, i) => d !== previous[i])
-        if (deps) effectDeps[index] = deps
-        if (changed) queued.push(fn)
-      },
       useState: (initial: unknown) => {
         const index = hookIndex++
         if (!(index in state)) state[index] = initial
@@ -75,7 +66,7 @@ function renderConnect(params: { id?: string; name?: string }, providers: Array<
       ActivityIndicator: "ActivityIndicator",
       StyleSheet: { create: (value: unknown) => value, hairlineWidth: 1 },
       useColorScheme: () => "light",
-      Alert: { alert: (title: string) => alerts.push(title) },
+      Alert: { alert: () => {} },
     },
     "expo-router": {
       Stack: { Screen: "StackScreen" },
@@ -122,19 +113,14 @@ function renderConnect(params: { id?: string; name?: string }, providers: Array<
     },
   })
 
-  /** Commit hook state and effects until the tree stops changing. */
+  /** Render the screen; no effects remain, so one pass is enough. */
   function render() {
-    for (let pass = 0; pass < 4; pass++) {
-      hookIndex = 0
-      queued = []
-      passTitles = []
-      passLead = []
-      tree = exports.default()
-      titles = passTitles
-      leadArgs = passLead
-      if (queued.length === 0) return tree
-      for (const effect of queued) effect()
-    }
+    hookIndex = 0
+    passTitles = []
+    passLead = []
+    tree = exports.default()
+    titles = passTitles
+    leadArgs = passLead
     return tree
   }
 
@@ -183,6 +169,7 @@ test("a ?name= label on the deep link never reaches the screen or the write", as
 
   await ui.pressSubmit()
   assert.deepEqual(ui.written, [["wafer.ai", "sk-test-1234"]])
+  assert.deepEqual(ui.alerts, ["success:wafer.ai"], "success names the provider written")
 })
 
 test("a connected provider is shown by its catalog name", () => {

@@ -184,8 +184,7 @@ function expandConnectedIds(ids: Iterable<string>): Set<string> {
   return out
 }
 
-/** Exact id only: the name shown must belong to the id the key is written to.
- * A case variant is not a catalog match, so the screen shows the id instead. */
+/** Exact id only: the name shown must belong to the id the key is written to. */
 export function findPopularProvider(id: string): PopularProviderDef | undefined {
   return POPULAR_PROVIDERS.find((p) => p.id === id)
 }

@@ -47,7 +47,7 @@ test("no translation value is an empty string", () => {
     const keys = flattenKeys(catalog)
     for (const key of keys) {
       const value = key.split(".").reduce<unknown>((acc, part) => (acc as Record<string, unknown>)?.[part], catalog)
-      assert.notEqual(value, "", `${name}.json: "${key}" is an empty string`)
+      assert.notEqual(String(value).trim(), "", `${name}.json: "${key}" is blank`)
     }
   }
 })
